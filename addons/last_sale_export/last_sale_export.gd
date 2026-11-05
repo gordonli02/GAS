@@ -6,9 +6,14 @@ extends EditorExportPlugin
 ##               Platform.builtin_pack_dir() reads them from here)
 ##   licenses/   the OFL texts of the bundled fonts and Godot's licence and
 ##               third-party notices, which their licences ask to travel with the game
+##
+## A preset with the custom feature "single_exe" (Windows Demo) instead puts packs/core
+## inside the .pck at res://packs/core, where Platform.builtin_pack_dir() finds it first,
+## and the licence texts at res://licenses/, so the executable is the whole game.
 
 const PACKS := "res://packs"
 const FONTS := "res://assets/fonts"
+const SINGLE_EXE := "single_exe"
 
 var _out_dir := ""
 
@@ -17,7 +22,17 @@ func _get_name() -> String:
 	return "LastSaleExport"
 
 
-func _export_begin(_features: PackedStringArray, _is_debug: bool, path: String, _flags: int) -> void:
+func _export_begin(features: PackedStringArray, _is_debug: bool, path: String, _flags: int) -> void:
+	_out_dir = ""
+	if features.has(SINGLE_EXE):
+		_embed_dir(PACKS.path_join("core"))
+		for f in DirAccess.get_files_at(FONTS):
+			if f.begins_with("OFL-") and f.ends_with(".txt"):
+				add_file("res://licenses".path_join(f), FileAccess.get_file_as_bytes(FONTS.path_join(f)), false)
+		add_file("res://licenses/GODOT-LICENSE.txt", Engine.get_license_text().to_utf8_buffer(), false)
+		add_file("res://licenses/GODOT-THIRDPARTY.txt", _godot_notices().to_utf8_buffer(), false)
+		print("LastSaleExport: packs and licences embedded in the .pck")
+		return
 	_out_dir = path.get_base_dir()
 	if _out_dir.is_relative_path():
 		_out_dir = ProjectSettings.globalize_path("res://").path_join(_out_dir)
@@ -45,12 +60,26 @@ func _export_end() -> void:
 		if f.begins_with("OFL-") and f.ends_with(".txt"):
 			DirAccess.copy_absolute(ProjectSettings.globalize_path(FONTS.path_join(f)), lic.path_join(f))
 	_write(lic.path_join("GODOT-LICENSE.txt"), Engine.get_license_text())
+	_write(lic.path_join("GODOT-THIRDPARTY.txt"), _godot_notices())
+	print("LastSaleExport: packs and licences copied to ", _out_dir)
+
+
+func _godot_notices() -> String:
 	var notices := PackedStringArray()
 	for c in Engine.get_copyright_info():
 		for part in c.parts:
 			notices.append("%s\n  files: %s\n  %s\n  licence: %s\n" % [c.name, ", ".join(part.files), "\n  ".join(part.copyright), part.license])
-	_write(lic.path_join("GODOT-THIRDPARTY.txt"), "\n".join(notices))
-	print("LastSaleExport: packs and licences copied to ", _out_dir)
+	return "\n".join(notices)
+
+
+## Raw bytes into the .pck under the same res:// path (packs are read as files, never imported).
+func _embed_dir(dir: String) -> void:
+	for f in DirAccess.get_files_at(dir):
+		if f == ".gdignore":
+			continue
+		add_file(dir.path_join(f), FileAccess.get_file_as_bytes(dir.path_join(f)), false)
+	for d in DirAccess.get_directories_at(dir):
+		_embed_dir(dir.path_join(d))
 
 
 func _copy_dir(from: String, to: String) -> void:

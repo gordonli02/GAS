@@ -35,6 +35,12 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
   Ship the whole `builds/windows` folder: the export plugin (`addons/last_sale_export`) puts the
   built-in packs and the licence texts next to the executable. The verify build also carries the
   tools; in it, `-- <args> --run-tool=res://tools/drive_game.tscn` (or `bench_fps.tscn`) runs a tool.
+  For a demo to send around, the "Windows Demo" preset (custom feature `single_exe`) makes one
+  self-contained executable: the export plugin puts `packs/core` and the licence texts inside the .pck.
+
+  ```
+  godot --headless --path . --export-release "Windows Demo" builds/demo/LastSale.exe
+  ```
   `docs/acceptance.md` holds the checklist results and how to measure frame times elsewhere.
 - `tools/drive_table.tscn` plays one ticket of each form with synthetic input and saves screenshots:
   `godot --path . --resolution 1920x1080 res://tools/drive_table.tscn -- <output dir>`
