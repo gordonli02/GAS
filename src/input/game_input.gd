@@ -31,6 +31,16 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_1, KEY_2, KEY_3:
 				if game.at_machine and game.camera.cam > 0.9:
 					game.press_machine(e.keycode - KEY_1)
+			KEY_F1, KEY_F2, KEY_F3:
+				# Developer room switch until the developer panel (milestone 6) takes it over.
+				if not OS.is_debug_build():
+					return
+				game.set_room(RoomSet.ORDER[e.keycode - KEY_F1])
+			KEY_BRACKETLEFT, KEY_BRACKETRIGHT:
+				# Developer lamp brightness for the red buttons: [ dimmer, ] brighter.
+				if not OS.is_debug_build():
+					return
+				game.step_lamp(1 if e.keycode == KEY_BRACKETLEFT else -1)
 			_:
 				return
 		get_viewport().set_input_as_handled()

@@ -4,6 +4,8 @@ extends Node
 ## Checks the money invariant every frame and saves screenshots.
 ##   godot --path . --resolution 1920x1080 res://tools/drive_game.tscn -- <output dir>
 
+const EDGE := 0.25   ## props stay this far in from the table edge
+
 var out := ""
 var game: Game
 var failures := 0
@@ -164,9 +166,112 @@ func _run() -> void:
 	_expect(e.loans == Economy.LOAN_LIMIT and game.hud._loan.disabled, "stops at the limit; the key greys out")
 	checked = _unbalanced
 	_expect(checked == 0, "cash + credit + bill = 200 + loans + won - spent on every frame (%d bad frames)" % checked)
+
+	# Rooms: F1-F3 switch them (debug builds); the machine stands where each room puts it.
+	for i in 3:
+		_key(KEY_F1 + i)
+		await _wait(0.4)
+		var id: String = RoomSet.ORDER[i]
+		_expect(game.rooms.id == id and game.machine_view.position.is_equal_approx(game.rooms.machine_pos()), "F%d: %s, machine at its spot" % [i + 1, id])
+		await _shot("09_room_" + id)
+		_table_props_clear(id)
+	# Clicks respect room props: from the table, a point where a prop covers the machine
+	# does not go to the machine.
+	_key(KEY_F1)
+	_key(KEY_B)
+	await _wait(1.0)
+	_expect(not game.at_machine, "at the table in the diner")
+	var covered := []
+	for y in range(40, 1080, 16):
+		for x in range(40, 1920, 16):
+			if not game.input._pick(Vector2(x, y)).has_meta("machine"):
+				covered.append(Vector2(x, y))
+	game.rooms._set_colliders("")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var behind := Vector2(-1, -1)
+	for p in covered:
+		if game.input._pick(p).has_meta("machine"):
+			behind = p
+			break
+	game.rooms._set_colliders("diner")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_expect(behind.x >= 0, "found a spot where a prop covers the machine (%s)" % behind)
+	if behind.x >= 0:
+		_click(behind)
+		await _wait(0.8)
+		_expect(not game.at_machine, "clicking a prop in front of the machine stays at the table")
+		_click(_machine_point())
+		await _wait(0.8)
+		_expect(game.at_machine, "clicking the machine itself still goes")
+	checked = _unbalanced
+	_expect(checked == 0, "money invariant held through the room changes (%d bad frames)" % checked)
+
+	# Developer lamp keys: [ dims the red buttons a step, ] brightens; repainted live.
+	_expect(MachineView.lamp_preset == 0, "buttons start at the brightest lamp step")
+	var face_tex := game.machine_view._big_mat.albedo_texture
+	_key(KEY_BRACKETLEFT)
+	await _wait(0.1)
+	_expect(MachineView.lamp_preset == 1 and game.machine_view._big_mat.albedo_texture != face_tex
+		and is_equal_approx(game.machine_view._sides[0].albedo_color.r, MachineView.lamp(1).side.r), "[ dims the buttons one step")
+	_key(KEY_BRACKETRIGHT)
+	_key(KEY_BRACKETRIGHT)
+	await _wait(0.1)
+	_expect(MachineView.lamp_preset == 0, "] brightens, and stops at the brightest")
 	print("NET %+d  opened %d  wins %d" % [e.net(), e.opened, e.wins])
 	print("DRIVE %s (%d failed checks)" % ["OK" if failures == 0 else "FAILED", failures])
 	get_tree().quit(1 if failures > 0 else 0)
+
+
+## Nothing standing on the table top overlaps the tray or the notepad, and nothing on
+## the table comes within EDGE of its edge (G: the diner jukebox looked half off it).
+## Bar: the pint and the flip phone stay apart. The discard pile is left out: a big heap
+## spreads over half the table by design (web build).
+func _table_props_clear(id: String) -> void:
+	var top := Rect2(-7.5, -6.25, 15, 12.5)
+	var table := top.grow(-EDGE)
+	var keep_out := {"tray": _footprint(game.table_tray),  "notepad": _footprint(game.notepad)}
+	var hits := []
+	var over := []
+	var g: Node3D = game.rooms.get_node(NodePath(id))
+	for m: MeshInstance3D in g.find_children("*", "MeshInstance3D", true, false):
+		var b := m.global_transform * m.get_aabb()
+		if b.position.y < -0.05 or b.position.y > 1.0:
+			continue   # not standing on the table top
+		var f := Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
+		if not top.has_point(f.get_center()):
+			continue   # off the table (the bar's beer tap, stools)
+		if not table.encloses(f):
+			over.append(str(f))
+		for k in keep_out:
+			if keep_out[k].intersects(f):
+				hits.append("%s under the %s" % [f, k])
+	_expect(hits.is_empty(), "%s: no prop under the tray or notepad %s" % [id, hits])
+	_expect(over.is_empty(), "%s: props keep %.2f clear of the table edge %s" % [id, EDGE, over])
+	if id == "bar":
+		var phone := Rect2()
+		var pint := Rect2()
+		for n: Node3D in g.get_children():
+			var at := Vector2(n.position.x, n.position.z)
+			if at.is_equal_approx(RoomBar.PHONE):
+				phone = _footprint(n)
+			elif at.is_equal_approx(RoomBar.PINT):
+				var b := n.global_transform * (n as MeshInstance3D).get_aabb()
+				pint = Rect2(b.position.x, b.position.z, b.size.x, b.size.z) if pint.size == Vector2.ZERO else pint.merge(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
+		_expect(phone.size != Vector2.ZERO and pint.size != Vector2.ZERO and not phone.intersects(pint), "bar: pint %s and phone %s apart" % [pint, phone])
+
+
+## Where a node's visible meshes cover the table, seen from above (x, z).
+func _footprint(n: Node) -> Rect2:
+	var r := Rect2()
+	for v: VisualInstance3D in n.find_children("*", "VisualInstance3D", true, false):
+		if not v.is_visible_in_tree():
+			continue
+		var b := v.global_transform * v.get_aabb()
+		var f := Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
+		r = f if r.size == Vector2.ZERO else r.merge(f)
+	return r
 
 
 func _open_by_space() -> void:

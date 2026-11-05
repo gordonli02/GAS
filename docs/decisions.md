@@ -62,3 +62,32 @@ Newest last. "G" is the project owner.
   remaining house line under them. The top-left plate shows cash, status and HELD / OPENED / NET.
 - **The full ledger is on a notepad on the table** (kept from the "in the world" mockup), written in
   Patrick Hand (SIL OFL, `assets/fonts/`, from Fontsource 5.3.0), also available to packs as `hand`.
+
+## Milestone 5: rooms
+- **Rooms are code, not pack data.** The props are built in `src/rooms/` from a port of the web build's
+  construction kit; the per-room config (background, fog, lights, machine placement) is a table in
+  `room_set.gd` that a test checks against the web source. Rooms could become pack data later; nothing
+  in the pack format covers them yet.
+- **Geometry is three.js r128's, vertex for vertex** (box, cylinder, lathe, plane, icosahedron, torus,
+  same start angles and triangle order), so the low-poly facets fall where they did on the web.
+- **Textures are the web build's own canvas drawings**, exported once to `assets/rooms/*.png` by
+  `tools/export_room_art.js` (nearest-filtered with mipmaps, like the web build). Signs stay in English.
+- **Lighting is converted, then fitted.** Godot has no hemisphere light: ambient carries the sky/ground
+  average and two shadowless directional lights (one negative) add and remove half the difference.
+  Spot and point lights drop the inverse-square term to keep the web build's linear falloff. Godot
+  lights in linear space and the web build did not, so each room has three gains (hemisphere, key,
+  points) fitted by least squares to the web build rendered from the same camera.
+- **Every room mesh catches clicks**, like the web build's raycast against the whole room, so a prop in
+  front of the machine blocks a click on it. Hidden rooms' colliders are switched off.
+- **F1/F2/F3 switch rooms in debug builds**, for testing until the developer panel (milestone 6).
+  **[ and ] step the red buttons' lamp brightness** (debug builds); the default is the brightest step.
+- **Layout departs from the web build where G asked (M5 review):** the diner breakfast sits in front
+  of the player, the jukebox and the pie plate moved in from the table edge, and the bar's pint and
+  flip phone moved apart and clear of the ticket tray. drive_game checks that nothing on the table
+  sits under the tray or the notepad or comes within 0.25 of the edge.
+- **The machine's fill light has no distance falloff** (like the room points). Godot's default 1/d
+  falloff made a hot spot on the diner booth the light stands against; the energy keeps the machine
+  face lit as in M4.
+- **Square buttons have stripes on their bezels**, painted after the banding G liked on the panel
+  around PLAY ALL; the lit caps stay clean, like PLAY ALL's dome. The PLAY ALL stripes themselves are
+  not painted: they are shadow banding from the key light on the dark panel, kept because G likes them.

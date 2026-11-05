@@ -22,7 +22,7 @@ const LAMP_BRIGHT := {"on": 0.78, "dim": 0.40, "hot": Color("#ff9c86"), "mid": C
 const LAMP_MUTED := {"on": 0.62, "dim": 0.34, "hot": Color("#e9a092"), "mid": Color("#bf3a30"),
 	"rim": Color("#4a0e0b"), "gloss": 0.28, "halo": Color(0.9, 0.2, 0.14, 0.2), "side": Color("#5e1612")}
 const LAMP_STEPS := 4
-static var lamp_preset := 1   ## G picked the second step
+static var lamp_preset := 0   ## G went back to the brightest step (M5); [ and ] step it in debug builds
 
 
 ## Lamp settings for a preset: an even blend from the brightest to the most muted.
@@ -55,6 +55,9 @@ var _bill: MeshInstance3D
 var _bill_mat := StandardMaterial3D.new()
 var _bill_tex := {}
 var _big_mat: StandardMaterial3D
+var _faces: Array = []                      ## [material, round] for each lit button face
+var _sides: Array[StandardMaterial3D] = []  ## the red plastic sides of the caps
+var _halos: Array[StandardMaterial3D] = []
 var _lcd_top := Label.new()
 var _lcd_sub := Label.new()
 var _time := 0.0
@@ -212,6 +215,24 @@ func set_blink(on: bool) -> void:
 	_big_mat.albedo_color = Color(v, v, v, 1.0)  # keep alpha 1: the round face is alpha-scissored
 
 
+## Repaints the lit buttons for the current lamp_preset (the debug brightness keys).
+func apply_lamp() -> void:
+	var l := lamp()
+	var tex := {}
+	for f in _faces:
+		var round: bool = f[1]
+		if not tex.has(round):
+			tex[round] = _glow_texture(round)
+		var m: StandardMaterial3D = f[0]
+		m.albedo_texture = tex[round]
+		m.albedo_color = Color(l.on, l.on, l.on, 1.0)
+	for m in _sides:
+		m.albedo_color = l.side
+	var halo := _halo_texture()
+	for m in _halos:
+		m.albedo_texture = halo
+
+
 func _process(dt: float) -> void:
 	_time += dt
 	for i in buttons.size():
@@ -249,17 +270,19 @@ func anchor(name: String) -> Vector3:
 func _square_button(at: Vector3, meta: Dictionary) -> Node3D:
 	var bezel := _box(Vector3(0.68, 0.68, 0.1), _lit(BEZEL, 40), at - Vector3(0, 0.34, 0.02))
 	bezel.position.z = at.z
+	_striped_frame(at + Vector3(0, 0, 0.0503))
 	_halo(at + Vector3(0, 0, 0.051), 1.05)
 	var cap := Node3D.new()
 	cap.position = at + Vector3(0, 0, 0.07)
 	add_child(cap)
 	var body := MeshInstance3D.new()
 	var bm := BoxMesh.new()
-	bm.size = Vector3(0.52, 0.52, 0.1)
+	bm.size = Vector3(SQUARE_CAP, SQUARE_CAP, 0.1)
 	body.mesh = bm
 	body.material_override = _lit(lamp().side, 60)
+	_sides.append(body.material_override)
 	cap.add_child(body)
-	cap.add_child(_lamp_face(Vector2(0.52, 0.52), false, 0.0505))
+	cap.add_child(_lamp_face(Vector2(SQUARE_CAP, SQUARE_CAP), false, 0.0505))
 	_collider(cap, Vector3(0.68, 0.68, 0.2), meta)
 	_button_z.append(cap.position.z)
 	return cap
@@ -280,6 +303,7 @@ func _round_button(at: Vector3) -> Node3D:
 	cap.position = at + Vector3(0, 0, 0.1)
 	add_child(cap)
 	var side := _cyl(r * 0.69, 0.1, 48, _lit(lamp().side, 60), Vector3.ZERO)
+	_sides.append(side.material_override)
 	side.reparent(cap, false)
 	side.rotation.x = PI / 2
 	var face := _lamp_face(Vector2(r * 1.38, r * 1.38), true, 0.0505)
@@ -298,6 +322,7 @@ func _lamp_face(size: Vector2, round: bool, z: float) -> MeshInstance3D:
 	m.albedo_color = Color(v, v, v, 1.0)
 	if round:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	_faces.append([m, round])
 	var q := MeshInstance3D.new()
 	var qm := QuadMesh.new()
 	qm.size = size
@@ -324,7 +349,7 @@ static func _glow_texture(round: bool) -> ImageTexture:
 			var r := Vector2(u, v).length()
 			# a rounded square for square caps (superellipse), no corners in the glow
 			var d := r if round else pow(pow(absf(u), 4.0) + pow(absf(v), 4.0), 0.25)
-			var c := hot.lerp(mid, smoothstep(0.0, 0.6, d)).lerp(rim, smoothstep(0.72, 1.0, d))
+			var c := hot.lerp(mid, smoothstep(0.0, 0.6, r)).lerp(rim, smoothstep(0.72, 1.0, d))
 			var g := Vector2(u + 0.38, v + 0.42)
 			var gloss := clampf(1.0 - Vector2(g.x / 0.42, g.y / 0.22).length(), 0.0, 1.0)
 			c = c.lerp(Color.WHITE, float(l.gloss) * gloss * gloss)
@@ -334,20 +359,62 @@ static func _glow_texture(round: bool) -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
+const SQUARE_CAP := 0.52       ## square cap face, machine units
+## Stripes on the square buttons' bezels, after the banding G liked on the panel around
+## PLAY ALL (that banding is the key light's shadow; these are painted). The lit cap has
+## none, like PLAY ALL's dome. G picked bezel-only stripes, few and well apart (M5).
+const FRAME := 0.68                   ## bezel front, machine units
+const FRAME_BASE := Color("#3a3b42")  ## the bezel front, lifted from black so stripes read on it
+const STRIPE_PERIOD := 0.17           ## machine units between stripes
+const STRIPE_SLOPE := -0.21           ## stripes fall about 12 degrees to the right
+const STRIPE_SHARP := 4.0             ## how fast a stripe fades below its dark edge
+const STRIPE_DEPTH := 0.65            ## how dark a stripe's edge is
+static var _frame_tex: ImageTexture
+
+
+## Darkening at (x, y) on a bezel (machine units from its centre, y up), 0..1: each
+## stripe starts dark at its upper edge and fades out below it.
+static func _stripe(x: float, y: float) -> float:
+	var p := fposmod((y - x * STRIPE_SLOPE) / STRIPE_PERIOD, 1.0)   # 1 just under a stripe edge, falling to 0 at the next
+	return pow(p, STRIPE_SHARP)
+
+
+static func _frame_texture() -> ImageTexture:
+	if _frame_tex == null:
+		var n := 128
+		var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+		for y in n:
+			for x in n:
+				var px := ((x + 0.5) / n - 0.5) * FRAME
+				var py := (0.5 - (y + 0.5) / n) * FRAME
+				img.set_pixel(x, y, FRAME_BASE.darkened(STRIPE_DEPTH * _stripe(px, py)))
+		img.generate_mipmaps()
+		_frame_tex = ImageTexture.create_from_image(img)
+	return _frame_tex
+
+
+## The striped front of a square button's bezel (lit, so the room's light falls on it).
+func _striped_frame(at: Vector3) -> void:
+	var q := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(FRAME, FRAME)
+	q.mesh = qm
+	var m := _lit(Color.WHITE, 40)
+	m.albedo_texture = _frame_texture()
+	q.material_override = m
+	q.position = at
+	q.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(q)
+
+
 ## Soft red light spilling onto the panel around a lit button.
 func _halo(at: Vector3, size: float) -> void:
-	var n := 64
-	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
-	for y in n:
-		for x in n:
-			var d := Vector2((x + 0.5) / n * 2.0 - 1.0, (y + 0.5) / n * 2.0 - 1.0).length()
-			var h: Color = lamp().halo
-			img.set_pixel(x, y, Color(h.r, h.g, h.b, h.a * pow(clampf(1.0 - d, 0.0, 1.0), 2.0)))
 	var m := StandardMaterial3D.new()
-	m.albedo_texture = ImageTexture.create_from_image(img)
+	m.albedo_texture = _halo_texture()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	_halos.append(m)
 	var q := MeshInstance3D.new()
 	var qm := QuadMesh.new()
 	qm.size = Vector2(size, size)
@@ -356,6 +423,17 @@ func _halo(at: Vector3, size: float) -> void:
 	q.position = at
 	q.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(q)
+
+
+static func _halo_texture() -> ImageTexture:
+	var n := 64
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var h: Color = lamp().halo
+	for y in n:
+		for x in n:
+			var d := Vector2((x + 0.5) / n * 2.0 - 1.0, (y + 0.5) / n * 2.0 - 1.0).length()
+			img.set_pixel(x, y, Color(h.r, h.g, h.b, h.a * pow(clampf(1.0 - d, 0.0, 1.0), 2.0)))
+	return ImageTexture.create_from_image(img)
 
 
 # --- construction kit ---------------------------------------------------------

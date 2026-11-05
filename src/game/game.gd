@@ -1,18 +1,19 @@
 class_name Game
 extends Node3D
 ## The game: table, machine, money, tray, discard pile and the camera between them.
-## Milestone 4 uses a plain grey room; the three rooms come in milestone 5.
+## The room (Diner, Bar, Bingo Hall) sets the lights and where the machine stands.
 ## Rules: MIGRATION.md "Money", "Machine", "Table and machine navigation", "Bill window".
 
 const SEED := "G-0001"
 const FORM_UIDS := ["core:catch", "core:plate", "core:spur"]
-## Where the machine stands (the Diner's placement from the web build's scenes config).
-const MACHINE_POS := Vector3(10.8, -3.25, -13)
-const MACHINE_YAW := -0.35
+const START_ROOM := "diner"
+const MACHINE_LIGHT_ENERGY := 0.8 / 6.5
 const UI_TICK := 0.09
 const MESSAGE_TIME := 1.6
 
 var painter := TicketPainter.new()
+var rooms := RoomSet.new()
+var machine_light := OmniLight3D.new()
 var camera := CameraRig.new()
 var view := TicketView.new()
 var flecks := Flecks.new()
@@ -39,7 +40,7 @@ var _ready_done := false
 
 func _ready() -> void:
 	add_child(painter)
-	_build_room()
+	add_child(rooms)
 	add_child(camera)
 	camera.current = true
 	view.painter = painter
@@ -58,17 +59,18 @@ func _ready() -> void:
 		forms.append(Packs.form(uid))
 	machine = MachineLogic.new(forms, SEED)
 	machine_view.painter = painter
-	machine_view.position = MACHINE_POS
-	machine_view.rotation.y = MACHINE_YAW
 	add_child(machine_view)
 	await machine_view.build(forms)
-	var light := OmniLight3D.new()
-	light.light_color = Color("#fff0e0")
-	light.light_energy = 0.8
-	light.omni_range = 22.0
-	light.position = MACHINE_POS + Vector3(-3.5, 5, 6)
-	add_child(light)
-	camera.set_machine(machine_view, MACHINE_POS, MACHINE_YAW)
+	machine_light.light_color = Color("#fff0e0")
+	# Web build: PointLight(0xfff0e0, .8, 22, 1.2) with its own gentle falloff. Godot's default
+	# 1/d falloff blew up into a hot spot on the diner booth, which this light stands right
+	# against; no distance term here, and the energy keeps the machine face as lit as in M4
+	# (0.8 at 1/d for the face's 6.5 units).
+	machine_light.light_energy = MACHINE_LIGHT_ENERGY
+	machine_light.omni_range = 22.0
+	machine_light.omni_attenuation = 0.0
+	add_child(machine_light)
+	set_room(START_ROOM)
 	camera.at_machine = true
 	camera.cam = 1.0
 
@@ -189,6 +191,13 @@ func close_machine() -> void:
 	machine.armed = false
 
 
+## Developer: steps the red buttons' lamp look (0 brightest .. LAMP_STEPS-1 most muted).
+func step_lamp(dir: int) -> void:
+	MachineView.lamp_preset = clampi(MachineView.lamp_preset + dir, 0, MachineView.LAMP_STEPS - 1)
+	machine_view.apply_lamp()
+	say("LAMP %d/%d" % [MachineView.lamp_preset + 1, MachineView.LAMP_STEPS])
+
+
 func say(text: String) -> void:
 	_msg = text
 	_msg_until = _time + MESSAGE_TIME
@@ -249,6 +258,7 @@ func _process(dt: float) -> void:
 		toggle_view()
 	# PLAY ALL blinks only while you stand at the machine; from the table it stays lit.
 	machine_view.set_blink(not at_machine or sin(_time * 4.0) > 0.0)
+	rooms.set_view(camera.cam)
 	if _time - _ui_at > UI_TICK:
 		_ui_at = _time
 		_refresh_ui()
@@ -298,52 +308,14 @@ func _place_bill_window() -> void:
 
 # --- scene ------------------------------------------------------------------------
 
-func _build_room() -> void:
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color("#2b2d33")
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("#fff0dc")
-	env.ambient_light_energy = 0.55
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-	var key := SpotLight3D.new()
-	key.position = Vector3(2, 13, 5)
-	key.look_at_from_position(key.position, Vector3.ZERO)
-	key.spot_range = 25.0
-	key.spot_angle = rad_to_deg(PI / 2.9)
-	key.spot_angle_attenuation = 0.6
-	key.light_energy = 1.4
-	key.shadow_enabled = true
-	key.shadow_reverse_cull_face = true
-	key.shadow_bias = 0.02
-	key.shadow_normal_bias = 0.5
-	add_child(key)
-	_solid(Vector3(15, 0.4, 12.5), Vector3(0, -0.2, 0), Color("#8b8b90"))   # table top
-	_solid(Vector3(0.9, 7.6, 0.9), Vector3(0, -4.2, 0), Color("#55555a"))   # pedestal
-	_solid(Vector3(90, 0.2, 90), Vector3(0, -8.1, -10), Color("#3a3c42"))   # floor
-
-
-## A plain block that also stops clicks (so clicks respect what is in front).
-func _solid(size: Vector3, at: Vector3, c: Color) -> void:
-	var m := MeshInstance3D.new()
-	var b := BoxMesh.new()
-	b.size = size
-	m.mesh = b
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = c
-	mat.roughness = 0.9
-	m.material_override = mat
-	m.position = at
-	add_child(m)
-	var body := StaticBody3D.new()
-	var shape := CollisionShape3D.new()
-	var bs := BoxShape3D.new()
-	bs.size = size
-	shape.shape = bs
-	body.add_child(shape)
-	m.add_child(body)
+## Shows a room and stands the machine where that room puts it.
+func set_room(room_id: String) -> void:
+	rooms.set_room(room_id)
+	var pos := rooms.machine_pos()
+	machine_view.position = pos
+	machine_view.rotation.y = rooms.machine_yaw()
+	machine_light.position = pos + Vector3(-3.5, 5, 6)
+	camera.set_machine(machine_view, pos, rooms.machine_yaw())
 
 
 func _place_tray_and_pile() -> void:
