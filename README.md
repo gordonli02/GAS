@@ -42,6 +42,8 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
   godot --headless --path . --export-release "Windows Demo" builds/demo/LastSale.exe
   ```
   `docs/acceptance.md` holds the checklist results and how to measure frame times elsewhere.
+- `tools/make_icon.gd` renders the game icon (`assets/icon/icon.png`, the window and .exe icon) from the
+  Big Catch front: `godot --path . -s res://tools/make_icon.gd`, then export again.
 - `tools/drive_table.tscn` plays one ticket of each form with synthetic input and saves screenshots:
   `godot --path . --resolution 1920x1080 res://tools/drive_table.tscn -- <output dir>`
 - `tools/drive_game.tscn` plays the full loop (bills, PLAY ALL, camera swing, leaving rules, cash out, loan,
