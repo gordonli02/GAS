@@ -1,22 +1,80 @@
 {
   "id": "plate",
   "name": "Hot Plate",
-  "title": ["HOT", "PLATE"],
+  "title": [
+    "HOT",
+    "PLATE"
+  ],
   "code": "HP-1S",
   "price": 1,
   "colors": {
     "edge": "#d4001f",
     "head": "#ffe14a",
     "ink": "#4a0612",
-    "tiles": ["#ff1e1e", "#ff7a00", "#ff2fa0", "#ffc400"]
+    "tiles": [
+      "#ff1e1e",
+      "#ff7a00",
+      "#ff2fa0",
+      "#ffc400"
+    ]
   },
   "tiers": [
-    { "key": "egg", "label": { "en": "Fried Egg", "zh": "煎蛋" }, "prize": 500, "printed_count": 6, "role": "top" },
-    { "key": "stack", "label": { "en": "Pancake Stack", "zh": "松饼" }, "prize": 500, "printed_count": 6, "role": "top" },
-    { "key": "mug", "label": { "en": "Coffee Mug", "zh": "咖啡" }, "prize": 100, "printed_count": 10, "role": "mid" },
-    { "key": "pie", "label": { "en": "Pie", "zh": "派" }, "prize": 25, "printed_count": 75, "role": "low" }
+    {
+      "key": "egg",
+      "label": {
+        "en": "Fried Egg",
+        "zh": "煎蛋"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/egg.png",
+      "symbol_large": "art/egg_large.png"
+    },
+    {
+      "key": "stack",
+      "label": {
+        "en": "Pancake Stack",
+        "zh": "松饼"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/stack.png",
+      "symbol_large": "art/stack_large.png"
+    },
+    {
+      "key": "mug",
+      "label": {
+        "en": "Coffee Mug",
+        "zh": "咖啡"
+      },
+      "prize": 100,
+      "printed_count": 10,
+      "role": "mid",
+      "symbol": "art/mug.png",
+      "symbol_large": "art/mug_large.png"
+    },
+    {
+      "key": "pie",
+      "label": {
+        "en": "Pie",
+        "zh": "派"
+      },
+      "prize": 25,
+      "printed_count": 75,
+      "role": "low",
+      "symbol": "art/pie.png",
+      "symbol_large": "art/pie_large.png"
+    }
   ],
-  "digit_groups": [4, 3, 4, 3, 4],
+  "digit_groups": [
+    4,
+    3,
+    4,
+    3,
+    4
+  ],
   "win_display": "one_group",
-  "layout": { "preset": "windows" }
+  "layout": "layouts/windows.json"
 }

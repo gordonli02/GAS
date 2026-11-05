@@ -1,0 +1,699 @@
+{
+ "format": 1,
+ "card": {
+  "size": [
+   2.12,
+   1.325
+  ],
+  "canvas": [
+   640,
+   400
+  ]
+ },
+ "front": [
+  {
+   "type": "rect",
+   "rect": [
+    0,
+    0,
+    640,
+    400
+   ],
+   "fill": "edge"
+  },
+  {
+   "type": "rect",
+   "rect": [
+    16,
+    14,
+    608,
+    74
+   ],
+   "fill": "head"
+  },
+  {
+   "type": "rect",
+   "rect": [
+    16,
+    14,
+    22,
+    8
+   ],
+   "fill": "tile.0",
+   "repeat": {
+    "count": 14,
+    "step": [
+     44,
+     0
+    ]
+   }
+  },
+  {
+   "type": "text",
+   "text": "{title}",
+   "pos": [
+    320,
+    74
+   ],
+   "font": "slab",
+   "size": 50,
+   "align": "center",
+   "max_width": 580,
+   "stroke": "#ffffff",
+   "stroke_width": 9
+  },
+  {
+   "type": "text",
+   "text": "{title}",
+   "pos": [
+    323,
+    77
+   ],
+   "font": "slab",
+   "size": 50,
+   "fill": "tile.1",
+   "align": "center",
+   "max_width": 580
+  },
+  {
+   "type": "text",
+   "text": "{title}",
+   "pos": [
+    320,
+    74
+   ],
+   "font": "slab",
+   "size": 50,
+   "fill": "ink",
+   "align": "center",
+   "max_width": 580
+  },
+  {
+   "type": "each_tier",
+   "origin": [
+    16,
+    96
+   ],
+   "columns": 4,
+   "step": [
+    153,
+    0
+   ],
+   "layers": [
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      149,
+      196
+     ],
+     "fill": "tile"
+    },
+    {
+     "type": "group",
+     "clip": [
+      0,
+      0,
+      149,
+      150
+     ],
+     "layers": [
+      {
+       "type": "ellipse",
+       "center": [
+        16,
+        16
+       ],
+       "radii": [
+        20,
+        14
+       ],
+       "rotation": 0,
+       "fill": "#ffffff2e"
+      },
+      {
+       "type": "ellipse",
+       "center": [
+        74,
+        16
+       ],
+       "radii": [
+        20,
+        14
+       ],
+       "rotation": 1,
+       "fill": "#ffffff2e"
+      },
+      {
+       "type": "ellipse",
+       "center": [
+        132,
+        72
+       ],
+       "radii": [
+        20,
+        14
+       ],
+       "rotation": 2,
+       "fill": "#ffffff2e"
+      },
+      {
+       "type": "ellipse",
+       "center": [
+        16,
+        72
+       ],
+       "radii": [
+        20,
+        14
+       ],
+       "rotation": 3,
+       "fill": "#ffffff2e"
+      },
+      {
+       "type": "ellipse",
+       "center": [
+        74,
+        128
+       ],
+       "radii": [
+        20,
+        14
+       ],
+       "rotation": 4,
+       "fill": "#ffffff2e"
+      },
+      {
+       "type": "ellipse",
+       "center": [
+        132,
+        128
+       ],
+       "radii": [
+        20,
+        14
+       ],
+       "rotation": 5,
+       "fill": "#ffffff2e"
+      }
+     ]
+    },
+    {
+     "type": "symbol",
+     "center": [
+      74.5,
+      72
+     ],
+     "size": 115.2
+    },
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      150,
+      149,
+      46
+     ],
+     "fill": "#ffe600"
+    },
+    {
+     "type": "text",
+     "text": "{count} WIN",
+     "pos": [
+      27,
+      180
+     ],
+     "font": "cond_bold",
+     "size": 14,
+     "fill": "#111111",
+     "align": "center",
+     "max_width": 44
+    },
+    {
+     "type": "text",
+     "text": "${tier_prize}",
+     "pos": [
+      98,
+      185
+     ],
+     "font": "slab",
+     "size": 29,
+     "fill": "#111111",
+     "align": "center",
+     "max_width": 92
+    }
+   ]
+  },
+  {
+   "type": "rect",
+   "rect": [
+    16,
+    300,
+    608,
+    86
+   ],
+   "fill": "#ffe600"
+  },
+  {
+   "type": "text",
+   "text": "${price}",
+   "pos": [
+    30,
+    364
+   ],
+   "font": "slab",
+   "size": 54,
+   "fill": "#111111",
+   "align": "left"
+  },
+  {
+   "type": "text",
+   "text": "INSTANT WINNERS SHOWN ABOVE.",
+   "pos": [
+    608,
+    320
+   ],
+   "font": "cond_bold",
+   "size": 15,
+   "fill": "#111111",
+   "align": "right",
+   "max_width": 420
+  },
+  {
+   "type": "text",
+   "text": "PAYABLE IN EGG MONEY.",
+   "pos": [
+    608,
+    338
+   ],
+   "font": "cond_bold",
+   "size": 15,
+   "fill": "#111111",
+   "align": "right",
+   "max_width": 420
+  },
+  {
+   "type": "text",
+   "text": "©Ben Kraptu apt.   FORM {code}",
+   "pos": [
+    608,
+    356
+   ],
+   "font": "cond",
+   "size": 15,
+   "fill": "#111111",
+   "align": "right",
+   "max_width": 420
+  },
+  {
+   "type": "text",
+   "text": "SERIAL NO. {serial}",
+   "pos": [
+    608,
+    379
+   ],
+   "font": "lcd",
+   "size": 24,
+   "fill": "#111111",
+   "align": "right",
+   "max_width": 420
+  }
+ ],
+ "interior": {
+  "base": [
+   {
+    "type": "rect",
+    "rect": [
+     0,
+     0,
+     640,
+     400
+    ],
+    "fill": "#ece7da"
+   },
+   {
+    "type": "rect",
+    "rect": [
+     12,
+     12,
+     616,
+     376
+    ],
+    "fill": "#f4f0e5"
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      218,
+      28
+     ],
+     [
+      218,
+      358
+     ]
+    ],
+    "stroke": "#b9b2a2",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ],
+    "repeat": {
+     "count": 2,
+     "step": [
+      204,
+      0
+     ]
+    },
+    "if": "lose"
+   },
+   {
+    "type": "text",
+    "text": "PAYABLE IN EGG MONEY",
+    "pos": [
+     320,
+     376
+    ],
+    "font": "cond_bold",
+    "size": 12,
+    "fill": "#5c5850",
+    "align": "center"
+   }
+  ],
+  "slots": [
+   {
+    "anchor": [
+     116,
+     200
+    ]
+   },
+   {
+    "anchor": [
+     320,
+     200
+    ]
+   },
+   {
+    "anchor": [
+     524,
+     200
+    ]
+   }
+  ],
+  "digits": {
+   "direction": "column",
+   "pitch": 84,
+   "color": "#3b3a39",
+   "digit": {
+    "font": "slab",
+    "size": 70,
+    "offset": [
+     -14,
+     24
+    ]
+   },
+   "caption": {
+    "font": "cond_bold",
+    "size": 15,
+    "offset": [
+     46,
+     14
+    ],
+    "max_width": 52
+   },
+   "mark": {
+    "font": "cond_bold",
+    "size": 15,
+    "offset": [
+     46,
+     -10
+    ]
+   }
+  },
+  "winner": [
+   {
+    "type": "rect",
+    "rect": [
+     36,
+     36,
+     568,
+     306
+    ],
+    "fill": "win_tile"
+   },
+   {
+    "type": "circle",
+    "center": [
+     190,
+     189
+    ],
+    "radius": 126,
+    "fill": "#ffffff30"
+   },
+   {
+    "type": "symbol",
+    "tier": "win",
+    "variant": "large",
+    "center": [
+     190,
+     189
+    ],
+    "size": 235.2
+   },
+   {
+    "type": "rect",
+    "rect": [
+     350,
+     92,
+     230,
+     194
+    ],
+    "fill": "#ffe600"
+   },
+   {
+    "type": "text",
+    "text": "${prize}",
+    "pos": [
+     465,
+     214
+    ],
+    "font": "slab",
+    "size": 72,
+    "fill": "#111111",
+    "align": "center",
+    "max_width": 208
+   },
+   {
+    "type": "text",
+    "text": "VERIFY {verify}",
+    "pos": [
+     465,
+     258
+    ],
+    "font": "lcd",
+    "size": 22,
+    "fill": "#111111",
+    "align": "center",
+    "if": "verify"
+   }
+  ]
+ },
+ "flaps": [
+  {
+   "rect": [
+    16.1006,
+    16.1006,
+    607.7987,
+    367.7987
+   ],
+   "hinge": "top",
+   "cover": {
+    "canvas": [
+     612,
+     372
+    ],
+    "layers": [
+     {
+      "type": "rect",
+      "rect": [
+       0,
+       0,
+       612,
+       372
+      ],
+      "fill": "#f4f0e5"
+     },
+     {
+      "type": "circle",
+      "center": [
+       306,
+       78
+      ],
+      "radius": 62,
+      "fill": "#494642"
+     },
+     {
+      "type": "circle",
+      "center": [
+       306,
+       78
+      ],
+      "radius": 50,
+      "fill": "#f4f0e5"
+     },
+     {
+      "type": "text",
+      "text": "BK",
+      "pos": [
+       306,
+       98
+      ],
+      "font": "slab",
+      "size": 52,
+      "fill": "#494642",
+      "align": "center"
+     },
+     {
+      "type": "path",
+      "points": [
+       [
+        254,
+        356
+       ],
+       [
+        254,
+        288
+       ],
+       [
+        216,
+        288
+       ],
+       [
+        306,
+        236
+       ],
+       [
+        396,
+        288
+       ],
+       [
+        358,
+        288
+       ],
+       [
+        358,
+        356
+       ]
+      ],
+      "closed": true,
+      "stroke": "#494642",
+      "width": 6,
+      "join": "miter"
+     },
+     {
+      "type": "text",
+      "text": "OPEN",
+      "pos": [
+       136,
+       316
+      ],
+      "font": "slab",
+      "size": 44,
+      "fill": "#494642",
+      "align": "center"
+     },
+     {
+      "type": "text",
+      "text": "UP",
+      "pos": [
+       476,
+       316
+      ],
+      "font": "slab",
+      "size": 44,
+      "fill": "#494642",
+      "align": "center"
+     }
+    ]
+   }
+  }
+ ],
+ "pairs": "none",
+ "band": {
+  "height": 0.24,
+  "canvas": [
+   640,
+   70
+  ],
+  "layers": [
+   {
+    "type": "rect",
+    "rect": [
+     0,
+     0,
+     640,
+     70
+    ],
+    "fill": "tile.3"
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      -20,
+      0
+     ],
+     [
+      -4,
+      0
+     ],
+     [
+      24,
+      70
+     ],
+     [
+      8,
+      70
+     ]
+    ],
+    "closed": true,
+    "fill": "edge",
+    "repeat": {
+     "count": 20,
+     "step": [
+      34,
+      0
+     ]
+    }
+   },
+   {
+    "type": "rect",
+    "rect": [
+     206,
+     14,
+     228,
+     42
+    ],
+    "fill": "#fff6df"
+   },
+   {
+    "type": "text",
+    "text": "BREAK BAND",
+    "pos": [
+     320,
+     46
+    ],
+    "font": "cond_bold",
+    "size": 30,
+    "fill": "edge",
+    "align": "center"
+   }
+  ]
+ },
+ "reveal_slide": [
+  0,
+  -0.5
+ ]
+}

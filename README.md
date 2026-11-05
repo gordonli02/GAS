@@ -16,8 +16,8 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 - Tests (headless, no addons):
 
   ```
-  godot --headless --path . -s res://tests/run_tests.gd               # quick, ~20 s
-  godot --headless --path . -s res://tests/run_tests.gd -- --full     # acceptance: 5,000 boxes per form
+  godot --headless --path . res://tests/run_tests.tscn               # quick, ~25 s
+  godot --headless --path . res://tests/run_tests.tscn -- --full     # acceptance: 5,000 boxes per form
   ```
 
 - `tools/make_generator_golden.js` (Node) regenerates `tests/fixtures/generator_golden.json` from the

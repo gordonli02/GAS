@@ -1,22 +1,78 @@
 {
   "id": "spur",
   "name": "Lucky Spur",
-  "title": ["LUCKY", "SPUR"],
+  "title": [
+    "LUCKY",
+    "SPUR"
+  ],
   "code": "LS-1S",
   "price": 1,
   "colors": {
     "edge": "#6a00b8",
     "head": "#c6ff00",
     "ink": "#2a0050",
-    "tiles": ["#0b8f3a", "#b000c8", "#a6e000", "#ff4fd8"]
+    "tiles": [
+      "#0b8f3a",
+      "#b000c8",
+      "#a6e000",
+      "#ff4fd8"
+    ]
   },
   "tiers": [
-    { "key": "shoe", "label": { "en": "Horseshoe", "zh": "马蹄铁" }, "prize": 500, "printed_count": 6, "role": "top" },
-    { "key": "star", "label": { "en": "Sheriff Star", "zh": "警星" }, "prize": 500, "printed_count": 6, "role": "top" },
-    { "key": "hat", "label": { "en": "Cowboy Hat", "zh": "牛仔帽" }, "prize": 100, "printed_count": 10, "role": "mid" },
-    { "key": "cactus", "label": { "en": "Cactus", "zh": "仙人掌" }, "prize": 25, "printed_count": 75, "role": "low" }
+    {
+      "key": "shoe",
+      "label": {
+        "en": "Horseshoe",
+        "zh": "马蹄铁"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/shoe.png",
+      "symbol_large": "art/shoe_large.png"
+    },
+    {
+      "key": "star",
+      "label": {
+        "en": "Sheriff Star",
+        "zh": "警星"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/star.png",
+      "symbol_large": "art/star_large.png"
+    },
+    {
+      "key": "hat",
+      "label": {
+        "en": "Cowboy Hat",
+        "zh": "牛仔帽"
+      },
+      "prize": 100,
+      "printed_count": 10,
+      "role": "mid",
+      "symbol": "art/hat.png",
+      "symbol_large": "art/hat_large.png"
+    },
+    {
+      "key": "cactus",
+      "label": {
+        "en": "Cactus",
+        "zh": "仙人掌"
+      },
+      "prize": 25,
+      "printed_count": 75,
+      "role": "low",
+      "symbol": "art/cactus.png",
+      "symbol_large": "art/cactus_large.png"
+    }
   ],
-  "digit_groups": [4, 4, 3],
+  "digit_groups": [
+    4,
+    4,
+    3
+  ],
   "win_display": "whole",
-  "layout": { "preset": "jar" }
+  "layout": "layouts/jar.json"
 }

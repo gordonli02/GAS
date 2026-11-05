@@ -12,12 +12,14 @@ config_version=5
 
 config/name="Last Sale"
 config/version="0.1.0"
-run/main_scene="res://src/dev/m1_check.tscn"
+run/main_scene="res://src/table/table_m2.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 
 Platform="*res://src/platform/platform.gd"
+Packs="*res://src/data/packs.gd"
+Sfx="*res://src/audio/sfx.gd"
 
 [display]
 
@@ -25,10 +27,6 @@ window/size/viewport_width=1920
 window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-
-[internationalization]
-
-locale/fallback="en"
 
 [rendering]
 

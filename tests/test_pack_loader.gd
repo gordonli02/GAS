@@ -14,7 +14,10 @@ func test_core_pack_loads() -> void:
 	eq(plate.name, "Hot Plate", "plate name")
 	eq(Array(plate.digit_groups), [4, 3, 4, 3, 4], "plate digit groups")
 	eq(plate.win_display, "one_group", "plate win display")
-	eq(pack.form("spur").layout.get("preset"), "jar", "spur preset")
+	eq(pack.form("spur").layout.flaps.size(), 1, "spur flaps")
+	eq(pack.form("plate").layout.flaps.size(), 5, "plate flaps")
+	check(pack.form("catch").tiers[0].symbol.ends_with("art/walleye.png"), "walleye symbol path")
+	check(pack.form("catch").tiers[0].symbol_large.ends_with("art/walleye_large.png"), "walleye large symbol path")
 	eq(pack.form("catch").colors.edge, Color.html("#0033cc"), "catch edge colour")
 	eq(pack.tear_clips.size(), 8, "tear clips")
 	var marks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://packs/core/audio/tear_marks.json"))
@@ -23,7 +26,7 @@ func test_core_pack_loads() -> void:
 
 
 func test_platform_lists_core_pack() -> void:
-	var platform = Engine.get_main_loop().root.get_node_or_null("Platform")
+	var platform = (Engine.get_main_loop() as SceneTree).root.get_node_or_null("Platform")
 	if not check(platform != null, "Platform autoload missing"):
 		return
 	check(platform.pack_dirs().has("res://packs/core"), "core pack dir listed")
@@ -50,7 +53,10 @@ func test_rejects_bad_fields() -> void:
 		"escape": {"tiers": [_tier("a", 500, "top", "../../evil.png"), _tier("b", 100, "mid"), _tier("c", 25, "low")]},
 		"missing_symbol": {"tiers": [_tier("a", 500, "top", "art/none.png"), _tier("b", 100, "mid"), _tier("c", 25, "low")]},
 		"groups": {"digit_groups": [4, 1]},
-		"preset": {"layout": {"preset": "spinner"}},
+		"groups_vs_layout": {"digit_groups": [4, 4]},
+		"layout_ref": {"layout": "core:spinner"},
+		"layout_escape": {"layout": "../layouts/single.json"},
+		"no_symbol": {"tiers": [_tier("a", 500, "top", "-"), _tier("b", 100, "mid"), _tier("c", 25, "low")]},
 		"id": {"id": "Bad Id"},
 	}
 	for k in cases:
@@ -67,8 +73,10 @@ func test_accepts_minimal_valid_pack() -> void:
 
 
 func _tier(key: String, prize: int, role: String, symbol := "") -> Dictionary:
-	var t := {"key": key, "label": key.capitalize(), "prize": prize, "printed_count": 3, "role": role}
-	if symbol != "":
+	var t := {"key": key, "label": key.capitalize(), "prize": prize, "printed_count": 3, "role": role, "symbol": "art/s.png"}
+	if symbol == "-":
+		t.erase("symbol")
+	elif symbol != "":
 		t.symbol = symbol
 	return t
 
@@ -82,11 +90,12 @@ func _make_pack(name: String, form_overrides: Dictionary) -> String:
 		"id": "test", "name": "Test Form", "title": ["TEST"], "code": "TF-1", "price": 1,
 		"colors": {"edge": "#123456", "head": "#abcdef", "ink": "#000000", "tiles": ["#111111", "#222222", "#333333", "#444444"]},
 		"tiers": [_tier("a", 500, "top"), _tier("b", 500, "top"), _tier("c", 100, "mid"), _tier("d", 25, "low")],
-		"digit_groups": [3, 3, 3], "win_display": "whole", "layout": {"preset": "single"},
+		"digit_groups": [4, 4, 3], "win_display": "whole", "layout": "core:single",
 	}
 	form.merge(form_overrides, true)
 	_write(dir.path_join("pack.json"), JSON.stringify({"format": 1, "id": "test_" + name.to_lower().replace(".", "_"), "version": "0.1", "name": "Test", "forms": ["form.json"]}))
 	_write(dir.path_join("form.json"), JSON.stringify(form))
+	Image.create(8, 8, false, Image.FORMAT_RGBA8).save_png(dir.path_join("art/s.png"))
 	return dir
 
 

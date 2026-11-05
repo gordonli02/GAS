@@ -6,10 +6,10 @@ extends RefCounted
 
 const FORMAT := 1
 const MANIFEST := "pack.json"
-const ALLOWED_EXTENSIONS := ["json", "png", "jpg", "jpeg", "webp", "wav", "ogg", "mp3", "txt", "md"]
+const ALLOWED_EXTENSIONS := ["json", "png", "jpg", "jpeg", "webp", "wav", "ogg", "mp3", "ttf", "otf", "woff", "woff2", "txt", "md"]
 const IMAGE_EXTENSIONS := ["png", "jpg", "jpeg", "webp"]
 const AUDIO_EXTENSIONS := ["wav", "ogg", "mp3"]
-const LAYOUT_PRESETS := ["single", "windows", "jar"]
+const CORE_DIR := "res://packs/core"
 const ID_PATTERN := "^[a-z0-9_]{1,32}$"
 const MAX_FILES := 2000
 
@@ -124,13 +124,19 @@ static func _load_form(ctx: _Ctx, pack: PackDef, path: String) -> FormDef:
 			"printed_count": ctx.req_int(t, "printed_count", where),
 			"role": ctx.req_string(t, "role", where),
 			"symbol": "",
+			"symbol_large": "",
 		}
 		if not FormDef.ROLES.has(tier.role):
 			ctx.err(where + ": role must be one of " + ", ".join(FormDef.ROLES))
 		if tier.prize < 1:
 			ctx.err(where + ": prize must be at least 1")
-		if t.has("symbol"):
-			tier.symbol = ctx.req_file(t, "symbol", where, IMAGE_EXTENSIONS, "")
+		var sym := ctx.req_file(t, "symbol", where, IMAGE_EXTENSIONS, "")
+		tier.symbol = ctx.abs_path(sym) if sym != "" else ""
+		tier.symbol_large = tier.symbol
+		if t.has("symbol_large"):
+			var big := ctx.req_file(t, "symbol_large", where, IMAGE_EXTENSIONS, "")
+			if big != "":
+				tier.symbol_large = ctx.abs_path(big)
 		f.tiers.append(tier)
 	if f.colors.has("tiles") and f.colors.tiles.size() < f.tiers.size():
 		ctx.err(path + ": colors.tiles needs one colour per tier")
@@ -150,17 +156,33 @@ static func _load_form(ctx: _Ctx, pack: PackDef, path: String) -> FormDef:
 	if not FormDef.WIN_DISPLAYS.has(f.win_display):
 		ctx.err(path + ": win_display must be one of " + ", ".join(FormDef.WIN_DISPLAYS))
 
-	var layout = d.get("layout")
-	if not layout is Dictionary:
-		ctx.err(path + ": layout missing")
-	else:
-		f.layout = layout
-		if not LAYOUT_PRESETS.has(str(layout.get("preset", ""))):
-			ctx.err(path + ": layout.preset must be one of " + ", ".join(LAYOUT_PRESETS))
+	f.layout = _load_layout(ctx, d.get("layout"), f, path)
 
 	if d.has("tear_sounds"):
 		f.tear_clips = _load_tear_sounds(ctx, d.tear_sounds, path)
 	return f
+
+
+## "layouts/x.json" inside this pack, or "core:x" for a built-in layout.
+static func _load_layout(ctx: _Ctx, ref, f: FormDef, path: String) -> Dictionary:
+	if not ref is String or ref == "":
+		ctx.err(path + ": layout must name a layout file, e.g. \"layouts/single.json\" or \"core:single\"")
+		return {}
+	var lctx := ctx
+	var rel: String = ref
+	if ref.begins_with("core:"):
+		lctx = _Ctx.new(CORE_DIR, ctx.errors)
+		rel = "layouts/%s.json" % ref.trim_prefix("core:")
+		if not FileAccess.file_exists(lctx.abs_path(rel)):
+			ctx.err("%s: no built-in layout '%s'" % [path, ref])
+			return {}
+	elif lctx.check_file(rel, path + " layout", ["json"]) == "":
+		return {}
+	var layout := LayoutLoader.validate(lctx, lctx.read_json(rel), f, rel)
+	if not layout.is_empty():
+		layout = layout.duplicate(true)
+		layout["_dir"] = lctx.dir  # where the layout's own images and fonts resolve
+	return layout
 
 
 ## The box generator needs top tiers of one prize, one mid and one low tier,
