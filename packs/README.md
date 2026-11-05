@@ -76,10 +76,15 @@ with the engine. The three built-in layouts in `core/layouts/` are complete exam
 - `flaps`: 1–12, inside the card, not overlapping. `hinge` (`left`, `right`, `top`, `bottom`) is the
   edge that stays fixed. `cover` is a cover object or the name of a `cover_templates` entry; covers
   are drawn upright on the card and stretched to the flap. List order is the order Space opens them.
+  `side_pull: true` also lets a sideways swipe (along the hinge) open the flap: the tear starts at
+  the free-edge corner the hand moves away from and spreads across as the hand travels.
 - `pairs`: `adjacent` lets two unopened flaps with the same hinge that share a full edge tear
   together when pressed within 0.095 of that edge; `none` turns this off.
-- `band`: `null`, or `{ "height": 0.05–0.6, "canvas": [w, h], "layers": [...] }`: a band across the
-  middle of the card that must be broken before the card can flip.
+- `band`: `null`, or `{ "height": 0.05–0.6, "canvas": [w, h], "layers": [...], "breaks": [...] }`: a
+  band across the middle of the card that must be broken before the card can flip. `breaks` lists
+  how it can break: `slide` (drag sideways past 0.34, it slides off) and/or `split` (drag up or down
+  past 0.34, it tears in the middle and the halves fall left and right); default `["slide"]`.
+  Space picks one of the listed ways at random.
 - `reveal_slide`: how far the card slides while opening, as shares of its width and height.
 
 ### Layers

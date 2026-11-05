@@ -181,7 +181,10 @@ jar = {
             R([350, 92, 230, 194], YEL),
             T("${prize}", [465, 214], "slab", 72, max_width=208),
             T("VERIFY {verify}", [465, 258], "lcd", 22, **{"if": "verify"})]},
+    # side_pull: G's change after M3 review: a sideways swipe also opens it, from the bottom corner
+    # the hand moves away from.
     "flaps": [{"rect": [r4(TM * PX), r4(TM * PX), r4((JW - 2 * TM) * PX), r4((JH - 2 * TM) * PX)], "hinge": "top",
+               "side_pull": True,
                "cover": {"canvas": [612, 372], "layers": [
                    R([0, 0, 612, 372], STOCK),
                    {"type": "circle", "center": [306, 78], "radius": 62, "fill": INK},
@@ -191,7 +194,8 @@ jar = {
                     "closed": True, "stroke": INK, "width": 6, "join": "miter"},
                    T("OPEN", [136, 316], "slab", 44, fill=INK), T("UP", [476, 316], "slab", 44, fill=INK)]}}],
     "pairs": "none",
-    "band": {"height": 0.24, "canvas": [640, 70], "layers": [
+    # breaks: G's change after M3 review: drag sideways to slide it off, or up/down to tear it in two.
+    "band": {"height": 0.24, "canvas": [640, 70], "breaks": ["slide", "split"], "layers": [
         R([0, 0, 640, 70], "tile.3"),
         {"type": "path", "points": [[-20, 0], [-4, 0], [24, 70], [8, 70]], "closed": True, "fill": "edge",
          "repeat": {"count": 20, "step": [34, 0]}},

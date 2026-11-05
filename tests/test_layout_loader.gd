@@ -57,6 +57,9 @@ func test_rejects_broken_layouts() -> void:
 		"symbol win on front": func(l): l.front.append({"type": "symbol", "tier": "win", "center": [0, 0], "size": 10}),
 		"missing image": func(l): l.front.append({"type": "image", "src": "art/nope.png", "rect": [0, 0, 10, 10]}),
 		"repeat too many": func(l): l.front[0].repeat = {"count": 5000, "step": [1, 0]},
+		"side_pull not bool": func(l): l.flaps[0].side_pull = "yes",
+		"unknown band break": func(l): l.band = {"height": 0.24, "canvas": [64, 8], "layers": [], "breaks": ["melt"]},
+		"empty band breaks": func(l): l.band = {"height": 0.24, "canvas": [64, 8], "layers": [], "breaks": []},
 	}
 	eq(_validate(_single(), form).size(), 0, "unchanged single layout is valid")
 	for name in cases:

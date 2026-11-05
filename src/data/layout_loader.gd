@@ -105,6 +105,8 @@ static func validate(ctx, layout, form: FormDef, where: String) -> Dictionary:
 		rects.append(r)
 		if not HINGES.has(f.get("hinge")):
 			v.err(p + ".hinge", "must be one of " + ", ".join(HINGES))
+		if f.has("side_pull") and not f.side_pull is bool:
+			v.err(p + ".side_pull", "must be true or false")
 		var c = f.get("cover")
 		if c is String:
 			if not templates.has(c):
@@ -126,6 +128,14 @@ static func validate(ctx, layout, form: FormDef, where: String) -> Dictionary:
 				v.err("band.height", "must be 0.05 to 0.6")
 			v.vec2(band, "canvas", "band.canvas")
 			v.layers(band.get("layers"), "band.layers", "band")
+			if band.has("breaks"):
+				var b = band.breaks
+				var good: bool = b is Array and not b.is_empty()
+				if good:
+					for m in b:
+						good = good and BandRules.MODES.has(m)
+				if not good:
+					v.err("band.breaks", "must list one or both of " + ", ".join(BandRules.MODES))
 
 	var slide := v.vec2(layout, "reveal_slide", "reveal_slide")
 	if absf(slide.x) > 1 or absf(slide.y) > 1:

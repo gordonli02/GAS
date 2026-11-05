@@ -1,8 +1,9 @@
 extends Node3D
-## Milestone 2 test scene: one ticket form on a plain grey table, for judging
-## the tear against the web build. Rooms, machine and economy come later.
+## Test table: tickets on a plain grey table, for judging the tear against the
+## web build. Deals the core forms in turn, each from its own box.
+## Rooms, machine and economy come in later milestones.
 
-const FORM_UID := "core:catch"
+const FORM_UIDS := ["core:catch", "core:plate", "core:spur"]
 const SEED := "G-0001"
 const TABLE_COLOR := Color("#8b8b90")
 const TRAY_COLOR := Color("#8d6b42")
@@ -15,8 +16,10 @@ var flow := TicketFlow.new()
 var input := TicketInput.new()
 var tray := Node3D.new()
 var pile := DiscardPile.new()
-var _box: TicketBox
+var _boxes: Array[TicketBox] = []
+var _turn := 0
 var _stack: MeshInstance3D
+var _stack_top: MeshInstance3D
 var _stack_mat := StandardMaterial3D.new()
 
 
@@ -34,8 +37,8 @@ func _ready() -> void:
 	pile.painter = painter
 	add_child(pile)
 
-	var form := Packs.form(FORM_UID)
-	_box = BoxGenerator.build(form, SEED)
+	for uid in FORM_UIDS:
+		_boxes.append(BoxGenerator.build(Packs.form(uid), SEED))
 	flow.camera = camera
 	flow.view = view
 	flow.flecks = flecks
@@ -47,15 +50,28 @@ func _ready() -> void:
 	add_child(input)
 	get_viewport().size_changed.connect(_place_tray_and_pile)
 	_place_tray_and_pile()
-	_stack_mat.albedo_texture = await pile.art(form)
+	_show_next_in_tray()
 
 
 func _next_ticket() -> Dictionary:
-	if _box.cursor >= _box.size:
-		_box = BoxGenerator.build(_box.form, _box.seed + "+")
-	var t: Dictionary = _box.tickets[_box.cursor]
-	_box.cursor += 1
-	return {"form": _box.form, "ticket": t}
+	var i := _turn % _boxes.size()
+	_turn += 1
+	var box := _boxes[i]
+	if box.cursor >= box.size:
+		box = BoxGenerator.build(box.form, box.seed + "+")
+		_boxes[i] = box
+	var t: Dictionary = box.tickets[box.cursor]
+	box.cursor += 1
+	_show_next_in_tray.call_deferred()
+	return {"form": box.form, "ticket": t}
+
+
+## The stack in the tray wears the next ticket's box art and card shape.
+func _show_next_in_tray() -> void:
+	var form := _boxes[_turn % _boxes.size()].form
+	var s: Array = form.layout.card.size
+	_stack.scale = Vector3(s[0] / 1.4, 1, s[1] / 2.0)
+	_stack_mat.albedo_texture = await pile.art(form)
 
 
 func _build_room() -> void:

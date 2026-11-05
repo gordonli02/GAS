@@ -509,6 +509,7 @@
     367.7987
    ],
    "hinge": "top",
+   "side_pull": true,
    "cover": {
     "canvas": [
      612,
@@ -626,6 +627,10 @@
   "canvas": [
    640,
    70
+  ],
+  "breaks": [
+   "slide",
+   "split"
   ],
   "layers": [
    {

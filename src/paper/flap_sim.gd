@@ -21,6 +21,7 @@ const SETTLE_TIME := 0.22
 const STEPS := 15             ## progress steps that drive tear crackles
 const K_GAIN := 0.45
 const K_MAX := 0.42
+const DRAG_DECIDE := 0.03     ## hand travel before a drag is read as up or sideways
 
 var w: float
 var h: float
@@ -92,10 +93,36 @@ func grab(y: float) -> void:
 		y_grab = clampf(y, -h / 2.0, h / 2.0)
 
 
+## How a drag on a flap is read, decided once the hand has moved DRAG_DECIDE:
+## "up" pulls the free edge toward the hinge (the original way); "side" is a
+## swipe along the hinge, allowed only on flaps marked side_pull.
+## `delta` is the pointer travel in the flap frame. Returns "" while undecided.
+static func drag_mode(delta: Vector2, side_allowed: bool) -> String:
+	if not side_allowed:
+		return "up"
+	if maxf(absf(delta.x), absf(delta.y)) < DRAG_DECIDE:
+		return ""
+	return "side" if absf(delta.y) > absf(delta.x) else "up"
+
+
 ## Pointer moved: `pull` is the requested f, `dy` the vertical drag since the press.
 ## Returns true on the frame the paper first breaks.
 func pull_to(pull: float, dy: float) -> bool:
 	k_target = clampf(dy * K_GAIN, -K_MAX, K_MAX)
+	return _set_pull(pull)
+
+
+## Sideways swipe along the hinge: the tear starts at the corner the hand moves
+## away from (swipe toward +y: the -y corner) and opens as far as the hand travels,
+## at the same rate as an upward pull. Returns true on the first break.
+func side_pull_to(side: float) -> bool:
+	if not torn and side != 0.0:
+		y_grab = -signf(side) * h / 2.0
+	k_target = 0.0
+	return _set_pull(w - absf(side) / 2.0)
+
+
+func _set_pull(pull: float) -> bool:
 	var popped := false
 	if not torn:
 		if pull < w - POP_PULL:

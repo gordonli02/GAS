@@ -62,6 +62,13 @@ func play_tear_slice(clip: Dictionary, from_step: int, to_step: int, steps: int)
 	_play_stream(_slice(src, clip.path, span.x, span.y), 1.0)
 
 
+## Plays [start, end] seconds of a rip (used for the band snapping).
+func play_tear_span(clip: Dictionary, start: float, end: float) -> void:
+	var src := PackAssets.audio(clip.path) as AudioStreamWAV
+	if src != null and end > start:
+		_play_stream(_slice(src, clip.path, start, end), 1.0)
+
+
 ## A copy of [start, end] with full gain to the end, then a short linear fade.
 func _slice(src: AudioStreamWAV, key: String, start: float, end: float) -> AudioStreamWAV:
 	var id := "%s|%.4f|%.4f" % [key, start, end]

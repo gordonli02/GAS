@@ -30,7 +30,9 @@ var pulse := 0.0
 var _anim := 0.0
 var _from := Transform3D.IDENTITY
 var _to_pile := Vector3.ZERO
-var _drag := []              ## [{flap, dx, y}] while the pointer holds flaps
+var _drag := []              ## [{flap, dx, y, start, mode}] while the pointer holds flaps
+var _band_start = null       ## card point where a band drag started, or null
+var _band_mode := ""         ## "slide" / "split" once the band drag's direction is read
 var _time := 0.0
 var _busy := false
 
@@ -45,7 +47,11 @@ func primary() -> void:
 		State.IDLE:
 			deal()
 		State.FRONT:
-			flip()
+			if view.band_on:
+				view.break_band(BandRules.random_mode(view.band_breaks(), randf()), 1.0)
+				_on_band_break()
+			else:
+				flip()
 		State.BACK:
 			if not _drag.is_empty():
 				return
@@ -73,13 +79,22 @@ func press(screen: Vector2) -> bool:
 			for i in set:
 				var s := view.sims[i]
 				var p: Vector2 = view.flap_point(i, from, dir)
-				_drag.append({"flap": i, "dx": (2.0 * s.f - s.w) - p.x, "y": p.y})
+				_drag.append({"flap": i, "dx": (2.0 * s.f - s.w) - p.x, "y": p.y, "start": p,
+					"mode": FlapSim.drag_mode(Vector2.ZERO, _side_pull(i))})
 				if hit.mate >= 0:
 					s.grab(view.shared_edge_y(i, set[1] if i == set[0] else set[0]))
 				else:
 					s.grab(p.y)
 			return true
 		State.FRONT:
+			if view.band_on:
+				var from := camera.project_ray_origin(screen)
+				var dir := camera.project_ray_normal(screen)
+				if view.on_card(from, dir):
+					_band_start = view.card_point(from, dir)
+					_band_mode = ""
+					return true
+				return false
 			flip()
 		State.REVEALED:
 			collect()
@@ -89,22 +104,42 @@ func press(screen: Vector2) -> bool:
 
 
 func move(screen: Vector2) -> void:
-	if _drag.is_empty():
-		return
 	var from := camera.project_ray_origin(screen)
 	var dir := camera.project_ray_normal(screen)
+	if _band_start != null:
+		var p = view.card_point(from, dir)
+		if p == null:
+			return
+		var delta: Vector2 = p - _band_start
+		if _band_mode == "":
+			_band_mode = BandRules.mode(delta, view.band_breaks())
+		if view.drag_band(delta, _band_mode):
+			_band_start = null
+			_on_band_break()
+		return
+	if _drag.is_empty():
+		return
 	for it in _drag:
 		var p = view.flap_point(it.flap, from, dir)
 		if p == null:
 			continue
 		var s := view.sims[it.flap]
-		if s.pull_to((p.x + it.dx + s.w) / 2.0, p.y - it.y):
+		if it.mode == "":
+			it.mode = FlapSim.drag_mode(p - it.start, _side_pull(it.flap))
+		if it.mode == "":
+			continue
+		var popped := s.side_pull_to((p - it.start).y) if it.mode == "side" else s.pull_to((p.x + it.dx + s.w) / 2.0, p.y - it.y)
+		if popped:
 			_on_break(it.flap)
 			camera.shake = 0.18
 			_fleck_burst(it.flap, 10)
 
 
 func release() -> void:
+	if _band_start != null:
+		_band_start = null
+		_band_mode = ""
+		view.release_band()
 	for it in _drag:
 		view.sims[it.flap].release()
 	_drag.clear()
@@ -112,9 +147,13 @@ func release() -> void:
 
 ## True when the pointer is over paper that can be grabbed.
 func can_grab(screen: Vector2) -> bool:
+	var from := camera.project_ray_origin(screen)
+	var dir := camera.project_ray_normal(screen)
+	if state == State.FRONT and view.band_on:
+		return view.on_card(from, dir)
 	if state != State.BACK:
 		return false
-	return not view.flap_at(camera.project_ray_origin(screen), camera.project_ray_normal(screen)).is_empty()
+	return not view.flap_at(from, dir).is_empty()
 
 
 func deal() -> void:
@@ -137,8 +176,9 @@ func deal() -> void:
 	Sfx.play("deal")
 
 
+## The card cannot turn over while its band is on.
 func flip() -> void:
-	if state != State.FRONT:
+	if state != State.FRONT or view.band_on:
 		return
 	_anim = 0.0
 	state = State.FLIP
@@ -169,7 +209,7 @@ func _process(dt: float) -> void:
 	var slide: Array = form.layout.reveal_slide
 	var target: Vector3 = hold.origin + up * sin(_time * 1.6) * 0.012 \
 		+ right * float(slide[0]) * open * view.size.x + up * float(slide[1]) * open * view.size.y
-	var held := not _drag.is_empty()
+	var held := not _drag.is_empty() or _band_start != null
 	var m := camera.mouse
 	var tilt := Basis.from_euler(Vector3(-0.07 + (0.0 if held else m.y * 0.05), 0.0 if held else m.x * 0.09, 0.03 * (1.0 - open)), EULER_ORDER_XYZ)
 	var facing := hold.basis * tilt
@@ -240,11 +280,33 @@ func _reveal() -> void:
 	revealed.emit(ticket, form)
 
 
+## The band snaps: a short rip (its first crackles), a jolt and coloured flecks.
+func _on_band_break() -> void:
+	camera.shake = 0.2
+	var clips := _clips()
+	if clips.is_empty():
+		Sfx.play("pop")
+	else:
+		var c: Dictionary = clips[randi() % clips.size()]
+		Sfx.play_tear_span(c, 0.0, c.marks[mini(2, c.marks.size() - 1)])
+	var color := PAPER
+	for cmd in TicketArt.band(form).cmds:
+		if cmd.k == "poly":
+			color = cmd.color
+			break
+	flecks.emit(view.global_position, color, 1.8, 10)
+
+
 ## The first break: with recorded rips the crackles carry the sound, so the
 ## break itself is silent (as in the web build); otherwise play the synth pop.
 func _on_break(_flap: int) -> void:
 	if _clips().is_empty():
 		Sfx.play("pop")
+
+
+## Whether the layout lets this flap open with a sideways swipe.
+func _side_pull(flap: int) -> bool:
+	return bool(form.layout.flaps[flap].get("side_pull", false))
 
 
 func _clips() -> Array:
