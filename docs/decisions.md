@@ -28,3 +28,37 @@ Newest last. "G" is the project owner.
 - **Lucky Spur flap also opens with a sideways swipe** (`side_pull`): swiping along the bottom tears
   from the bottom corner the hand moves away from (swipe right: bottom-left), opening half the swipe
   distance, the same rate as an upward pull. Upward pulls work as before.
+
+## Milestone 4
+- **Discard pile grows by ranges** (G's design, replaces "capped at 36 meshes"): one card per
+  ticket for the first 12, then a fixed heap per range of tickets opened plus up to 5 of the latest
+  on top (`src/table/pile_model.gd`). Cards come from one seeded drop sequence, settle onto the slope
+  under them and slide off spots steeper than ~18°, choosing the lowest of three spots, so the pile
+  rises into a mound. At most 185 cards are drawn, in one batch per form.
+- **A tossed ticket lands on its pile spot facing the way it will lie.** The web build snapped to a
+  random turn on landing.
+- **The cash readout and ledger (top left) arrived with the economy in milestone 4**, in the green
+  LCD style; the menu and developer panel stay in milestone 6. The web build's narrow-screen
+  TABLE/MACHINE button is not ported (desktop only); B does the same.
+
+## Milestone 4 review
+- **Motor loop at 1.5x speed but its own pitch.** MIGRATION.md (and the web build) played
+  `dispense_loop.wav` at pitch scale 1.5, which also raised it. G wanted the speed without the pitch:
+  `dispense_loop_fast.wav` is the loop time-compressed with WSOLA (`tools/time_stretch_loop.py`):
+  rhythm 92 -> 62 ms, low peak 284 -> 275 Hz (pitch-scaled playback: 426 Hz). Played at pitch 1.0.
+- **LOAN is always available, within a limit.** The web build offered it only when the player was
+  stuck. The limit is a placeholder (`Economy.LOAN_LIMIT`, $1000 total) until the credit-line design
+  is worked out with the later game modes.
+- **Lit arcade buttons on the machine.** The three column buttons are square lit push buttons in a
+  black bezel and PLAY ALL a lit red dome in a ring bezel, after G's reference photos. The lamp look
+  is painted into unshaded textures: the Compatibility renderer ignores emission textures, and its
+  glow brightens the whole frame, so neither is used. PLAY ALL's outer metal ring is as tall as the
+  machine LCD beside it. Lamp brightness comes in four presets (`MachineView.lamp_preset`, 0 brightest
+  ... 3 most muted; `tools/preview_lamps.tscn` renders them); G picked 1 (the second step).
+- **PLAY ALL blinks only in the machine view**; seen from the table it stays lit.
+- **While a ticket is open the status line shows just its number** (e.g. "00001", no "TICKET").
+- **UI style "A, refined LCD"** (G's pick of three mockups): dark metal plates with screws, recessed
+  backlit LCD glass with a pixel grid, lit green bill keys and chrome CASH OUT / LOAN keys, the
+  remaining house line under them. The top-left plate shows cash, status and HELD / OPENED / NET.
+- **The full ledger is on a notepad on the table** (kept from the "in the world" mockup), written in
+  Patrick Hand (SIL OFL, `assets/fonts/`, from Fontsource 5.3.0), also available to packs as `hand`.

@@ -12,8 +12,8 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 ## Development
 
 - Engine: Godot 4.7.2 (stable), Compatibility renderer.
-- Open `project.godot` in Godot. Main scene for now: `src/table/test_table.tscn` (the core forms in turn on a grey table).
-  `src/dev/m1_check.tscn` shows fonts, sounds and generated boxes.
+- Open `project.godot` in Godot. Main scene: `src/game/game.tscn` (machine, money, table; a plain grey room until milestone 5).
+  Dev scenes: `src/table/test_table.tscn` (the core forms in turn, no economy), `src/dev/m1_check.tscn` (fonts, sounds, boxes).
 - Tests (headless, no addons):
 
   ```
@@ -23,12 +23,14 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 
 - `tools/drive_table.tscn` plays one ticket of each form with synthetic input and saves screenshots:
   `godot --path . --resolution 1920x1080 res://tools/drive_table.tscn -- <output dir>`
+- `tools/drive_game.tscn` plays the full loop (bills, PLAY ALL, camera swing, leaving rules, cash out, loan)
+  and checks the money identity every frame; `tools/preview_pile.tscn` renders the discard pile at several sizes.
 - `tools/make_generator_golden.js` (Node) regenerates `tests/fixtures/generator_golden.json` from the
   web build's own generator; the Godot generator must match it bit for bit.
 
 ### Layout
 
-- `src/core/`: plain logic with no scene access (random numbers, box generator, data classes)
+- `src/core/`: plain logic with no scene access (random numbers, box generator, economy, machine, tray, navigation rules)
 - `src/data/`: data pack loading and validation
 - `src/platform/`: thin platform layer (`Platform` autoload); offline backend only for now
 - `docs/decisions.md`: where the code deliberately differs from MIGRATION.md or the web build

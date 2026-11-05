@@ -88,13 +88,16 @@ func _build_room() -> void:
 	var key := SpotLight3D.new()
 	key.position = Vector3(2, 13, 5)
 	key.look_at_from_position(key.position, Vector3.ZERO)
-	key.spot_range = 40.0
+	key.spot_range = 25.0
 	key.spot_angle = rad_to_deg(PI / 2.9)
 	key.spot_angle_attenuation = 0.6
 	key.light_energy = 1.4
 	key.shadow_enabled = true
-	key.shadow_bias = 0.2
-	key.shadow_normal_bias = 3.0
+	# Back faces cast the shadow, so lit surfaces don't shadow themselves (no stripes)
+	# and the bias can stay small (no gap between things and their shadows).
+	key.shadow_reverse_cull_face = true
+	key.shadow_bias = 0.02
+	key.shadow_normal_bias = 0.5
 	add_child(key)
 
 	var table := MeshInstance3D.new()

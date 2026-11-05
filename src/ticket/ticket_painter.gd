@@ -9,6 +9,7 @@ const BUILTIN_FONTS := {
 	"cond": "res://assets/fonts/oswald-latin-400-normal.woff2",
 	"cond_bold": "res://assets/fonts/oswald-latin-600-normal.woff2",
 	"lcd": "res://assets/fonts/vt323-latin-400-normal.woff2",
+	"hand": "res://assets/fonts/patrick-hand-latin-400-normal.woff2",
 }
 
 static var _fonts := {}

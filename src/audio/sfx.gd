@@ -14,6 +14,8 @@ const SOUNDS := {
 	"button": "res://assets/audio/machine_button.wav",
 	"bill": "res://assets/audio/bill_insert.wav",
 	"dispense_loop": "res://assets/audio/dispense_loop.wav",
+	## The loop sped up 1.5x at its own pitch (tools/time_stretch_loop.py).
+	"dispense_loop_fast": "res://assets/audio/dispense_loop_fast.wav",
 	"dispense_stop": "res://assets/audio/dispense_stop.wav",
 }
 const POOL := 16
@@ -23,6 +25,8 @@ var _streams := {}
 var _players: Array[AudioStreamPlayer] = []
 var _next := 0
 var _slices := {}   ## cache: "<path>|<start>|<end>" -> AudioStreamWAV
+var _motor := AudioStreamPlayer.new()
+var _motor_on := false
 
 
 func _ready() -> void:
@@ -33,6 +37,23 @@ func _ready() -> void:
 		add_child(p)
 		_players.append(p)
 	set_master(DEFAULT_MASTER)
+	var loop: AudioStreamWAV = _streams["dispense_loop_fast"].duplicate()
+	loop.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	loop.loop_begin = 0
+	loop.loop_end = loop.data.size() / 2
+	_motor.stream = loop
+	add_child(_motor)
+
+
+## The dispenser's motor loop while tickets come out: 1.5x speed, original pitch.
+func motor(on: bool) -> void:
+	if on == _motor_on:
+		return
+	_motor_on = on
+	if on:
+		_motor.play()
+	else:
+		_motor.stop()
 
 
 func set_master(linear: float) -> void:

@@ -4,6 +4,7 @@ extends Node
 ## Owns the ticket's pose and turns pointer actions into flap pulls.
 ## Timings and poses follow the web build (MIGRATION.md "Ticket timing").
 
+signal dealt(ticket: Dictionary, form: FormDef)
 signal revealed(ticket: Dictionary, form: FormDef)
 signal tossed
 
@@ -22,6 +23,8 @@ var tray: Node3D             ## where tickets are dealt from
 var pile: DiscardPile
 ## Returns the next ticket as {form: FormDef, ticket: Dictionary}, or {} when the tray is empty.
 var next_ticket: Callable
+## Asked after a toss lands: deal the next ticket straight away?
+var deal_after_toss: Callable = func() -> bool: return true
 
 var state := State.IDLE
 var form: FormDef
@@ -30,6 +33,7 @@ var pulse := 0.0
 var _anim := 0.0
 var _from := Transform3D.IDENTITY
 var _to_pile := Vector3.ZERO
+var _to_pile_basis := Basis.IDENTITY
 var _drag := []              ## [{flap, dx, y, start, mode}] while the pointer holds flaps
 var _band_start = null       ## card point where a band drag started, or null
 var _band_mode := ""         ## "slide" / "split" once the band drag's direction is read
@@ -39,6 +43,31 @@ var _busy := false
 
 func has_ticket() -> bool:
 	return state != State.IDLE
+
+
+## The ticket in hand, for TableNav.
+func hand() -> TableNav.Hand:
+	match state:
+		State.IDLE:
+			return TableNav.Hand.NONE
+		State.FRONT:
+			return TableNav.Hand.FRONT
+		State.BACK:
+			return TableNav.Hand.OPENED if view.all_settled() else TableNav.Hand.BACK
+		State.REVEALED:
+			return TableNav.Hand.OPENED
+	return TableNav.Hand.MOVING
+
+
+func has_band() -> bool:
+	return form != null and form.layout.band != null
+
+
+## Puts the ticket in hand away untouched (it goes back to the tray).
+func cancel() -> void:
+	release()
+	view.visible = false
+	state = State.IDLE
 
 
 ## Space / Enter.
@@ -174,6 +203,7 @@ func deal() -> void:
 	_anim = 0.0
 	state = State.DEAL
 	Sfx.play("deal")
+	dealt.emit(ticket, form)
 
 
 ## The card cannot turn over while its band is on.
@@ -190,6 +220,7 @@ func collect() -> void:
 		return
 	_from = view.global_transform
 	_to_pile = pile.next_spot()
+	_to_pile_basis = pile.next_basis()
 	_anim = 0.0
 	state = State.TOSS
 	Sfx.play("flip")
@@ -238,7 +269,7 @@ func _process(dt: float) -> void:
 			_anim = minf(1.0, _anim + dt / TOSS_TIME)
 			var t := _ease(_anim)
 			var pos := _from.origin.lerp(_to_pile, t) + Vector3(0, sin(t * PI) * 0.8, 0)
-			var q := _from.basis.get_rotation_quaternion().slerp(_flat_basis().get_rotation_quaternion(), t)
+			var q := _from.basis.get_rotation_quaternion().slerp(_to_pile_basis.get_rotation_quaternion(), t)
 			view.global_transform = Transform3D(Basis(q), pos)
 			if _anim >= 1.0:
 				view.visible = false
@@ -246,7 +277,8 @@ func _process(dt: float) -> void:
 				Sfx.play("toss")
 				state = State.IDLE
 				tossed.emit()
-				deal()
+				if deal_after_toss.call():
+					deal()
 
 
 func _step_paper(dt: float) -> void:

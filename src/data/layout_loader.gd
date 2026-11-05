@@ -4,7 +4,7 @@ extends RefCounted
 ## Every error names the file and the field. See packs/README.md for the format.
 
 const FORMAT := 1
-const FONTS := ["slab", "cond", "cond_bold", "lcd"]
+const FONTS := ["slab", "cond", "cond_bold", "lcd", "hand"]
 const FONT_EXTENSIONS := ["ttf", "otf", "woff", "woff2"]
 const SHAPES := ["rect", "circle", "ellipse", "path"]
 const LAYER_TYPES := ["rect", "circle", "ellipse", "path", "text", "image", "symbol", "group", "each_tier"]

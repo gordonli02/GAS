@@ -106,7 +106,7 @@ Every layer has a `type`; any layer may add `repeat: {"count": 1–200, "step": 
 
 Colours: `#rrggbb`, `#rrggbbaa`, or the form's `edge`, `head`, `ink`, `tile.N`; `tile` inside
 `each_tier`; `win_tile` in winner layers.
-Fonts: `slab` (Alfa Slab One), `cond` (Oswald 400), `cond_bold` (Oswald 600), `lcd` (VT323), or a font
-file in the pack.
+Fonts: `slab` (Alfa Slab One), `cond` (Oswald 400), `cond_bold` (Oswald 600), `lcd` (VT323),
+`hand` (Patrick Hand), or a font file in the pack.
 Text variables: `{title} {name} {code} {price}` everywhere; `{serial}` on the front and inside;
 `{prize} {verify}` inside; `{count} {tier_prize}` in `each_tier`; `{flap_no}` on covers.
