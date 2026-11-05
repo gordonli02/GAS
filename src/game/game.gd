@@ -49,6 +49,8 @@ var _saved_at := 0.0
 
 
 func _ready() -> void:
+	if _run_tool():
+		return
 	if use_save:
 		Save.open(save_path)
 		Lang.set_language(Save.setting("language"))
@@ -75,6 +77,9 @@ func _ready() -> void:
 	var forms: Array = []
 	for uid in FORM_UIDS:
 		forms.append(Packs.form(uid))
+	if forms.has(null):
+		_show_missing_data()
+		return
 	machine = MachineLogic.new(forms, SEED)
 	machine_view.painter = painter
 	add_child(machine_view)
@@ -230,6 +235,45 @@ func say(key: String) -> void:
 	_msg_until = _time + MESSAGE_TIME
 
 
+## The built-in ticket data is missing or damaged (packs/core next to the game): say so
+## instead of starting a game that cannot run. Both languages, as the menu is not up.
+func _show_missing_data() -> void:
+	hud.visible = false
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var l := LcdStyle.label("", 30, LcdStyle.LCD)
+	l.text = "Last Sale could not load its ticket data.\nPlease verify or reinstall the game.\n\n无法读取彩票数据，请验证或重新安装游戏。\n\n%s" % Platform.builtin_pack_dir()
+	l.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(l)
+	for dir in Packs.errors:
+		push_error("Data pack rejected: %s\n  %s" % [dir, "\n  ".join(Packs.errors[dir].slice(0, 8))])
+
+
+## Debug builds only: `-- --run-tool=res://tools/<scene>.tscn` opens a tool scene in
+## place of the game, before the save is touched. Exported builds refuse scene paths
+## on the command line, so this is how a verify export runs drive_game or bench_fps.
+static var _tool_started := false
+
+func _run_tool() -> bool:
+	if _tool_started or not OS.is_debug_build():
+		return false
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--run-tool="):
+			_tool_started = true
+			# Every part of this game was made but never added; their own parts too. The
+			# engine lists such nodes in debug builds (this path is debug-only): free them.
+			for id in Node.get_orphan_node_ids():
+				var n := instance_from_id(id)
+				if is_instance_valid(n) and n is Node and n.get_parent() == null:
+					n.free()
+			get_tree().change_scene_to_file.call_deferred(a.trim_prefix("--run-tool="))
+			return true
+	return false
+
+
 # --- menu and settings --------------------------------------------------------------
 
 func toggle_menu() -> void:
@@ -306,6 +350,11 @@ func save_now() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		save_now()
+	elif what == NOTIFICATION_PREDELETE:
+		# Parts never added (run-tool, missing data). Its own parts only.
+		Orphans.free_members(self, ["painter", "rooms", "machine_light", "camera", "view", "flecks", "flow",
+			"table_tray", "pile", "machine_view", "hud", "notepad", "input", "menu"])
+
 
 
 func _restore_session(d: Dictionary) -> void:

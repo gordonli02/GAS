@@ -315,7 +315,10 @@ func _milestone_6() -> void:
 	var col := game.dev.form_index
 	var box: TicketBox = game.machine.boxes[col]
 	_expect(box.seed == "TEST-0007" and box.cursor == 0 and is_equal_approx(game.machine.loaded[col], box.size), "dev panel: a new box from a seed")
-	game.dev_sound_file("toss", ProjectSettings.globalize_path("res://assets/audio/sfx_pop.wav"))
+	# A sound file on disk, as a developer would pick one (an export has no raw res:// WAVs).
+	var picked := out.path_join("picked_pop.wav")
+	_blip().save_to_wav(picked)
+	game.dev_sound_file("toss", picked)
 	game.dev_sound_volume("toss", 1.5)
 	var copied: String = Save.setting("sounds").get("toss", {}).get("file", "")
 	_expect(Sfx.is_replaced("toss") and FileAccess.file_exists(copied) and is_equal_approx(Sfx.volume("toss"), 1.5), "dev panel: toss replaced by a file (copied to %s), 150%%" % copied)
@@ -399,6 +402,19 @@ func _milestone_6() -> void:
 	_expect(e.bill == 5 and snap2.economy.credit == e.credit + 5 and snap2.economy.cash == e.cash, "a bill being fed is saved as credit")
 	await _wait(2.0)
 	game.save_now()
+
+
+## A short 16-bit tone, standing in for a sound file a developer picks.
+func _blip() -> AudioStreamWAV:
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = 22050
+	var data := PackedByteArray()
+	data.resize(2205 * 2)
+	for i in 2205:
+		data.encode_s16(i * 2, int(sin(i * 0.12) * 8000.0 * (1.0 - i / 2205.0)))
+	w.data = data
+	return w
 
 
 func _tear_partly() -> void:

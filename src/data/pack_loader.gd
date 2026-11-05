@@ -9,7 +9,9 @@ const MANIFEST := "pack.json"
 const ALLOWED_EXTENSIONS := ["json", "png", "jpg", "jpeg", "webp", "wav", "ogg", "mp3", "ttf", "otf", "woff", "woff2", "txt", "md"]
 const IMAGE_EXTENSIONS := ["png", "jpg", "jpeg", "webp"]
 const AUDIO_EXTENSIONS := ["wav", "ogg", "mp3"]
-const CORE_DIR := "res://packs/core"
+## The built-in pack, for "core:" layout references. Platform points it at the
+## exported game's pack folder.
+static var core_dir := "res://packs/core"
 const ID_PATTERN := "^[a-z0-9_]{1,32}$"
 const MAX_FILES := 2000
 
@@ -171,7 +173,7 @@ static func _load_layout(ctx: _Ctx, ref, f: FormDef, path: String) -> Dictionary
 	var lctx := ctx
 	var rel: String = ref
 	if ref.begins_with("core:"):
-		lctx = _Ctx.new(CORE_DIR, ctx.errors)
+		lctx = _Ctx.new(core_dir, ctx.errors)
 		rel = "layouts/%s.json" % ref.trim_prefix("core:")
 		if not FileAccess.file_exists(lctx.abs_path(rel)):
 			ctx.err("%s: no built-in layout '%s'" % [path, ref])

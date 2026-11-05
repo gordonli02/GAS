@@ -166,3 +166,8 @@ func _toggle_key(text: String) -> Button:
 	b.custom_minimum_size = Vector2(0, 46)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	return b
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		Orphans.free_members(self, ["_volume", "_shade"])

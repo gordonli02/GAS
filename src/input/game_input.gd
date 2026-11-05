@@ -110,5 +110,6 @@ func _update_cursor(pos: Vector2) -> void:
 	Input.set_default_cursor_shape(shape)
 
 
-func _exit_tree() -> void:
-	_nothing.free()
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		Orphans.free_members(self, ["_nothing"])   # never in the tree

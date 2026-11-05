@@ -245,13 +245,20 @@ func _play_span(s: AudioStream, start: float, dur: float, gain: float) -> void:
 	_tweens[i] = t
 
 
+## Frames in a WAV stream, whatever its format.
+static func loop_frames(s: AudioStreamWAV) -> int:
+	return roundi(s.get_length() * s.mix_rate)
+
+
 static func _looped(s: AudioStream) -> AudioStream:
 	var loop := s.duplicate()
 	if loop is AudioStreamWAV:
 		loop.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		loop.loop_begin = 0
-		var frame := (2 if loop.format == AudioStreamWAV.FORMAT_16_BITS else 1) * (2 if loop.stereo else 1)
-		loop.loop_end = loop.data.size() / frame
+		# The whole sound, in frames. Not from data.size(): the engine's sounds are
+		# imported compressed (QOA), so bytes say nothing about length (until M7 the
+		# motor looped only its first 0.2 s this way).
+		loop.loop_end = loop_frames(loop)
 	elif loop is AudioStreamOggVorbis or loop is AudioStreamMP3:
 		loop.loop = true
 	return loop

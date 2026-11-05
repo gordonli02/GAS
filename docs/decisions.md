@@ -130,3 +130,23 @@ Newest last. "G" is the project owner.
   (replaces [ and ]; it replaced F1-F3 for rooms too), and the sound bench: a file replaces a sound,
   each with its own volume 0-200%. Replacement files are copied next to the save. A replaced tear is
   cut into equal steps (no crackle marks), and the band then plays the pop, as on the web.
+
+## Milestone 7: export
+- **Built-in packs ship as a folder next to the executable** (`packs/core`), not inside the .pck:
+  `packs/.gdignore` keeps the engine from importing pack files, which the loader reads raw, so
+  they cannot travel in the .pck. `Platform.builtin_pack_dir()` uses the project folder in the
+  editor and the executable's folder in an export. This is also how Workshop packs will arrive.
+- **An editor export plugin** (`addons/last_sale_export`) copies the packs and the licence texts
+  (font OFLs, Godot's licence and third-party notices) beside every export, from the editor or the
+  command line, and keeps `builds/` out of the editor's scan.
+- **Two presets**: "Windows Desktop" (release, no tests or tools) and "Windows Verify" (debug, with
+  the tools). Exported Godot refuses a scene path on the command line, so debug builds take
+  `--run-tool=<scene>` after `--`; release builds ignore it.
+- **Missing or damaged ticket data shows a message** (English and Chinese) instead of a game that
+  cannot run.
+- **Parts made at declaration are freed when a node goes early** (`Orphans`): the game stopping
+  before it adds them (missing data, a tool taking over) no longer leaves nodes behind at exit.
+- **The dispenser motor now loops the whole recording** (G, after comparing): since M4 it had
+  looped only the first 0.20 s of `dispense_loop_fast.wav` (0.98 s), because the engine's sounds
+  are imported as QOA and the loop end was computed as if the data were 16-bit PCM
+  (`data.size() / 2`). The loop end now comes from the stream's length.

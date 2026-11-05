@@ -40,3 +40,31 @@ func test_pack_tear_clips_load_at_runtime() -> void:
 		if check(s is AudioStreamWAV, c.path + " failed to load"):
 			var last: float = c.marks[c.marks.size() - 1]
 			check(s.get_length() > last, "%s: %.3f s but last crackle at %.3f" % [c.path.get_file(), s.get_length(), last])
+
+
+## The dispenser motor loops the whole recording (until M7 it looped only the first 0.2 s:
+## the loop end was taken from the byte count of a QOA-compressed import).
+func test_motor_loops_whole_recording() -> void:
+	var raw := FileAccess.get_file_as_bytes("res://assets/audio/dispense_loop_fast.wav")
+	var frames := 0
+	var i := 12
+	while i + 8 <= raw.size():
+		var id := raw.slice(i, i + 4).get_string_from_ascii()
+		var n := raw.decode_u32(i + 4)
+		if id == "data":
+			frames = n / 2   # 16-bit mono, as recorded
+			break
+		i += 8 + n + (n % 2)
+	check(frames > 40000, "read the recording's length (%d frames)" % frames)
+	var loop: AudioStreamWAV = Sfx._motor.stream
+	eq(loop.loop_mode, AudioStreamWAV.LOOP_FORWARD, "motor stream loops")
+	eq(loop.loop_begin, 0, "from the start")
+	check(absi(loop.loop_end - frames) <= 2, "to the end: loop_end %d, recording %d frames" % [loop.loop_end, frames])
+	# A developer's 16-bit replacement: the same rule gives the same answer as its bytes.
+	var pcm := AudioStreamWAV.new()
+	pcm.format = AudioStreamWAV.FORMAT_16_BITS
+	pcm.mix_rate = 22050
+	var data := PackedByteArray()
+	data.resize(22050 * 2)
+	pcm.data = data
+	eq(Sfx.loop_frames(pcm), 22050, "a 1 s PCM file loops over 22050 frames")

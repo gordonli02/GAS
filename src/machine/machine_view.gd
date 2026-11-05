@@ -581,3 +581,8 @@ static func _text(t: String, pos: Vector2, font: String, size: float, c: Color, 
 
 static func _ease(t: float) -> float:
 	return 2.0 * t * t if t < 0.5 else 1.0 - pow(-2.0 * t + 2.0, 2.0) / 2.0
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		Orphans.free_members(self, ["_lcd_top", "_lcd_sub"])

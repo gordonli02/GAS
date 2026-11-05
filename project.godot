@@ -30,6 +30,10 @@ window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/last_sale_export/plugin.cfg")
+
 [internationalization]
 
 locale/translations=PackedStringArray("res://locale/ui.en.translation", "res://locale/ui.zh.translation")
