@@ -1,0 +1,22 @@
+{
+  "id": "catch",
+  "name": "Big Catch",
+  "title": ["BIG", "CATCH"],
+  "code": "BC-1S",
+  "price": 1,
+  "colors": {
+    "edge": "#0033cc",
+    "head": "#6ff5ff",
+    "ink": "#04124d",
+    "tiles": ["#00b8ff", "#0047ff", "#00dba0", "#7a00ff"]
+  },
+  "tiers": [
+    { "key": "walleye", "label": { "en": "Walleye", "zh": "大鱼" }, "prize": 500, "printed_count": 6, "role": "top" },
+    { "key": "bobber", "label": { "en": "Bobber", "zh": "浮漂" }, "prize": 500, "printed_count": 6, "role": "top" },
+    { "key": "boot", "label": { "en": "Old Boot", "zh": "旧靴" }, "prize": 100, "printed_count": 10, "role": "mid" },
+    { "key": "worm", "label": { "en": "Worm", "zh": "鱼饵" }, "prize": 25, "printed_count": 75, "role": "low" }
+  ],
+  "digit_groups": [4, 4, 3],
+  "win_display": "whole",
+  "layout": { "preset": "single" }
+}

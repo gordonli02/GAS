@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "id": "core",
+  "version": "1.0.0",
+  "name": { "en": "Last Sale Classics", "zh": "Last Sale 经典票款" },
+  "author": "G",
+  "forms": [
+    "forms/catch.json",
+    "forms/plate.json",
+    "forms/spur.json"
+  ],
+  "tear_sounds": {
+    "marks": "audio/tear_marks.json",
+    "clips": [
+      "audio/tear_01.wav", "audio/tear_02.wav", "audio/tear_03.wav", "audio/tear_04.wav",
+      "audio/tear_05.wav", "audio/tear_06.wav", "audio/tear_07.wav", "audio/tear_08.wav"
+    ]
+  }
+}
