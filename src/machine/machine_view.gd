@@ -22,7 +22,7 @@ const LAMP_BRIGHT := {"on": 0.78, "dim": 0.40, "hot": Color("#ff9c86"), "mid": C
 const LAMP_MUTED := {"on": 0.62, "dim": 0.34, "hot": Color("#e9a092"), "mid": Color("#bf3a30"),
 	"rim": Color("#4a0e0b"), "gloss": 0.28, "halo": Color(0.9, 0.2, 0.14, 0.2), "side": Color("#5e1612")}
 const LAMP_STEPS := 4
-static var lamp_preset := 0   ## G went back to the brightest step (M5); [ and ] step it in debug builds
+static var lamp_preset := 0   ## G went back to the brightest step (M5); the developer panel steps it
 
 
 ## Lamp settings for a preset: an even blend from the brightest to the most muted.
@@ -215,7 +215,7 @@ func set_blink(on: bool) -> void:
 	_big_mat.albedo_color = Color(v, v, v, 1.0)  # keep alpha 1: the round face is alpha-scissored
 
 
-## Repaints the lit buttons for the current lamp_preset (the debug brightness keys).
+## Repaints the lit buttons for the current lamp_preset (the developer panel's lamp steps).
 func apply_lamp() -> void:
 	var l := lamp()
 	var tex := {}

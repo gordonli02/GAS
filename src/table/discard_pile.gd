@@ -30,24 +30,51 @@ func next_basis() -> Basis:
 ## A ticket of `form` has landed.
 func land(form: FormDef, _spot := Vector3.ZERO) -> void:
 	var uid := form.uid()
-	_history.append(uid)
-	if _history.size() > HISTORY:
-		_history.pop_front()
-	var before := PileModel.shown(opened)
+	_remember(_history, uid)
+	PileModel.add_card(_forms, _history, opened, uid, _rng)
 	opened += 1
-	var after := PileModel.shown(opened)
-	if after == before and after > 0:
-		# Toppers are full: they shift down and the newest goes on top.
-		var heap := PileModel.heap_cards(opened)
-		for i in range(heap, after - 1):
-			_forms[i] = _forms[i + 1]
-		_forms[after - 1] = uid
-	else:
-		# New spots: a range jump fills them from recent tickets; the top one is this ticket.
-		while _forms.size() < after - 1:
-			_forms.append(_history[_rng.randi() % _history.size()])
-		_forms.append(uid)
 	await _rebuild()
+
+
+## The pile as plain data for the save file. `landing` is the form uid of a ticket
+## still on its way (already paid), counted as if it had landed.
+func to_dict(landing := "") -> Dictionary:
+	var forms := _forms.duplicate()
+	var history := _history.duplicate()
+	var n := opened
+	if landing != "":
+		var r := RandomNumberGenerator.new()
+		r.seed = _rng.seed
+		r.state = _rng.state
+		_remember(history, landing)
+		PileModel.add_card(forms, history, n, landing, r)
+		n += 1
+	return {"opened": n, "history": history, "forms": forms}
+
+
+## Restores a pile saved with to_dict(); rebuilt from its history if the cards don't fit.
+func from_dict(d: Dictionary) -> void:
+	var n := maxi(0, int(d.get("opened", 0)))
+	var history: Array[String] = []
+	history.assign(d.get("history", []))
+	if n == 0 or history.is_empty():
+		clear()
+		return
+	var forms: Array[String] = []
+	forms.assign(d.get("forms", []))
+	if forms.size() != PileModel.shown(n):
+		await fill(n, history)
+		return
+	opened = n
+	_history = history
+	_forms = forms
+	await _rebuild()
+
+
+static func _remember(history: Array[String], uid: String) -> void:
+	history.append(uid)
+	if history.size() > HISTORY:
+		history.pop_front()
 
 
 ## Sets the pile straight to a count, e.g. when restoring a session or previewing.

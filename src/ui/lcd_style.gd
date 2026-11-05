@@ -14,6 +14,11 @@ const FRAME := Color("#0a0a0c")
 const RIM := Color("#3a3842")
 const FONT := preload("res://assets/fonts/vt323-latin-400-normal.woff2")
 const FONT_COND := preload("res://assets/fonts/oswald-latin-600-normal.woff2")
+## Text drawn in these fonts; Lang resizes it when the language changes.
+const TEXT_GROUP := "lcd_text"
+## Menu text in Chinese (LcdStyle.menu_look) is never smaller than this, so the
+## menu's Chinese is all one size (a control may ask for its own Chinese size).
+const ZH_MIN_SIZE := 24
 
 static var _cache := {}
 
@@ -59,14 +64,57 @@ static func label(text: String, size: int, color := INK, font: Font = FONT) -> L
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_override("font", font)
-	l.add_theme_font_size_override("font_size", size)
+	set_sizes(l, size)
 	l.add_theme_color_override("font_color", color)
 	return l
+
+
+## Gives a control its font size now and whenever the language changes.
+## Chinese uses the same size as English, except in the menu look (menu_look()).
+static func set_sizes(c: Control, size: int, zh_size := -1) -> void:
+	c.set_meta("lcd_size", size)
+	c.set_meta("lcd_zh_size", zh_size)
+	c.add_to_group(TEXT_GROUP)
+	resize(c)
+
+
+static func resize(c: Control) -> void:
+	var size: int = c.get_meta("lcd_size")
+	var zh: int = c.get_meta("lcd_zh_size", -1)
+	if Lang.current == "zh" and c.get_meta("lcd_menu", false):
+		size = zh if zh > 0 else maxi(size, ZH_MIN_SIZE)
+	c.add_theme_font_size_override("font_size", size)
+
+
+## The menu's look for Chinese (G, M6 review): the larger pixel Chinese, never under
+## ZH_MIN_SIZE, instead of Chinese as tall as the Latin capitals. `bold` thickens the
+## Chinese only. zh_size: this control's own size in Chinese.
+static func menu_look(c: Control, bold := false, zh_size := -1) -> void:
+	c.set_meta("lcd_menu", true)
+	if zh_size > 0:
+		c.set_meta("lcd_zh_size", zh_size)
+	var f: Font = c.get_theme_font("font")
+	c.add_theme_font_override("font", Lang.menu_font(f, bold))
+	resize(c)
 
 
 ## A lit green keycap in a black bezel: inverted when pressed, dark when disabled.
 static func key(text: String, size: int) -> Button:
 	return _button(text, size, "key", INK, Color("#2a3a10"))
+
+
+## A lit key that stays down while its choice is current: shown inverted (dark cap,
+## lit text), as the web build's pressed keys.
+static func toggle_key(text: String, size: int) -> Button:
+	var b := key(text, size)
+	b.toggle_mode = true
+	for state in ["pressed", "hover_pressed"]:
+		var s: StyleBoxTexture = b.get_theme_stylebox(state).duplicate()
+		s.texture = _texture("key_selected")
+		b.add_theme_stylebox_override(state, s)
+	b.add_theme_color_override("font_pressed_color", BRIGHT_TEXT)
+	b.add_theme_color_override("font_hover_pressed_color", BRIGHT_TEXT)
+	return b
 
 
 ## A chrome push key.
@@ -79,10 +127,10 @@ static func _button(text: String, size: int, kind: String, ink: Color, off_ink: 
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
 	b.add_theme_font_override("font", font)
-	b.add_theme_font_size_override("font_size", size)
-	for state in ["normal", "hover", "pressed", "disabled"]:
+	set_sizes(b, size)
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 		var s := StyleBoxTexture.new()
-		var tex_state: String = "normal" if state == "hover" else state
+		var tex_state: String = "normal" if state == "hover" else "pressed" if state == "hover_pressed" else state
 		s.texture = _texture(kind + "_" + tex_state)
 		s.texture_margin_left = 14
 		s.texture_margin_right = 14
@@ -93,8 +141,31 @@ static func _button(text: String, size: int, kind: String, ink: Color, off_ink: 
 	b.add_theme_color_override("font_color", ink)
 	b.add_theme_color_override("font_hover_color", ink)
 	b.add_theme_color_override("font_pressed_color", ink)
+	b.add_theme_color_override("font_hover_pressed_color", ink)
 	b.add_theme_color_override("font_disabled_color", off_ink)
 	return b
+
+
+## A volume slider: dark recessed track, lit green fill, a small keycap to drag.
+static func style_slider(s: HSlider) -> void:
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color("#0d1205")
+	track.border_color = FRAME
+	track.set_border_width_all(2)
+	track.set_corner_radius_all(4)
+	track.content_margin_top = 6
+	track.content_margin_bottom = 6
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = DIM_TEXT
+	fill.set_corner_radius_all(4)
+	fill.content_margin_top = 6
+	fill.content_margin_bottom = 6
+	s.add_theme_stylebox_override("slider", track)
+	s.add_theme_stylebox_override("grabber_area", fill)
+	s.add_theme_stylebox_override("grabber_area_highlight", fill)
+	s.add_theme_icon_override("grabber", _texture("grabber"))
+	s.add_theme_icon_override("grabber_highlight", _texture("grabber"))
+	s.focus_mode = Control.FOCUS_NONE
 
 
 static func _texture(id: String) -> Texture2D:
@@ -108,12 +179,17 @@ static func _texture(id: String) -> Texture2D:
 			img = _keycap(Color("#f3ffd0"), Color("#9fe33c"), Color("#3d7d0c"))
 		"key_pressed":
 			img = _keycap(Color("#cbe89a"), Color("#6fb424"), Color("#2b5a08"))
+		"key_selected":
+			img = _keycap(Color("#3f5216"), Color("#26330c"), Color("#161e06"))
 		"key_disabled":
 			img = _keycap(Color("#5b6b3a"), Color("#3a4a1c"), Color("#232e10"))
+		"grabber":
+			img = _keycap(Color("#f3ffd0"), Color("#9fe33c"), Color("#3d7d0c"))
+			img.resize(26, 26, Image.INTERPOLATE_BILINEAR)
 		"chrome_normal":
-			img = _chrome(Color("#e7ebef"), Color("#9aa2ab"), Color("#cfd5db"))
+			img = _chrome(Color("#eef1f4"), Color("#a3aab3"), Color("#d3d8de"))
 		"chrome_pressed":
-			img = _chrome(Color("#b9bfc6"), Color("#7d848d"), Color("#a9b0b8"))
+			img = _chrome(Color("#b4bac1"), Color("#7b828b"), Color("#a3aab2"))
 		"chrome_disabled":
 			img = _chrome(Color("#77797f"), Color("#55575d"), Color("#66686e"))
 	var t := ImageTexture.create_from_image(img)
@@ -159,19 +235,22 @@ static func _keycap(hot: Color, mid: Color, edge: Color) -> Image:
 	return img
 
 
+## A chrome cap in the same black bezel as the green keys (same size, corners and
+## inset), lit from above: a bright top edge, a darker band low down.
 static func _chrome(top: Color, mid: Color, bottom: Color) -> Image:
-	var w := 48
-	var h := 40
-	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
-	for y in h:
-		for x in w:
-			var t := (y + 0.5) / h
-			var c := top.lerp(mid, smoothstep(0.0, 0.55, t)).lerp(bottom, smoothstep(0.55, 1.0, t))
-			if y == 0:
-				c = c.lerp(Color.WHITE, 0.6)
-			if y >= h - 2:
-				c = Color.BLACK
-			c.a = _rounded(Vector2(x + 0.5, y + 0.5), Vector2(w, h), 6.0)
+	var n := 48
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	for y in n:
+		for x in n:
+			var p := Vector2(x + 0.5, y + 0.5)
+			var c := Color("#0d0d10")
+			var cap := _rounded(p - Vector2(5, 5), Vector2(n - 10, n - 10), 6.0)
+			if cap > 0.0:
+				var t := (p.y - 5.0) / (n - 10)
+				c = top.lerp(mid, smoothstep(0.0, 0.6, t)).lerp(bottom, smoothstep(0.6, 1.0, t))
+				if y == 5:
+					c = c.lerp(Color.WHITE, 0.55)
+			c.a = _rounded(p, Vector2(n, n), 8.0)
 			img.set_pixel(x, y, c)
 	return img
 

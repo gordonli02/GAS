@@ -45,6 +45,11 @@ func has_ticket() -> bool:
 	return state != State.IDLE
 
 
+## A ticket has been taken from the tray and is being prepared to deal (state still IDLE).
+func dealing() -> bool:
+	return _busy
+
+
 ## The ticket in hand, for TableNav.
 func hand() -> TableNav.Hand:
 	match state:
@@ -332,8 +337,7 @@ func _on_band_break() -> void:
 ## The first break: with recorded rips the crackles carry the sound, so the
 ## break itself is silent (as in the web build); otherwise play the synth pop.
 func _on_break(_flap: int) -> void:
-	if _clips().is_empty():
-		Sfx.play("pop")
+	Sfx.play_break(not _clips().is_empty())
 
 
 ## Whether the layout lets this flap open with a sideways swipe.

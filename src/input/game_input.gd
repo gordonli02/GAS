@@ -2,6 +2,8 @@ class_name GameInput
 extends Node
 ## Mouse and keys for the whole game. Clicks respect occlusion: the front-most
 ## thing under the pointer decides (MIGRATION.md "Table and machine navigation").
+## Esc opens and closes the menu; while it is open nothing else reaches the game.
+## Backquote toggles the developer panel in debug builds.
 
 var game: Game
 var _dragging := false
@@ -9,6 +11,17 @@ var _dragging := false
 
 func _unhandled_input(e: InputEvent) -> void:
 	if game == null or game.machine == null:
+		return
+	if e is InputEventKey and e.pressed and not e.echo:
+		if e.keycode == KEY_ESCAPE:
+			game.toggle_menu()
+			get_viewport().set_input_as_handled()
+			return
+		if e.keycode == KEY_QUOTELEFT and game.dev != null and not game.menu.visible:
+			game.dev.toggle()
+			get_viewport().set_input_as_handled()
+			return
+	if game.menu.visible:
 		return
 	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
 		if e.pressed:
@@ -31,16 +44,6 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_1, KEY_2, KEY_3:
 				if game.at_machine and game.camera.cam > 0.9:
 					game.press_machine(e.keycode - KEY_1)
-			KEY_F1, KEY_F2, KEY_F3:
-				# Developer room switch until the developer panel (milestone 6) takes it over.
-				if not OS.is_debug_build():
-					return
-				game.set_room(RoomSet.ORDER[e.keycode - KEY_F1])
-			KEY_BRACKETLEFT, KEY_BRACKETRIGHT:
-				# Developer lamp brightness for the red buttons: [ dimmer, ] brighter.
-				if not OS.is_debug_build():
-					return
-				game.step_lamp(1 if e.keycode == KEY_BRACKETLEFT else -1)
 			_:
 				return
 		get_viewport().set_input_as_handled()

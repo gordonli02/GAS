@@ -13,6 +13,7 @@ func _run() -> void:
 	for i in MachineView.LAMP_STEPS:
 		MachineView.lamp_preset = i
 		var game: Game = load("res://src/game/game.tscn").instantiate()
+		game.use_save = false
 		add_child(game)
 		await get_tree().create_timer(1.6).timeout
 		game.hud.visible = false

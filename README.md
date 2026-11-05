@@ -12,9 +12,12 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 ## Development
 
 - Engine: Godot 4.7.2 (stable), Compatibility renderer.
-- Open `project.godot` in Godot. Main scene: `src/game/game.tscn` (the Diner, Bar or Bingo Hall with table, machine and money;
-  in debug builds F1/F2/F3 switch rooms and [ / ] step the red buttons' brightness until the developer panel arrives in milestone 6).
+- Open `project.godot` in Godot. Main scene: `src/game/game.tscn` (the Diner, Bar or Bingo Hall with table, machine and money).
+  Esc or the MENU key opens the player menu. In debug builds the backquote key opens the developer panel
+  (rooms, a free ticket of any form, box seeds and counts, reset of tickets and money, lamp step, sound bench).
   Dev scenes: `src/table/test_table.tscn` (the core forms in turn, no economy), `src/dev/m1_check.tscn` (fonts, sounds, boxes).
+- Save: one versioned JSON file, `user://save.json` (Windows: `%APPDATA%\Godot\app_userdata\Last Sale\save.json`),
+  with the settings and the session in progress. Delete it to start over.
 - Tests (headless, no addons):
 
   ```
@@ -24,12 +27,17 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 
 - `tools/drive_table.tscn` plays one ticket of each form with synthetic input and saves screenshots:
   `godot --path . --resolution 1920x1080 res://tools/drive_table.tscn -- <output dir>`
-- `tools/drive_game.tscn` plays the full loop (bills, PLAY ALL, camera swing, leaving rules, cash out, loan)
-  and checks the money identity every frame; `tools/preview_pile.tscn` renders the discard pile at several sizes.
+- `tools/drive_game.tscn` plays the full loop (bills, PLAY ALL, camera swing, leaving rules, cash out, loan,
+  menu, language, developer panel, save and reload) and checks the money identity every frame; its save file
+  goes under the output dir. `tools/preview_pile.tscn` renders the discard pile at several sizes.
 - `tools/preview_rooms.tscn` screenshots every room from the table and the machine
   (`--gains=h,k,p` overrides the light gains, used to fit them against the web build).
 - `tools/export_room_art.js` (Node) re-exports the room textures in `assets/rooms/` from the web build's
   own canvas code: run it, open http://localhost:8765/ in a browser.
+- `tools/subset_cjk_fonts.py` cuts the bundled Chinese fonts down to the characters in `locale/ui.csv`;
+  run it after adding Chinese text (a test fails until you do). `tools/measure_cjk.gd` prints where the
+  Chinese sits against each Latin font's capitals (`godot --path . -s res://tools/measure_cjk.gd`);
+  `tools/preview_cjk.tscn` renders the machine view and the menu in English and Chinese.
 - `tools/make_generator_golden.js` (Node) regenerates `tests/fixtures/generator_golden.json` from the
   web build's own generator; the Godot generator must match it bit for bit.
 
@@ -39,6 +47,9 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 - `src/data/`: data pack loading and validation
 - `src/rooms/`: the three rooms, built from code with a port of the web build's low-poly kit (`room_kit.gd`)
 - `src/platform/`: thin platform layer (`Platform` autoload); offline backend only for now
+- `src/save/`: the save file (`SaveFile`, `Save` autoload); `src/core/session_state.gd` says what a session keeps
+- `src/ui/`: HUD, menu, LCD look, language (`Lang` autoload); `src/dev/`: developer panel and dev scenes
+- `locale/ui.csv`: player text, English and Chinese (keys are the English text)
 - `docs/decisions.md`: where the code deliberately differs from MIGRATION.md or the web build
 - `packs/core/`: built-in ticket forms, in the same format Workshop packs will use (see `packs/README.md`)
 - `assets/`: engine-side fonts, machine sounds and room textures

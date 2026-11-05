@@ -22,6 +22,7 @@ func _run() -> void:
 		if a.begins_with("--gains="):
 			RoomSet.gains_override = Array(a.trim_prefix("--gains=").split(",")).map(func(x): return float(x))
 	game = load("res://src/game/game.tscn").instantiate()
+	game.use_save = false
 	add_child(game)
 	await _wait(1.5)
 	var only := ""

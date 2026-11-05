@@ -3,6 +3,8 @@ extends Node3D
 ## The game: table, machine, money, tray, discard pile and the camera between them.
 ## The room (Diner, Bar, Bingo Hall) sets the lights and where the machine stands.
 ## Rules: MIGRATION.md "Money", "Machine", "Table and machine navigation", "Bill window".
+## Settings and the session are kept through the Save autoload (SessionState says what
+## is kept); Esc / MENU opens the player menu, backquote the developer panel (debug builds).
 
 const SEED := "G-0001"
 const FORM_UIDS := ["core:catch", "core:plate", "core:spur"]
@@ -10,6 +12,7 @@ const START_ROOM := "diner"
 const MACHINE_LIGHT_ENERGY := 0.8 / 6.5
 const UI_TICK := 0.09
 const MESSAGE_TIME := 1.6
+const AUTOSAVE := 2.0
 
 var painter := TicketPainter.new()
 var rooms := RoomSet.new()
@@ -24,6 +27,12 @@ var machine_view := MachineView.new()
 var hud := Hud.new()
 var notepad := Notepad.new()
 var input := GameInput.new()
+var menu := Menu.new()
+var dev: DevPanel
+
+## Where the save lives ("" = the platform's save folder); tools point it elsewhere.
+var save_path := ""
+var use_save := true
 
 var economy := Economy.new()
 var machine: MachineLogic
@@ -36,9 +45,18 @@ var _ui_at := 0.0
 var _msg := ""
 var _msg_until := 0.0
 var _ready_done := false
+var _saved_at := 0.0
 
 
 func _ready() -> void:
+	if use_save:
+		Save.open(save_path)
+		Lang.set_language(Save.setting("language"))
+		Sfx.apply_settings(Save.settings)
+		_apply_window()
+		MachineView.lamp_preset = clampi(int(Save.setting("lamp")), 0, MachineView.LAMP_STEPS - 1)
+	else:
+		Lang.set_language("en")   # preview tools: English, their own lamp step, no file
 	add_child(painter)
 	add_child(rooms)
 	add_child(camera)
@@ -70,7 +88,8 @@ func _ready() -> void:
 	machine_light.omni_range = 22.0
 	machine_light.omni_attenuation = 0.0
 	add_child(machine_light)
-	set_room(START_ROOM)
+	var room: String = Save.setting("room")
+	set_room(room if RoomSet.ORDER.has(room) else START_ROOM)
 	camera.at_machine = true
 	camera.cam = 1.0
 
@@ -89,9 +108,23 @@ func _ready() -> void:
 	hud.bill_pressed.connect(insert_bill)
 	hud.cash_out_pressed.connect(cash_out)
 	hud.loan_pressed.connect(take_loan)
+	hud.menu_pressed.connect(toggle_menu)
+	add_child(menu)
+	menu.room_picked.connect(set_room)
+	menu.volume_changed.connect(set_master)
+	menu.mute_toggled.connect(toggle_mute)
+	menu.fullscreen_toggled.connect(toggle_fullscreen)
+	menu.language_picked.connect(set_language)
+	menu.quit_pressed.connect(quit_game)
+	if use_save and not Save.session.is_empty():
+		await _restore_session(Save.session)
+	if OS.is_debug_build():
+		dev = DevPanel.new()
+		dev.game = self
+		add_child(dev)
 	get_viewport().size_changed.connect(_place_tray_and_pile)
 	_place_tray_and_pile()
-	hud.set_status(tr("READY"))
+	hud.set_status("READY")
 	_ready_done = true
 
 
@@ -104,7 +137,7 @@ func press_machine(i: int) -> void:
 	machine.return_at = 0.0
 	var r := machine.press_play_all(economy.credit) if i == 3 else machine.press(i, economy.credit)
 	if r == "insert_bill":
-		say(tr("INSERT BILL"))
+		say("INSERT BILL")
 
 
 func insert_bill(value: int) -> void:
@@ -125,7 +158,7 @@ func take_loan() -> void:
 	if not economy.take_loan():
 		return
 	Sfx.play("toss")
-	hud.set_status(tr("HOUSE LOAN"))
+	hud.set_status("HOUSE LOAN")
 
 
 ## Space / Enter.
@@ -136,7 +169,7 @@ func primary() -> void:
 		elif not tray.is_empty():
 			toggle_view()
 		else:
-			say(tr("INSERT BILL"))
+			say("INSERT BILL")
 		return
 	if flow.state == TicketFlow.State.IDLE and tray.is_empty():
 		open_machine()
@@ -153,7 +186,7 @@ func toggle_view() -> void:
 		if flow.state == TicketFlow.State.IDLE and not tray.is_empty():
 			flow.deal()
 		else:
-			hud.set_status(tr("READY"))
+			hud.set_status("READY")
 		return
 	_leave_table(false)
 
@@ -181,7 +214,7 @@ func open_machine() -> void:
 	at_machine = true
 	camera.at_machine = true
 	machine.return_at = 0.0
-	hud.set_status(tr("ONE MORE?"))
+	hud.set_status("ONE MORE?")
 
 
 func close_machine() -> void:
@@ -191,16 +224,196 @@ func close_machine() -> void:
 	machine.armed = false
 
 
-## Developer: steps the red buttons' lamp look (0 brightest .. LAMP_STEPS-1 most muted).
-func step_lamp(dir: int) -> void:
-	MachineView.lamp_preset = clampi(MachineView.lamp_preset + dir, 0, MachineView.LAMP_STEPS - 1)
-	machine_view.apply_lamp()
-	say("LAMP %d/%d" % [MachineView.lamp_preset + 1, MachineView.LAMP_STEPS])
-
-
-func say(text: String) -> void:
-	_msg = text
+## A short message on the machine LCD's status line (a translation key).
+func say(key: String) -> void:
+	_msg = key
 	_msg_until = _time + MESSAGE_TIME
+
+
+# --- menu and settings --------------------------------------------------------------
+
+func toggle_menu() -> void:
+	if menu.visible:
+		menu.close()
+	else:
+		menu.open(Save.settings, rooms.id, Lang.current)
+
+
+func set_master(linear: float) -> void:
+	Save.set_setting("master", clampf(linear, 0.0, 1.0))
+	Sfx.apply_settings(Save.settings)
+
+
+func toggle_mute() -> void:
+	Save.set_setting("muted", not bool(Save.setting("muted")))
+	Sfx.apply_settings(Save.settings)
+	menu.show_state(Save.settings, rooms.id, Lang.current)
+
+
+func toggle_fullscreen() -> void:
+	Save.set_setting("fullscreen", not bool(Save.setting("fullscreen")))
+	_apply_window()
+	menu.show_state(Save.settings, rooms.id, Lang.current)
+
+
+func set_language(code: String) -> void:
+	Save.set_setting("language", code)
+	Lang.set_language(code)
+	menu.show_state(Save.settings, rooms.id, Lang.current)
+
+
+func quit_game() -> void:
+	save_now()
+	get_tree().quit()
+
+
+func _apply_window() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var full := bool(Save.setting("fullscreen"))
+	var mode := DisplayServer.window_get_mode()
+	if full and mode != DisplayServer.WINDOW_MODE_FULLSCREEN:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	elif not full and mode == DisplayServer.WINDOW_MODE_FULLSCREEN:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+
+
+# --- saving ---------------------------------------------------------------------
+
+## The session as SessionState keeps it: a ticket in hand that is not revealed goes
+## back to the tray, a revealed one counts on the pile.
+func capture_session() -> Dictionary:
+	var hand := {}
+	var landing := ""
+	match flow.state:
+		TicketFlow.State.REVEALED, TicketFlow.State.TOSS:
+			landing = flow.form.uid()
+		TicketFlow.State.DEAL, TicketFlow.State.FRONT, TicketFlow.State.FLIP, TicketFlow.State.BACK:
+			hand = current
+		TicketFlow.State.IDLE:
+			if flow.dealing():
+				hand = current
+	return SessionState.capture(economy, machine, tray, hand, pile.to_dict(landing))
+
+
+func save_now() -> void:
+	if not use_save or not _ready_done:
+		return
+	Save.set_session(capture_session())
+	Save.flush()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		save_now()
+
+
+func _restore_session(d: Dictionary) -> void:
+	if not SessionState.restore(d, economy, machine, tray, Packs.form):
+		push_warning("Save: the saved session does not add up; starting a new one")
+		return
+	var p = d.get("pile", {})
+	if typeof(p) == TYPE_DICTIONARY:
+		await pile.from_dict(p)
+
+
+# --- developer panel --------------------------------------------------------------
+
+## Red button brightness step (0 brightest .. LAMP_STEPS-1 most muted).
+func set_lamp(step: int) -> void:
+	MachineView.lamp_preset = clampi(step, 0, MachineView.LAMP_STEPS - 1)
+	machine_view.apply_lamp()
+	Save.set_setting("lamp", MachineView.lamp_preset)
+
+
+## A free ticket of machine column `i` (web build's bench): an untouched ticket in hand
+## goes back to the tray first; the free one is dealt at the table. Not counted as spent.
+func dev_free_ticket(i: int) -> void:
+	if flow.state == TicketFlow.State.FRONT and TableNav.leave(flow.hand(), flow.has_band(), view.band_on, view.any_torn(), false) == TableNav.Action.RETURN_THEN_GO:
+		flow.cancel()
+		tray.put_back(current)
+		current = {}
+	if flow.state != TicketFlow.State.IDLE or flow.dealing() or machine.busy() or economy.bill > 0 or machine.stock_left(i) <= 0:
+		return
+	var box: TicketBox = machine.boxes[i]
+	var t: Dictionary = box.tickets[box.cursor]
+	box.cursor += 1
+	tray.put_back({"form": machine.forms[i], "ticket": t, "box": box})
+	close_machine()
+	flow.deal()
+
+
+## Replaces column `i`'s box with a new one from `seed_text`, fully loaded.
+func dev_new_box(i: int, seed_text: String) -> void:
+	machine.boxes[i] = BoxGenerator.build(machine.forms[i], seed_text)
+	machine.loaded[i] = machine.boxes[i].size
+
+
+## Clears the table and the money: tray, pile, hand, ledger. The boxes stay as they are.
+func dev_reset() -> void:
+	flow.cancel()
+	current = {}
+	_go_machine = false
+	tray.clear()
+	pile.clear()
+	economy = Economy.new()
+	machine.queue.clear()
+	machine.armed = false
+	machine.return_at = 0.0
+	Sfx.motor(false)
+	machine_view.show_bill(0, 0.0)
+	open_machine()
+	hud.set_status("READY")
+
+
+## Developer sound bench: a file replaces a sound slot (copied next to the save file).
+func dev_sound_file(slot: String, path: String) -> void:
+	var ext := path.get_extension().to_lower()
+	if not Sfx.AUDIO_EXTS.has(ext):
+		return
+	var dir := Save.path.get_base_dir().path_join("sounds") if Save.path != "" else "user://sounds"
+	DirAccess.make_dir_recursive_absolute(dir)
+	for e in Sfx.AUDIO_EXTS:
+		var old := dir.path_join(slot + "." + e)
+		if FileAccess.file_exists(old):
+			DirAccess.remove_absolute(old)
+	var dst := dir.path_join(slot + "." + ext)
+	if DirAccess.copy_absolute(path, dst) != OK or Sfx.load_file(dst) == null:
+		push_warning("Sound file could not be used: " + path)
+		DirAccess.remove_absolute(dst)
+		return
+	var sounds: Dictionary = Save.setting("sounds").duplicate(true)
+	var d: Dictionary = sounds.get(slot, {})
+	d.file = dst
+	d.name = path.get_file()
+	sounds[slot] = d
+	Save.set_setting("sounds", sounds)
+	Sfx.apply_settings(Save.settings)
+	Sfx.audition(slot)
+
+
+func dev_sound_clear(slot: String) -> void:
+	var sounds: Dictionary = Save.setting("sounds").duplicate(true)
+	var d: Dictionary = sounds.get(slot, {})
+	if d.has("file") and FileAccess.file_exists(d.file):
+		DirAccess.remove_absolute(d.file)
+	d.erase("file")
+	d.erase("name")
+	if d.is_empty():
+		sounds.erase(slot)
+	else:
+		sounds[slot] = d
+	Save.set_setting("sounds", sounds)
+	Sfx.apply_settings(Save.settings)
+
+
+func dev_sound_volume(slot: String, linear: float) -> void:
+	var sounds: Dictionary = Save.setting("sounds").duplicate(true)
+	var d: Dictionary = sounds.get(slot, {})
+	d.volume = clampf(linear, 0.0, 2.0)
+	sounds[slot] = d
+	Save.set_setting("sounds", sounds)
+	Sfx.apply_settings(Save.settings)
 
 
 # --- ticket flow hooks ------------------------------------------------------------
@@ -229,10 +442,10 @@ func _on_revealed(t: Dictionary, _form: FormDef) -> void:
 	if current.has("box"):
 		current.box.opened = t.no
 	if t.prize > 0:
-		hud.set_status(tr("WINNER $%d") % t.prize)
+		hud.set_status("WINNER $%d", [t.prize])
 		hud.flash_win()
 	else:
-		hud.set_status(tr("NO WIN"))
+		hud.set_status("NO WIN")
 
 
 # --- frame ----------------------------------------------------------------------
@@ -262,6 +475,9 @@ func _process(dt: float) -> void:
 	if _time - _ui_at > UI_TICK:
 		_ui_at = _time
 		_refresh_ui()
+	if use_save and _time - _saved_at > AUTOSAVE:
+		_saved_at = _time
+		Save.set_session(capture_session())
 	_place_bill_window()
 
 
@@ -278,7 +494,7 @@ func _refresh_ui() -> void:
 	])
 	var sub := tr("READING BILL") if economy.bill > 0 \
 		else (tr("PLAYALL") if sin(_time * 7.0) > -0.4 else "") if machine.armed \
-		else _msg if _time < _msg_until \
+		else tr(_msg) if _time < _msg_until \
 		else tr("SELECT A TICKET") if economy.credit >= 1 else tr("INSERT BILL")
 	machine_view.set_lcd("$ %7.2f %s" % [economy.credit, tr("CREDIT")], sub)
 	var shares := []
@@ -311,6 +527,9 @@ func _place_bill_window() -> void:
 ## Shows a room and stands the machine where that room puts it.
 func set_room(room_id: String) -> void:
 	rooms.set_room(room_id)
+	Save.set_setting("room", room_id)
+	if menu.visible:
+		menu.show_state(Save.settings, room_id, Lang.current)
 	var pos := rooms.machine_pos()
 	machine_view.position = pos
 	machine_view.rotation.y = rooms.machine_yaw()

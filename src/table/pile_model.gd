@@ -66,6 +66,23 @@ static func shown(opened: int) -> int:
 	return heap_cards(opened) + mini(TOPPERS, opened - range_start(opened) + 1)
 
 
+## The form shown by each card after ticket number `opened + 1`, of form `uid`, lands.
+## `history` already ends with `uid`. Once the toppers are full they shift down and the
+## newest goes on top; a range jump fills the new spots from recent tickets.
+static func add_card(forms: Array[String], history: Array[String], opened: int, uid: String, rng: RandomNumberGenerator) -> void:
+	var before := shown(opened)
+	var after := shown(opened + 1)
+	if after == before and after > 0:
+		var heap := heap_cards(opened + 1)
+		for i in range(heap, after - 1):
+			forms[i] = forms[i + 1]
+		forms[after - 1] = uid
+	else:
+		while forms.size() < after - 1:
+			forms.append(history[rng.randi() % history.size()])
+		forms.append(uid)
+
+
 ## Where the next tossed ticket lands: the spot it will occupy (relative to the centre).
 func landing_spot(opened_before: int) -> Vector3:
 	var i := mini(shown(opened_before + 1) - 1, MAX_CARDS - 1)

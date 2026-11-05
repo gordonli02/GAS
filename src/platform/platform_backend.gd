@@ -12,6 +12,10 @@ func extra_pack_dirs() -> PackedStringArray:
 	return PackedStringArray()
 
 
+func save_dir() -> String:
+	return "user://"
+
+
 func unlock_achievement(_id: String) -> void:
 	pass
 

@@ -91,3 +91,42 @@ Newest last. "G" is the project owner.
 - **Square buttons have stripes on their bezels**, painted after the banding G liked on the panel
   around PLAY ALL; the lit caps stay clean, like PLAY ALL's dome. The PLAY ALL stripes themselves are
   not painted: they are shadow banding from the key light on the dark panel, kept because G likes them.
+
+## Milestone 6: menu, developer panel, save, Chinese
+- **The save keeps the whole session** (G's pick; the web build kept only settings): money and the
+  ledger, every box's seed and progress, the tray, the discard pile, plus the settings. A ticket in hand
+  that is not revealed yet (even partly torn, or with its band broken) goes back to the front of the
+  tray and is dealt again untouched; a revealed one was already paid and counts on the pile. A bill
+  being fed is saved as credit; tickets still queued in the machine are dropped (never paid for). The
+  game autosaves every 2 s (written only when something changed) and on quit or closing the window.
+  A save that does not add up, or cannot be read, is set aside and the game starts fresh.
+- **The game starts at the machine** after a reload, as on a fresh start.
+- **Menu extras** (G's pick): QUIT and FULLSCREEN, besides the brief's table, volume, sound and resume;
+  plus LANGUAGE. The menu does not pause the machine (web build). Current choices show inverted
+  (dark cap, lit text), as the web build's pressed keys.
+- **A MENU key on the top-left plate** (the web build had MENU beside TABLE and CLEAR).
+- **Chinese is finished in this milestone** (G's pick): every player string has English and Chinese
+  (`locale/ui.csv`), the language follows the system until the player picks one. Ticket print, the
+  machine's printed labels (PULL-TABS, form names, PLAY ALL) and room signs stay English (art and
+  pack data). Fonts: the LCD faces fall back to Fusion Pixel 12px, the notepad hand to LXGW WenKai;
+  both OFL, cut down to the characters used and renamed (LXGW WenKai reserves its name).
+- **Pixel Chinese is as tall as the English capitals** (G picked this over a larger look after a side
+  by side, `tools/preview_cjk.tscn`): same font size as the English, each character exactly the
+  capitals' height and on the same baseline. VT323's capitals are 0.56 em and Oswald's 0.81, so the
+  pixel font is cut twice (`cjk-pixel-lcd`, `cjk-pixel-cond`), lifted one grid row onto the baseline
+  and scaled to each; `tools/measure_cjk.gd` shows heights equal and centres within half a pixel at
+  every size used. Small Chinese text gets few pixels per stroke; G accepted that.
+- **The menu keeps the larger Chinese** (G): the pixel font at 3/4 of full size, no menu text under
+  size 24, so the menu's Chinese is all one size, through font variations with their own fallback
+  (`LcdStyle.menu_look`). 继续 is in synthetic bold and at 24 like 退出 (RESUME stays 26 in English).
+- PLAYALL reads 全下 (G).
+- **2D vertices snap to whole pixels** (`rendering/2d/snap/snap_2d_vertices_to_pixel`): VT323's
+  baseline falls on a half pixel, which drew the Chinese on the green keys blurred (继续).
+- **Chrome keys share the green keys' black bezel, corners and inset** (G, M6 review), only the cap
+  is metal.
+- **Developer panel** follows the web build's bench, in Chinese with the system font: tables, forms
+  (picking one shows its box and hands out a free ticket, not counted as spent), new box from a seed,
+  the box's real counts and expectation, reset of tickets and money (boxes stay), the lamp step
+  (replaces [ and ]; it replaced F1-F3 for rooms too), and the sound bench: a file replaces a sound,
+  each with its own volume 0-200%. Replacement files are copied next to the save. A replaced tear is
+  cut into equal steps (no crackle marks), and the band then plays the pop, as on the web.

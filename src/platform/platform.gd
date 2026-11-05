@@ -25,6 +25,11 @@ func pack_dirs() -> PackedStringArray:
 	return dirs
 
 
+## Folder for the save file. A store backend may move it (e.g. a cloud-synced folder).
+func save_dir() -> String:
+	return backend.save_dir()
+
+
 func unlock_achievement(id: String) -> void:
 	backend.unlock_achievement(id)
 

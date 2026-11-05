@@ -20,6 +20,8 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 Platform="*res://src/platform/platform.gd"
 Packs="*res://src/data/packs.gd"
 Sfx="*res://src/audio/sfx.gd"
+Save="*res://src/save/save.gd"
+Lang="*res://src/ui/lang.gd"
 
 [display]
 
@@ -28,7 +30,12 @@ window/size/viewport_height=1080
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[internationalization]
+
+locale/translations=PackedStringArray("res://locale/ui.en.translation", "res://locale/ui.zh.translation")
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+2d/snap/snap_2d_vertices_to_pixel=true

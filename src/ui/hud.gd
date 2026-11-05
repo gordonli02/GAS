@@ -3,11 +3,13 @@ extends CanvasLayer
 ## Player HUD in the "refined LCD" style: a metal plate top left with the cash LCD
 ## and a one-line count, and the bill plate beside the machine's bill slot.
 ## The full ledger lives on the notepad on the table. Shows state only; the game
-## wires the buttons. All player text goes through tr().
+## wires the buttons. Player text is translation keys (auto-translated by the
+## controls) or goes through tr(); it follows a language change straight away.
 
 signal bill_pressed(value: int)
 signal cash_out_pressed
 signal loan_pressed
+signal menu_pressed
 
 var _cash := LcdStyle.label("", 46)
 var _status := LcdStyle.label("", 24)
@@ -22,6 +24,9 @@ var _line := LcdStyle.label("", 20, LcdStyle.GREY_TEXT)
 var _window: PanelContainer
 var _arrow := Polygon2D.new()
 var _flash := 0.0
+var _status_key := ""
+var _status_args := []
+var menu_key: Button
 
 
 func _ready() -> void:
@@ -48,13 +53,17 @@ func _ready() -> void:
 	col.add_child(_cash_glass)
 	var mini := HBoxContainer.new()
 	mini.add_theme_constant_override("separation", 6)
-	for pair in [[tr("HELD"), _held], [tr("OPENED"), _opened], [tr("NET"), _net]]:
+	for pair in [["HELD", _held], ["OPENED", _opened], ["NET", _net]]:
 		mini.add_child(LcdStyle.label(pair[0], 20, LcdStyle.DIM_TEXT))
 		mini.add_child(pair[1])
 		var gap := Control.new()
 		gap.custom_minimum_size = Vector2(8, 0)
 		mini.add_child(gap)
 	col.add_child(mini)
+	menu_key = LcdStyle.chrome("MENU", 18)
+	menu_key.custom_minimum_size = Vector2(0, 34)
+	menu_key.pressed.connect(func(): menu_pressed.emit())
+	col.add_child(menu_key)
 
 	_window = LcdStyle.plate()
 	_window.custom_minimum_size = Vector2(270, 0)
@@ -65,8 +74,8 @@ func _ready() -> void:
 	var head := LcdStyle.glass()
 	var head_lines := VBoxContainer.new()
 	head_lines.add_theme_constant_override("separation", -6)
-	head_lines.add_child(LcdStyle.label(tr("INSERT BILL"), 26))
-	var nochange := LcdStyle.label(tr("NO CHANGE GIVEN"), 22)
+	head_lines.add_child(LcdStyle.label("INSERT BILL", 26))
+	var nochange := LcdStyle.label("NO CHANGE GIVEN", 22)
 	nochange.modulate = Color(1, 1, 1, 0.85)
 	head_lines.add_child(nochange)
 	head.add_child(head_lines)
@@ -87,8 +96,8 @@ func _ready() -> void:
 	wv.add_child(center)
 	var two := HBoxContainer.new()
 	two.add_theme_constant_override("separation", 10)
-	_cash_out = LcdStyle.chrome(tr("CASH OUT"), 20)
-	_loan = LcdStyle.chrome(tr("LOAN $200"), 20)
+	_cash_out = LcdStyle.chrome("CASH OUT", 20)
+	_loan = LcdStyle.chrome("LOAN $200", 20)
 	for b in [_cash_out, _loan]:
 		b.custom_minimum_size = Vector2(0, 44)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -116,8 +125,22 @@ func set_cash(cash: int) -> void:
 	_cash.text = "$ %.2f" % cash
 
 
-func set_status(text: String) -> void:
-	_status.text = tr("CASH") + " · " + text
+## The line under the cash: a translation key (with format args), or plain text
+## such as a ticket number.
+func set_status(key: String, args := []) -> void:
+	_status_key = key
+	_status_args = args
+	_show_status()
+
+
+func _show_status() -> void:
+	var t := tr(_status_key)
+	_status.text = tr("CASH") + " · " + (t % _status_args if not _status_args.is_empty() else t)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and _status_key != "":
+		_show_status()
 
 
 func flash_win() -> void:

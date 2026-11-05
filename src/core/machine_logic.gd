@@ -108,6 +108,33 @@ static func next_seed(s: String) -> String:
 	return m.get_string(1) + str(digits.to_int() + 1).pad_zeros(digits.length())
 
 
+## Restores boxes saved with to_dict(). box_for(form uid, seed) returns that box
+## (generated once and shared with the tray), or null if the form is gone.
+## Forms not in the save keep the box they have. Nothing is queued or armed after.
+func load_boxes(saved: Array, box_for: Callable) -> void:
+	queue.clear()
+	armed = false
+	return_at = 0.0
+	_acc = 0.0
+	_sold = false
+	for d in saved:
+		if typeof(d) != TYPE_DICTIONARY:
+			continue
+		var i := -1
+		for k in forms.size():
+			if forms[k].uid() == str(d.get("form", "")):
+				i = k
+		if i < 0:
+			continue
+		var box: TicketBox = box_for.call(forms[i].uid(), str(d.get("seed", "")))
+		if box == null:
+			continue
+		box.cursor = clampi(int(d.get("cursor", 0)), 0, box.size)
+		box.opened = clampi(int(d.get("opened", 0)), 0, box.size)
+		boxes[i] = box
+		loaded[i] = clampf(float(d.get("loaded", box.size)), 0.0, box.size)
+
+
 func to_dict() -> Dictionary:
 	var out := []
 	for i in boxes.size():
