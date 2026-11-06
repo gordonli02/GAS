@@ -33,6 +33,16 @@ func _ready() -> void:
 	edge.albedo_color = Color("#ece6d7")
 	_stack.material_override = edge
 	add_child(_stack)
+	# Clicked while holding an untouched ticket: it goes back in (Game.put_back).
+	var hit := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(JW + 0.2, 0.5, TH + 0.2)
+	shape.shape = box
+	hit.add_child(shape)
+	hit.position.y = 0.2
+	hit.set_meta("tray", true)
+	add_child(hit)
 	var q := QuadMesh.new()
 	q.size = Vector2(1.4, 2.0)
 	_top.mesh = q

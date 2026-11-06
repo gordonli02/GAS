@@ -52,7 +52,7 @@ func _ready() -> void:
 
 
 ## title: text. lines: each a text, or [text, style] with style "text" (default),
-## "dim", "big" or "story" (wrapped prose). rows: rows of keys, each key
+## "dim", "big", "story" (wrapped prose) or "note" (dim, wrapped). rows: rows of keys, each key
 ## {id, text, kind: "key" (lit green, default) or "chrome", disabled: bool}.
 func show_card(title: String, lines: Array, rows: Array) -> void:
 	_title.text = title
@@ -64,10 +64,10 @@ func show_card(title: String, lines: Array, rows: Array) -> void:
 		var text: String = line if line is String else line[0]
 		var style: String = "text" if line is String else line[1]
 		var l := LcdStyle.label(text, 30 if style == "big" else 24,
-			LcdStyle.DIM_TEXT if style == "dim" else LcdStyle.BRIGHT_TEXT)
+			LcdStyle.DIM_TEXT if style == "dim" or style == "note" else LcdStyle.BRIGHT_TEXT)
 		l.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 		LcdStyle.menu_look(l)
-		if style == "story":
+		if style == "story" or style == "note":
 			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			l.custom_minimum_size = Vector2(WIDTH - 40.0, 0)
 		_body.add_child(l)

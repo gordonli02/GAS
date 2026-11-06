@@ -8,10 +8,13 @@ extends CanvasLayer
 
 signal bill_pressed(value: int)
 signal cash_out_pressed
-signal loan_pressed
+signal phone_pressed       ## the phone (LOAN, and in the run the shop and contacts)
 signal menu_pressed
 signal leave_pressed       ## run: leave for today
 signal new_box_pressed     ## run: change a column's box
+signal bet_pressed         ## run: the next bet (HIGH ROLLER)
+signal all_in_pressed      ## run: ALL IN on the next column pressed
+signal open_pressed        ## run: open tickets at once (QUICK HANDS)
 
 var _cash := LcdStyle.label("", 46)
 var _status := LcdStyle.label("", 24)
@@ -24,15 +27,17 @@ var _bill_values: Array = Economy.BILLS
 var _run_line := LcdStyle.label("", 20, LcdStyle.BRIGHT_TEXT)
 var _leave: Button
 var _new_box: Button
+var _bet: Button
+var _all_in: Button
+var _open: Button
 var _cash_out: Button
-var _loan: Button
-var _line := LcdStyle.label("", 20, LcdStyle.GREY_TEXT)
 var _window: PanelContainer
 var _arrow := Polygon2D.new()
 var _flash := 0.0
 var _status_key := ""
 var _status_args := []
 var menu_key: Button
+var phone_key: Button
 
 
 func _ready() -> void:
@@ -72,15 +77,23 @@ func _ready() -> void:
 	var keys := HBoxContainer.new()
 	keys.add_theme_constant_override("separation", 8)
 	menu_key = LcdStyle.chrome("MENU", 18)
+	phone_key = LcdStyle.chrome("PHONE", 18)
+	phone_key.pressed.connect(func(): phone_pressed.emit())
 	_leave = LcdStyle.chrome("LEAVE", 18)
 	_leave.visible = false
 	_leave.pressed.connect(func(): leave_pressed.emit())
-	for b in [menu_key, _leave]:
+	for b in [menu_key, phone_key, _leave]:
 		b.custom_minimum_size = Vector2(0, 34)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		keys.add_child(b)
 	menu_key.pressed.connect(func(): menu_pressed.emit())
 	col.add_child(keys)
+	_open = LcdStyle.key("", 22)
+	_open.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	_open.custom_minimum_size = Vector2(0, 40)
+	_open.visible = false
+	_open.pressed.connect(func(): open_pressed.emit())
+	col.add_child(_open)
 
 	_window = LcdStyle.plate()
 	_window.custom_minimum_size = Vector2(270, 0)
@@ -112,18 +125,11 @@ func _ready() -> void:
 	var center := CenterContainer.new()
 	center.add_child(pad)
 	wv.add_child(center)
-	var two := HBoxContainer.new()
-	two.add_theme_constant_override("separation", 10)
+	# LOAN moved to the phone (M9); CASH OUT has the row to itself.
 	_cash_out = LcdStyle.chrome("CASH OUT", 20)
-	_loan = LcdStyle.chrome("", 20)
-	_loan.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
-	for b in [_cash_out, _loan]:
-		b.custom_minimum_size = Vector2(0, 44)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		two.add_child(b)
+	_cash_out.custom_minimum_size = Vector2(0, 44)
 	_cash_out.pressed.connect(func(): cash_out_pressed.emit())
-	_loan.pressed.connect(func(): loan_pressed.emit())
-	wv.add_child(two)
+	wv.add_child(_cash_out)
 	_new_box = LcdStyle.chrome("", 20)
 	_new_box.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_new_box.toggle_mode = true
@@ -131,8 +137,21 @@ func _ready() -> void:
 	_new_box.visible = false
 	_new_box.pressed.connect(func(): new_box_pressed.emit())
 	wv.add_child(_new_box)
-	_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wv.add_child(_line)
+	var run_row := HBoxContainer.new()
+	run_row.add_theme_constant_override("separation", 8)
+	_bet = LcdStyle.chrome("", 20)
+	_bet.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	_bet.pressed.connect(func(): bet_pressed.emit())
+	_all_in = LcdStyle.chrome("", 20)
+	_all_in.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	_all_in.toggle_mode = true
+	_all_in.pressed.connect(func(): all_in_pressed.emit())
+	for b in [_bet, _all_in]:
+		b.custom_minimum_size = Vector2(0, 44)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.visible = false
+		run_row.add_child(b)
+	wv.add_child(run_row)
 	_window.add_child(wv)
 	_arrow.color = LcdStyle.RIM
 	_arrow.polygon = PackedVector2Array([Vector2(0, -12), Vector2(0, 12), Vector2(-16, 0)])
@@ -180,11 +199,9 @@ func set_ledger(held: int, e: Economy) -> void:
 	_net.text = ("+" if n > 0 else "-" if n < 0 else "") + _money(absi(n))
 
 
-## Bill plate: shown beside the slot; keys dark while a bill feeds or cash is short;
-## LOAN always there, dark once the house line is used up.
-## loan: {step, left, ok}: what one press lends, what the house still lends, and
-## whether it lends now. change: {} in free play, else {fee, armed, ok} for NEW BOX.
-func set_bill_window(show: bool, e: Economy, machine_busy: bool, loan: Dictionary, change := {}) -> void:
+## Bill plate: shown beside the slot; keys dark while a bill feeds or cash is short.
+## change: {} in free play, else {fee, armed, ok} for NEW BOX.
+func set_bill_window(show: bool, e: Economy, machine_busy: bool, change := {}) -> void:
 	_window.visible = show
 	if not show:
 		return
@@ -196,14 +213,31 @@ func set_bill_window(show: bool, e: Economy, machine_busy: bool, loan: Dictionar
 	for i in _bills.size():
 		_bills[i].disabled = e.bill > 0 or e.cash < int(_bill_values[i])
 	_cash_out.disabled = e.credit <= 0 or machine_busy
-	_loan.text = tr("LOAN %s") % _money(loan.step)
-	_loan.disabled = not loan.ok
-	_line.text = tr("HOUSE LINE %s LEFT") % _money(loan.left)
 	_new_box.visible = not change.is_empty()
 	if not change.is_empty():
 		_new_box.text = tr("NEW BOX %s") % _money(change.fee)
 		_new_box.set_pressed_no_signal(change.armed)
 		_new_box.disabled = not change.ok
+	# HIGH ROLLER's bet and ALL IN, when the run has them.
+	var bet: Dictionary = change.get("bet", {})
+	_bet.visible = not bet.is_empty()
+	if not bet.is_empty():
+		_bet.text = str(bet.text)
+		_bet.disabled = not bet.ok
+	var all_in: Dictionary = change.get("all_in", {})
+	_all_in.visible = not all_in.is_empty()
+	if not all_in.is_empty():
+		_all_in.text = str(all_in.text)
+		_all_in.set_pressed_no_signal(all_in.armed)
+		_all_in.disabled = not all_in.ok
+
+
+## Run, at the table: the key that opens tickets at once (QUICK HANDS). An empty text
+## hides it.
+func set_open(text: String, ok := true) -> void:
+	_open.visible = text != ""
+	_open.text = text
+	_open.disabled = not ok
 
 
 ## Run (story mode): the line with what is due and the day, and the LEAVE key.
@@ -217,7 +251,16 @@ func set_run(text: String, can_leave := false) -> void:
 
 ## Tools: the run keys.
 func run_key(id: String) -> Button:
-	return _leave if id == "leave" else _new_box
+	match id:
+		"leave":
+			return _leave
+		"bet":
+			return _bet
+		"all_in":
+			return _all_in
+		"open":
+			return _open
+	return _new_box
 
 
 ## Lines the plate up beside the machine: x right of the slot side, centred on the

@@ -70,6 +70,18 @@ func land(form: FormDef, _spot := Vector3.ZERO, entry := {}) -> void:
 	await _rebuild()
 
 
+## Many tickets landed at once (opened together, QUICK HANDS or ALL IN): `faces` are their
+## face ids (face_id). The pile is rebuilt once.
+func land_many(faces: Array) -> void:
+	if faces.is_empty():
+		return
+	for id in faces:
+		_remember(_history, id)
+		PileModel.add_card(_forms, _history, opened, id, _rng)
+		opened += 1
+	await _rebuild()
+
+
 ## The pile as plain data for the save file. `landing` is the face (face_id) of a ticket
 ## still on its way (already paid), counted as if it had landed.
 func to_dict(landing := "") -> Dictionary:

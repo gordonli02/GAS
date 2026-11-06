@@ -76,5 +76,6 @@
     4
   ],
   "win_display": "each_group",
+  "shape": { "top": [0.0, 0.20], "mid": [0.1, 0.3], "prizes": { "nug_dino": 100, "nug_star": 100, "nug_boot": 50, "nug_ball": 5 } },
   "layout": "layouts/nugget.json"
 }

@@ -162,13 +162,25 @@ static func _roll(form: FormDef, model: BoxModel, r: SeededRng, box: TicketBox) 
 
 	var share: float = 1.0 + type["min"] + (type["max"] - type["min"]) * r.next_float()
 	var total := int(_js_round(gross * share / low_prize)) * low_prize
-	var tops := int(floor(total * (model.top_share_min + model.top_share_span * r.next_float()) / top_prize))
+	# The form's shape (the run only) moves money between the tiers; the total stays.
+	var top_min := model.top_share_min
+	var top_span := model.top_share_span
+	var mid_min := model.mid_share_min
+	var mid_span := model.mid_share_span
+	if model.shapes:
+		if form.shape.has("top"):
+			top_min = float(form.shape.top[0])
+			top_span = float(form.shape.top[1]) - top_min
+		if form.shape.has("mid"):
+			mid_min = float(form.shape.mid[0])
+			mid_span = float(form.shape.mid[1]) - mid_min
+	var tops := int(floor(total * (top_min + top_span * r.next_float()) / top_prize))
 	var counts := []
 	counts.resize(form.tiers.size())
 	counts.fill(0)
 	for i in tops:
 		counts[top_ids[r.next_int(top_ids.size())]] += 1
-	var mids := int(floor((total - tops * top_prize) * (model.mid_share_min + model.mid_share_span * r.next_float()) / mid_prize))
+	var mids := int(floor((total - tops * top_prize) * (mid_min + mid_span * r.next_float()) / mid_prize))
 	counts[mid_id] = mids
 	counts[low_id] = (total - tops * top_prize - mids * mid_prize) / low_prize
 	box.counts = counts

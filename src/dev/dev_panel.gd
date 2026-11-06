@@ -114,6 +114,14 @@ func _ready() -> void:
 	reset.pressed.connect(func(): game.dev_reset())
 	col.add_child(reset)
 
+	col.add_child(_sticker("Run", "剧情模式"))
+	var run_keys := _cols(col, 3)
+	for pair in [["+现金", "cash"], ["技能全满", "perks"], ["道具各 +3", "items"], ["换一批 perk", "offers"], ["每天 +1 选项", "offer_more"]]:
+		var b := _plain(pair[0])
+		var what: String = pair[1]
+		b.pressed.connect(func(): game.dev_run(what))
+		run_keys.add_child(b)
+
 	col.add_child(_sticker("Lamp", "红灯亮度"))
 	var lamps := _cols(col, MachineView.LAMP_STEPS)
 	for i in MachineView.LAMP_STEPS:

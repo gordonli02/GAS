@@ -55,10 +55,13 @@ static func restore(d: Dictionary, economy: Economy, machine: MachineLogic, tray
 			var no := int(it.get("no", 0))
 			if box == null or no < 1 or no > box.size:
 				continue
-			tray.add(box.form, box.tickets[no - 1], box)
+			tray.add(box.form, box.tickets[no - 1], box, maxi(1, int(it.get("bet", 1))))
 	economy.from_dict(money)
 	return true
 
 
 static func _entry(e: Dictionary) -> Dictionary:
-	return {"form": e.form.uid(), "seed": e.box.seed, "no": int(e.ticket.no)}
+	var d := {"form": e.form.uid(), "seed": e.box.seed, "no": int(e.ticket.no)}
+	if int(e.get("bet", 1)) > 1:
+		d.bet = int(e.bet)
+	return d

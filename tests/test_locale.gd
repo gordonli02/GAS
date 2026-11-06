@@ -4,7 +4,9 @@ extends "res://tests/test_case.gd"
 
 const CSV := "res://locale/ui.csv"
 ## Player text set from tables rather than a literal call.
-const EXTRA_KEYS := ["DINER", "BAR", "BINGO", "MUTED", "SOUND", "HELD", "OPENED", "NET", "STORY", "SURE?"]
+const EXTRA_KEYS := ["DINER", "BAR", "BINGO", "MUTED", "SOUND", "HELD", "OPENED", "NET", "STORY", "SURE?",
+	"LOAN", "SHOP", "CONTACTS", "PERKS", "ITEMS", "HOT", "FAIR", "COLD",
+	"TOP IN", "NO TOP", "FAT BOX", "EVEN BOX", "LEAN BOX", "NEXT ONE LOSES"]
 const PATTERNS := [
 	"\\btr\\(\"([^\"]+)\"",
 	"\\bset_status\\(\"([^\"]+)\"",
@@ -49,6 +51,8 @@ func _used_keys() -> Array:
 						found[k] = file
 	for k in EXTRA_KEYS:
 		found[k] = "tables"
+	for k in Catalog.standard().text_keys():
+		found[k] = "catalog"   # the phone's shop and contacts (src/core/catalog.gd)
 	return found.keys()
 
 

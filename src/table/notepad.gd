@@ -38,8 +38,9 @@ func _ready() -> void:
 	add_child(top)
 
 
+## lines: each a text, or a row of columns [[text, x], ...] (x from the left margin).
 func show_ledger(lines: Array) -> void:
-	var key := "|".join(lines)
+	var key := var_to_str(lines)
 	if key == _shown:
 		return
 	_shown = key
@@ -62,8 +63,12 @@ static func _page_cmds(lines: Array) -> Array:
 	for i in 9:
 		cmds.append(_rect(16 + i * 28, 6, 10, 16, Color("#6b6d73")))
 	for i in lines.size():
-		cmds.append({"k": "text", "text": lines[i], "pos": Vector2(42, 88 + i * 30), "font": HAND_FONT,
-			"size": 27.0, "align": "left", "max_width": PAGE.x - 54.0, "color": INK, "outline": 0.0, "dir": ""})
+		var cells: Array = lines[i] if lines[i] is Array else [[lines[i], 0.0]]
+		for k in cells.size():
+			var x: float = cells[k][1]
+			var w: float = (cells[k + 1][1] if k + 1 < cells.size() else PAGE.x - 54.0) - x - 6.0
+			cmds.append({"k": "text", "text": str(cells[k][0]), "pos": Vector2(42 + x, 88 + i * 30), "font": HAND_FONT,
+				"size": 27.0, "align": "left", "max_width": w, "color": INK, "outline": 0.0, "dir": ""})
 	return cmds
 
 

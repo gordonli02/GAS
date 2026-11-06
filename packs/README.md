@@ -36,6 +36,7 @@ Where packs come from (`Platform.pack_dirs()`): `res://packs/core`, then each fo
 | `tiers` | 3–8 entries: `key`, `label` (text or localized), `prize`, `printed_count` (decoration only), `role`, `symbol` (square transparent image) and optional `symbol_large` (used by symbol layers with `"variant": "large"`) |
 | `digit_groups` | loser digit group lengths, 2–6 each; shuffled per ticket |
 | `win_display` | `whole` (one prize a ticket; it replaces the inside), `one_group` (one prize a ticket, shown in one group) or `each_group` (every group can win on its own: a ticket holds up to one prize per group, each shown in its group) |
+| `shape` | optional, story mode only: the form's own odds. `top` and `mid` are `[min, max]` shares between 0 and 1 (the share of a box's prize money that goes to top prizes, then the share of what is left that goes to mid prizes; the rest is small prizes); without them the standard split (top 0.10–0.40, mid 0.10–0.25). `prizes` maps tier keys to the prizes the form pays in story mode (the same rules as `tiers`: all tops equal, every prize a multiple of the low), printed on its tickets there; tiers not named keep the pack's prize. A box's prize money is set by its type whatever the shape, so every form pays back the same on average. Free play ignores `shape` altogether |
 | `layout` | a layout file in this pack (`"layouts/x.json"`) or a built-in one (`"core:single"`, `"core:windows"`, `"core:jar"`) |
 | `tear_sounds` | optional, same shape as in `pack.json`; overrides the pack's rips for this form |
 

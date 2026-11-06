@@ -1,7 +1,10 @@
 extends Node
 ## Plays the story mode's run in the game scene with synthetic input: the menu's mode
 ## keys, the story and day cards, a day at the machine (bills, tickets, NEW BOX, LOAN,
-## the last sale of a box), LEAVE, a shift of work, paying early into the next layer
+## the last sale of a box), the perk offers after a day (buy, reroll, done), the phone
+## (LOAN, the perk tree, the item shelf, box reading, a call to a contact), HIGH ROLLER's
+## bet, ALL IN, opening at once, putting a ticket back in the tray, the trash can, tickets kept
+## overnight, LEAVE, a shift of work, paying early into the next layer
 ## and its stake, saving and reloading mid-run, the deadline, the settlement, and a
 ## whole run cleared by work alone. Checks the money identity every frame and saves
 ## screenshots. The save file goes to <output dir>/save/, never the player's own.
@@ -43,6 +46,16 @@ func _run() -> void:
 	_key(KEY_1)
 	await _wait(1.0)
 	_expect(game.tray.size() == 1 and game.economy.cash == 195, "free play: one ticket in the tray, $195")
+	_key(KEY_P)
+	await _wait(0.4)
+	_expect(game.phone.visible and _pkey("app_loan") != null and _pkey("app_shop") == null, "free play: the phone has LOAN only")
+	await _shot("01a_phone_free_play")
+	_phone("app_loan")
+	await _wait(0.3)
+	await _shot("01b_phone_loan_free_play")
+	_key(KEY_ESCAPE)
+	await _wait(0.3)
+	_expect(not game.phone.visible and not game.menu.visible, "Esc puts the phone away (and opens no menu)")
 
 	# Menu: STORY starts a run.
 	_click(_button_center(game.hud.menu_key))
@@ -64,8 +77,41 @@ func _run() -> void:
 	await _shot("02_story_intro")
 	_card("ok")
 	await _wait(0.3)
+	# The perk offers come first, at the start of the run and after every day.
+	_expect(run.story == "" and game.run_card.visible and game.run_card.key("offer_done") != null, "then the perk offers")
+	_expect(game.run_card.key("offer_0") != null and run.offers.size() == Catalog.OFFERS, "three offers, a key each")
+	await _shot("02b_offers")
+	game.set_language("zh")
+	await _wait(0.3)
+	await _shot("02c_offers_zh")
+	game.set_language("en")
+	await _wait(0.2)
+	e.bonus(1000)
+	game._show_run_card()
+	await _wait(0.2)
+	var offered: String = run.offers[0]
+	var price := run.perk_price(offered)
+	var cash := e.cash
+	_card("offer_0")
+	await _wait(0.3)
+	_expect(run.level(offered) == 1 and e.cash == cash - price and run.offers.size() == Catalog.OFFERS - 1, "BUY: %s for %s, gone from the offers" % [offered, Hud._money(price)])
+	var reroll := run.reroll_price()
+	cash = e.cash
+	_card("offer_reroll")
+	await _wait(0.3)
+	_expect(e.cash == cash - reroll and run.offers.size() == Catalog.OFFERS and run.reroll_price() == reroll * 2, "REROLL: three new offers for %s, the next costs double" % Hud._money(reroll))
+	await _shot("02d_offers_rerolled")
+	_card("offer_done")
+	await _wait(0.3)
+	_expect(not run.offers_open and run.items_held() == 0, "DONE: closed, no item (something was bought)")
+	# The checks that follow count on a run without perks and the first day's money.
+	run.perks = {}
+	run.apply(game.machine)
+	e.pay(e.cash - 200)
+	game._show_run_card()
+	await _wait(0.2)
 	_expect(run.story == "" and game.run_card.visible and run.can_choose(), "then the day's choice")
-	_expect(game.run_card.key("pay").disabled and not game.run_card.key("loan").disabled, "PAY dark without the money, LOAN lit")
+	_expect(game.run_card.key("pay").disabled and game.run_card.key("phone") != null, "PAY dark without the money; the PHONE key")
 	await _shot("03_day_card")
 	# Nothing reaches the machine behind the card.
 	_key(KEY_1)
@@ -104,7 +150,7 @@ func _run() -> void:
 
 	# NEW BOX: arms, then a column press changes that column's box for the fee.
 	var seed_before: String = game.machine.boxes[2].seed
-	var cash := e.cash
+	cash = e.cash
 	_click(_button_center(game.hud.run_key("new_box")))
 	await _wait(0.3)
 	_expect(game.machine.change_armed, "NEW BOX arms")
@@ -114,10 +160,23 @@ func _run() -> void:
 	_expect(game.machine.boxes[2].seed == MachineLogic.next_seed(seed_before) and e.cash == cash - 25, "column 3 has a new box, $25 paid")
 	_expect(not game.machine.change_armed and run.stats.box_changes == 1 and game.tray.is_empty(), "disarmed, counted, no ticket sold")
 
-	# LOAN: the layer's line, with interest on top of what is due.
-	_click(_button_center(game.hud._loan))
+	# LOAN, on the phone now: the layer's line, with interest on top of what is due.
+	_click(_button_center(game.hud.phone_key))
+	await _wait(0.4)
+	_expect(game.phone.visible and _pkey("app_shop") != null and _pkey("app_contacts") != null, "the run's phone: LOAN, SHOP, CONTACTS")
+	await _shot("06b_phone_home")
+	_phone("app_loan")
+	await _wait(0.3)
+	await _shot("06c_phone_loan")
+	_phone("loan")
 	await _wait(0.3)
 	_expect(e.cash == cash - 25 + 100 and run.due() == 1125, "LOAN $100: cash now, $125 more due")
+	_key(KEY_1)
+	await _wait(0.3)
+	_expect(game.tray.is_empty() and e.spent == 5, "keys do not reach the machine behind the phone")
+	_key(KEY_P)
+	await _wait(0.3)
+	_expect(not game.phone.visible, "P puts it away")
 
 	# The last ticket of a box pays the last sale.
 	var box: TicketBox = game.machine.boxes[0]
@@ -138,6 +197,102 @@ func _run() -> void:
 	_key(KEY_SPACE)
 	await _wait(1.0)
 
+	# The shop: the perk tree to look at, one branch at a time (perks come as offers);
+	# today's shelf of items.
+	e.bonus(3000)
+	cash = e.cash
+	_key(KEY_P)
+	await _wait(0.3)
+	_phone("app_shop")
+	await _wait(0.3)
+	_expect(_pkey("branch_money") != null and _pkey("perk_prizes") != null and _pkey("buy_perk") == null, "the tree: branches, perks, nothing to buy here")
+	await _shot("07a_shop_tree")
+	_phone("branch_reading")
+	await _wait(0.2)
+	_phone("perk_read2")
+	await _wait(0.2)
+	_expect(_pkey("perk_read1") != null and _pkey("perk_prizes") == null, "the reading branch alone")
+	await _shot("07b_tree_reading")
+	_phone("branch_hands")
+	await _wait(0.2)
+	await _shot("07b2_tree_hands")
+	# Perks for the checks below (the offers are random): LUCKY STREAK, REGULAR, CLOSER
+	# and the reading chain to HOT OR COLD.
+	for id in ["luck", "regular", "closer", "read1", "read2", "read3"]:
+		run.perks[id] = 1
+	run.apply(game.machine)
+	_expect(game.machine.luck == 0.3 and run.change_fee() == 12 and run.reading() == 3, "the machine has the luck; NEW BOX half price; reading at 3")
+	run.shelf = ["peek", "coin", "magnifier", "skip"]
+	game.phone.show_state(game.phone_state())
+	await _wait(0.2)
+	_phone("tab_items")
+	await _wait(0.2)
+	_expect(_pkey("buy_peek") != null and _pkey("reroll_shelf") != null, "today's shelf, and a key for another")
+	_phone("buy_peek")
+	await _wait(0.15)
+	_phone("buy_coin")
+	await _wait(0.2)
+	_expect(run.held("peek") == 1 and run.held("coin") == 1 and not run.shelf.has("peek"), "PEEK and a LUCKY COIN in hand, gone from the shelf")
+	_expect(e.cash == cash - 60 and e.balanced(), "$60 from cash")
+	await _shot("07d_shop_items")
+	# PEEK: used on a column at the machine.
+	_phone("use_peek")
+	await _wait(0.3)
+	_expect(not game.phone.visible and game.aim == "peek", "USE: the phone goes, the machine waits for a column")
+	await _shot("07e_pick_a_column")
+	_key(KEY_2)
+	await _wait(0.3)
+	_expect(run.held("peek") == 0 and game.tray.is_empty() and game.aim == "", "column 2 is read, nothing sold")
+	_expect(game.machine_view._lcd_sub.text.begins_with("NEXT 10"), "the LCD: %s" % game.machine_view._lcd_sub.text)
+	await _shot("07f_peek")
+	# Reading at level 3: how the rest feels, and whether a top prize is in.
+	await _wait(4.0)
+	game._info_column = 0
+	game._info_until = game._time + 6.0
+	await _wait(0.3)
+	var lcd: String = game.machine_view._lcd_sub.text
+	_expect(["HOT", "FAIR", "COLD"].any(func(w): return lcd.begins_with(w)) and lcd.contains("TOP"), "reading: %s" % lcd)
+	await _shot("07g_reading")
+	# The top level: the notepad keeps a line for every box (developer panel: every perk at the top).
+	game.dev_run("perks")
+	_key(KEY_B)
+	await _wait(1.4)
+	_expect(run.reading() == 5 and not game.at_machine, "every perk at the top; at the table")
+	await _shot("07g2_notepad_boxes")
+	_key(KEY_SPACE)
+	await _wait(1.2)
+	# Calling the lender: one more day for this layer.
+	_key(KEY_P)
+	await _wait(0.3)
+	_phone("app_contacts")
+	await _wait(0.2)
+	await _shot("07h_contacts")
+	_phone("contact_lender")
+	await _wait(0.4)
+	await _shot("07i_calling")
+	await _wait(2.0)
+	_expect(_pkey("service_more_time") != null, "the lender picks up and offers a day")
+	await _shot("07j_lender")
+	var days := run.days()
+	_phone("service_more_time")
+	await _wait(0.2)
+	_expect(run.days() == days + 1 and _pkey("service_more_time").disabled, "ONE MORE DAY: the layer has %d days; once a layer" % run.days())
+	_phone("hang_up")
+	await _wait(0.2)
+	_phone("contact_unknown")
+	await _wait(3.2)
+	_expect(_pkey("hang_up") != null and _pkey("service_more_time") == null, "the unknown number: nobody picks up")
+	await _shot("07k_no_answer")
+	game.set_language("zh")
+	_phone("hang_up")
+	await _wait(0.2)
+	game.phone.go("shop")
+	await _wait(0.3)
+	await _shot("07l_shop_zh")
+	game.set_language("en")
+	_key(KEY_ESCAPE)
+	await _wait(0.3)
+
 	# Quit and start again mid-run.
 	var before := {"cash": e.cash, "credit": e.credit, "due": run.due(), "day": run.day, "tickets": run.stats.tickets,
 		"seed": game.machine.boxes[2].seed, "pile": game.piled()}
@@ -152,6 +307,60 @@ func _run() -> void:
 	_expect(e.cash + e.credit == before.cash + before.credit and run.due() == before.due and run.day == before.day, "money, debt and day as left")
 	_expect(run.stats.tickets == before.tickets and game.machine.boxes[2].seed == before.seed and game.piled() == before.pile, "tickets counted, boxes and pile as left")
 	_expect(e.balanced(), "ledger balanced after the reload")
+	_expect(run.reading() == 5 and run.held("coin") == 1 and run.extra_days == 1 and game.machine.luck == 0.9, "perks, items and the extra day kept")
+
+	# HIGH ROLLER: the BET key steps through the bets. ALL IN: a column's box bought out
+	# and opened at once.
+	_expect(game.at_machine and game.hud.run_key("bet").visible and game.hud.run_key("all_in").visible, "the BET and ALL IN keys")
+	_click(_button_center(game.hud.run_key("bet")))
+	await _wait(0.3)
+	_expect(run.bet == 2 and game.machine.price(0) == 2, "BET x2: a $1 ticket costs $2")
+	await _shot("07m_bet")
+	for k in 3:
+		_click(_button_center(game.hud.run_key("bet")))
+		await _wait(0.2)
+	_expect(run.bet == 1, "x5, x10, then back to x1")
+	e.bonus(5000)
+	var piles := game.piled()
+	var sold: int = run.stats.tickets
+	_click(_button_center(game.hud.run_key("all_in")))
+	await _wait(0.3)
+	_expect(game.aim == "all_in", "ALL IN arms")
+	_key(KEY_4)
+	await _wait(0.6)
+	_expect(run.stats.all_ins == 1 and run.stats.tickets > sold and game.piled() > piles and game.tray.is_empty(), "column 4 bought out and opened: %d tickets" % (run.stats.tickets - sold))
+	_expect(run.stats.last_sales == 2 and e.balanced(), "its last sale paid, the ledger balanced")
+	await _shot("07n_all_in")
+	await _wait(0.2)
+	_expect(game.hud.run_key("all_in").disabled and not run.can_all_in(e, game.machine, 0), "ALL IN once a day")
+
+	# Tickets at the table: one goes back into the tray, one in the trash can; the rest
+	# stay overnight (G, after M9).
+	_click(_button_center(game.hud._bills[0]))
+	await _wait(2.4)
+	_key(KEY_SPACE)
+	_key(KEY_1)
+	await _wait(3.6)
+	var bought := game._unopened()
+	_expect(bought >= 5 and not game.at_machine and game.flow.state == TicketFlow.State.FRONT, "%d tickets bought, the first in hand" % bought)
+	var first: Dictionary = game.current
+	_click(game.camera.unproject_position(game.table_tray.global_position + Vector3(0, 0.3, 0)))
+	await _wait(1.3)
+	_expect(game.tray.items[-1] == first and game.current != first and game._unopened() == bought, "clicking the tray: the ticket goes back to the bottom, the next comes up")
+	await _shot("08a_put_back")
+	_click(game.camera.unproject_position(game.trash_can.mouth()))
+	await _wait(0.3)
+	_expect(game.run_card.visible and game.run_card.key("trash_one") != null and game.run_card.key("trash_all") != null, "the trash can asks first")
+	await _shot("08b_trash_card")
+	var discarded: int = run.stats.discarded
+	_card("trash_one")
+	await _wait(1.3)
+	_expect(game._unopened() == bought - 1 and run.stats.discarded == discarded + 1 and not game.run_card.visible, "THIS ONE: the ticket in hand goes in the trash")
+	_click(game.camera.unproject_position(game.table_phone.global_position + Vector3(0, 0.08, 0)))
+	await _wait(0.4)
+	_expect(game.phone.visible, "clicking the phone on the table opens it")
+	_key(KEY_ESCAPE)
+	await _wait(0.3)
 
 	# LEAVE: the day's summary, then the next day.
 	_click(_button_center(game.hud.run_key("leave")))
@@ -166,6 +375,8 @@ func _run() -> void:
 	_card("next")
 	await _wait(0.3)
 	_expect(run.day == 2 and run.can_choose() and game.run_card.visible, "NEXT DAY: day 2, a new choice")
+	_expect(game.tray.size() == bought - 1 and game.current.is_empty() and run.stats.discarded == discarded + 1, "the %d unopened tickets are still in the tray" % (bought - 1))
+	await _shot("08c_kept_overnight")
 
 	# A shift of work.
 	cash = e.cash
@@ -194,10 +405,11 @@ func _run() -> void:
 	_card("pay")
 	await _wait(1.5)
 	_expect(run.layer == 1 and run.day == 1 and run.story == "twist", "PAY: the second layer, day 1, the interest has compounded")
-	_expect(run.stats.days_spared == 2, "two days spared")
+	_expect(run.stats.days_spared == 3, "three days spared (one bought)")
 	_expect(game.rooms.id != room_before and game.rooms.id == run.scene(), "a new table (%s)" % game.rooms.id)
 	_expect(game.machine.forms[0].price == 5 and e.bills == [25, 50, 100, 250, 500], "tickets $5, bills at five times")
 	_expect(game.piled() == 0 and game.tray.is_empty(), "a clean table")
+	_expect(run.stats.discarded == discarded + bought, "paying ends the layer: the kept tickets are thrown away")
 	await _shot("11_story_twist")
 	_card("ok")
 	await _wait(0.3)
@@ -216,6 +428,13 @@ func _run() -> void:
 	_expect(e.spent == spent + 5 and game.current.get("form") != null and game.current.form.price == 5, "one ticket for $5")
 	await _wait(0.6)
 	await _shot("13_ticket_at_stake_5")
+	# QUICK HANDS: the OPEN key opens the ticket in hand (untouched) and the tray at once.
+	var opened := e.opened
+	_expect(game.hud.run_key("open").visible, "the OPEN key at the table")
+	_key(KEY_O)
+	await _wait(0.6)
+	_expect(e.opened == opened + 1 and game.current.is_empty() and game.tray.is_empty(), "O: opened at once")
+	await _shot("13b_opened_at_once")
 	await _open_all()
 	_key(KEY_SPACE)
 	await _wait(1.0)
@@ -228,10 +447,12 @@ func _run() -> void:
 	_card("next")
 	await _wait(0.3)
 	while run.playing() and not run.last_day():
+		await _skip_offers()
 		_card("work")
 		await _wait(0.2)
 		_card("next")
 		await _wait(0.2)
+	await _skip_offers()
 	_expect(run.playing() and run.last_day() and run.layer == 1, "the last day of the layer")
 	await _shot("14_last_day")
 	# The last day at the machine: five tickets bought, then LEAVE without opening them.
@@ -252,7 +473,7 @@ func _run() -> void:
 	await _shot("14b_leave_last_day")
 	_card("next")
 	await _wait(0.4)
-	_expect(game.tray.is_empty() and game.current.is_empty() and run.stats.discarded == 5, "confirmed: the five tickets are thrown away")
+	_expect(game.tray.is_empty() and game.current.is_empty() and run.stats.discarded == discarded + bought + 5, "confirmed: the five tickets are thrown away")
 	_expect(e.spent == spent_before and e.opened == opened_before and e.balanced(), "they stay paid for and are never opened")
 	_expect(run.status == RunState.FAILED and run.story == "failed", "the last day ends unpaid: over")
 	await _shot("15_story_failed")
@@ -265,6 +486,15 @@ func _run() -> void:
 	_expect(game.mode == "free" and game.run == null and not game.run_card.visible, "FREE PLAY")
 	_expect(game.tray.size() == 1 and game.economy.cash == 195, "free play as it was left: one ticket, $195")
 	_expect(Save.run.is_empty(), "nothing of the finished run is kept")
+	# The trash can in free play: everything unopened, after asking.
+	_key(KEY_B)
+	await _wait(1.6)
+	_click(game.camera.unproject_position(game.trash_can.mouth()))
+	await _wait(0.3)
+	_expect(game.run_card.visible and game.run_card.key("trash_all") != null, "free play: the trash can asks too")
+	_card("trash_all")
+	await _wait(1.0)
+	_expect(game._unopened() == 0 and not game.run_card.visible and game.economy.balanced(), "ALL: thrown away, the money as it was")
 
 	# A whole run by work alone, through the cards: cleared to the dollar, no ticket.
 	_click(_button_center(game.hud.menu_key))
@@ -281,6 +511,8 @@ func _run() -> void:
 		guard += 1
 		if game.run_card.key("ok") != null:
 			_card("ok")
+		elif game.run_card.key("offer_done") != null:
+			_card("offer_done")
 		elif game.run_card.key("work") != null:
 			_card("work")
 		elif game.run_card.key("next") != null:
@@ -312,6 +544,13 @@ func _run() -> void:
 	get_tree().quit(1 if failures > 0 else 0)
 
 
+## The perk offers, when they are up: closed without buying (an item for it).
+func _skip_offers() -> void:
+	if game.run_card.visible and game.run_card.key("offer_done") != null:
+		_card("offer_done")
+		await _wait(0.3)
+
+
 ## Clicks a key on the run's card.
 func _card(id: String) -> void:
 	var b := game.run_card.key(id)
@@ -319,6 +558,19 @@ func _card(id: String) -> void:
 		_expect(false, "card key '%s' is not there" % id)
 		return
 	_click(_button_center(b))
+
+
+## A key on the phone's screen.
+func _phone(id: String) -> void:
+	var b := _pkey(id)
+	if b == null:
+		_expect(false, "phone key '%s' is not there" % id)
+		return
+	_click(_button_center(b))
+
+
+func _pkey(id: String) -> Button:
+	return game.phone.key(id) if game.phone.visible else null
 
 
 ## Opens every ticket in the tray with Space, from the table.

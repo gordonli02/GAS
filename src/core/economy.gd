@@ -83,6 +83,17 @@ func buy(price: int) -> bool:
 	return true
 
 
+## Tickets paid from credit first, then cash (the run's ALL IN buys a box out at once).
+func spend(amount: int) -> bool:
+	if amount < 0 or cash + credit < amount:
+		return false
+	var c := mini(credit, amount)
+	credit -= c
+	cash -= amount - c
+	spent += amount
+	return true
+
+
 ## A ticket was opened; its prize (maybe 0) goes straight to cash.
 func open_ticket(prize: int) -> void:
 	opened += 1

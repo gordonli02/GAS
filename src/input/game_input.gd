@@ -2,7 +2,8 @@ class_name GameInput
 extends Node
 ## Mouse and keys for the whole game. Clicks respect occlusion: the front-most
 ## thing under the pointer decides (MIGRATION.md "Table and machine navigation").
-## Esc opens and closes the menu; while it is open nothing else reaches the game.
+## Esc opens and closes the menu (or puts the phone away first); while either is open
+## nothing else reaches the game. P takes the phone out and puts it away.
 ## Backquote toggles the developer panel in debug builds.
 
 var game: Game
@@ -14,14 +15,24 @@ func _unhandled_input(e: InputEvent) -> void:
 		return
 	if e is InputEventKey and e.pressed and not e.echo:
 		if e.keycode == KEY_ESCAPE:
-			game.toggle_menu()
+			if game.phone.visible and not game.menu.visible:
+				game.phone.close()
+			else:
+				game.toggle_menu()
+			get_viewport().set_input_as_handled()
+			return
+		if e.keycode == KEY_P and not game.menu.visible:
+			if game.phone.visible:
+				game.phone.close()
+			else:
+				game.open_phone()
 			get_viewport().set_input_as_handled()
 			return
 		if e.keycode == KEY_QUOTELEFT and game.dev != null and not game.menu.visible:
 			game.dev.toggle()
 			get_viewport().set_input_as_handled()
 			return
-	if game.menu.visible or game.run_card.visible:
+	if game.menu.visible or game.run_card.visible or game.phone.visible:
 		return
 	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
 		if e.pressed:
@@ -43,6 +54,15 @@ func _unhandled_input(e: InputEvent) -> void:
 				game.toggle_view()
 			KEY_N:
 				game.toggle_change()
+			KEY_R:
+				if not game.at_machine:
+					game.put_back()
+			KEY_O:
+				if not game.at_machine:
+					game.open_many()
+			KEY_DELETE, KEY_BACKSPACE:
+				if not game.at_machine:
+					game.click_trash()
 			KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 				# One key per column, as numbered on the plates under the buttons.
 				if game.at_machine and game.camera.cam > 0.9 and e.keycode - KEY_1 < game.columns.size():
@@ -73,8 +93,17 @@ func _press(pos: Vector2) -> void:
 		if flow.can_grab(pos):
 			_dragging = flow.press(pos)
 			return
-	if _pick(pos).has_meta("machine"):
+	var hit := _pick(pos)
+	if hit.has_meta("machine"):
 		game.leave_for_machine()
+		return
+	if hit.has_meta("phone"):
+		game.open_phone()
+		return
+	if hit.has_meta("trash"):
+		game.click_trash()
+		return
+	if hit.has_meta("tray") and game.put_back():
 		return
 	if flow.state == TicketFlow.State.IDLE and game.tray.is_empty():
 		return   # an empty table: clicking it does nothing
@@ -111,8 +140,11 @@ func _update_cursor(pos: Vector2) -> void:
 	elif game.camera.cam < 0.1:
 		if game.flow.can_grab(pos):
 			shape = Input.CURSOR_CAN_DROP
-		elif _pick(pos).has_meta("machine"):
-			shape = Input.CURSOR_POINTING_HAND
+		else:
+			var hit := _pick(pos)
+			if hit.has_meta("machine") or hit.has_meta("phone") or hit.has_meta("trash") \
+					or (hit.has_meta("tray") and game.flow.hand() in [TableNav.Hand.FRONT, TableNav.Hand.BACK]):
+				shape = Input.CURSOR_POINTING_HAND
 	Input.set_default_cursor_shape(shape)
 
 

@@ -31,6 +31,12 @@ var mid_share_span := 0.15
 ## then. The box's prizes and money are the same either way. G settled on 0.12
 ## (2026-11-06, M8.5).
 var stack_share := 0.12
+## Whether a form's own shape (FormDef.shape: its top and mid shares) replaces the
+## shares above. The run's model says yes (RunConfig.box_model), so Big Catch is the
+## jackpot form and Hot Plate pays small and often; free play keeps the web build's
+## boxes, shape or no shape (G, M9.6). The same draws are made either way, so a seed
+## gives the same type and size, and the same prize total, with shapes on or off.
+var shapes := false
 
 
 static func standard() -> BoxModel:

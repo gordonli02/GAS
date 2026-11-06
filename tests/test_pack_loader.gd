@@ -77,6 +77,14 @@ func test_rejects_bad_fields() -> void:
 		"layout_escape": {"layout": "../layouts/single.json"},
 		"no_symbol": {"tiers": [_tier("a", 500, "top", "-"), _tier("b", 100, "mid"), _tier("c", 25, "low")]},
 		"id": {"id": "Bad Id"},
+		"shape_order": {"shape": {"top": [0.9, 0.2]}},
+		"shape_range": {"shape": {"mid": [0.5, 1.5]}},
+		"shape_key": {"shape": {"low": [0.1, 0.2]}},
+		"shape_pair": {"shape": {"top": [0.3]}},
+		"shape_prize_key": {"shape": {"prizes": {"zzz": 10}}},
+		"shape_prize_tops": {"shape": {"prizes": {"a": 1000}}},
+		"shape_prize_multiple": {"shape": {"prizes": {"d": 30}}},
+		"shape_prize_zero": {"shape": {"prizes": {"c": 0}}},
 	}
 	for k in cases:
 		var res := PackLoader.load_dir(_make_pack("bad_" + k, cases[k]))
@@ -89,6 +97,16 @@ func test_accepts_minimal_valid_pack() -> void:
 	if check(res.ok(), "valid pack rejected: " + "; ".join(res.errors)):
 		var box := BoxGenerator.build(res.pack.forms[0], "S-1")
 		check(box.tickets.size() == box.size, "generator runs on a user form")
+		check(res.pack.forms[0].shape.is_empty(), "no shape unless the form gives one")
+	var shaped := PackLoader.load_dir(_make_pack("shaped", {"shape": {"top": [0.5, 1], "prizes": {"a": 1000, "b": 1000, "d": 50}}}))
+	if check(shaped.ok(), "a shape is accepted: " + "; ".join(shaped.errors)):
+		var f: FormDef = shaped.pack.forms[0]
+		eq(f.shape, {"top": [0.5, 1.0], "prizes": {"a": 1000, "b": 1000, "d": 50}}, "the shape as loaded")
+		eq(int(f.tiers[0].prize), 500, "the pack's prizes stay on the pack's form")
+		var run_form := f.shaped()
+		eq([int(run_form.tiers[0].prize), int(run_form.tiers[2].prize), int(run_form.tiers[3].prize)], [1000, 100, 50], "shaped(): the run's prizes, the rest as the pack's")
+		check(run_form.shaped() == run_form, "shaped() twice is the same form")
+		check(f.shaped() != f, "shaped() is a copy")
 
 
 func _tier(key: String, prize: int, role: String, symbol := "") -> Dictionary:

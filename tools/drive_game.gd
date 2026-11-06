@@ -171,18 +171,24 @@ func _run() -> void:
 	await _wait(0.3)
 	_expect(e.credit == 0 and e.cash == cash_before + 10, "CASH OUT returns all credit to cash")
 
-	# Loan: always offered, within the limit.
+	# Loan: on the phone (M9), always offered, within the limit.
 	var checked := _unbalanced
-	_expect(game.hud._loan.visible and not game.hud._loan.disabled, "LOAN $200 offered with cash in hand")
+	_click(_button_center(game.hud.phone_key))
+	await _wait(0.3)
+	game.phone.go("loan")
+	await _wait(0.2)
+	_expect(game.phone.key("loan") != null and not game.phone.key("loan").disabled, "LOAN $200 offered on the phone with cash in hand")
 	await _shot("08_loan")
 	var cash_now := e.cash
-	_click(_button_center(game.hud._loan))
+	_click(_button_center(game.phone.key("loan")))
 	await _wait(0.3)
 	_expect(e.cash == cash_now + 200 and e.loans == 200, "loan adds $200")
 	for i in 6:
-		_click(_button_center(game.hud._loan))
+		_click(_button_center(game.phone.key("loan")))
 		await _wait(0.2)
-	_expect(e.loans == Economy.LOAN_LIMIT and game.hud._loan.disabled, "stops at the limit; the key greys out")
+	_expect(e.loans == Economy.LOAN_LIMIT and game.phone.key("loan").disabled, "stops at the limit; the key greys out")
+	game.phone.close()
+	await _wait(0.2)
 	checked = _unbalanced
 	_expect(checked == 0, "cash + credit + bill = 200 + loans + won - spent on every frame (%d bad frames)" % checked)
 

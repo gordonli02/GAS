@@ -73,5 +73,6 @@
     3
   ],
   "win_display": "whole",
+  "shape": { "top": [0.75, 1.0], "mid": [0.0, 0.10], "prizes": { "bomb": 500, "c4": 500, "grenade": 250, "shell": 50 } },
   "layout": "layouts/kabawk.json"
 }

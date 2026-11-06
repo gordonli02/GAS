@@ -13,6 +13,24 @@ var counts: Array = []       ## real count per tier, same order as form.tiers
 var tickets: Array = []
 var cursor := 0              ## next ticket to sell
 var opened := 0              ## tickets opened so far (by ticket number)
+var shuffles: Array = []     ## SHUFFLE: the cursor at each shuffle of what was left, in order
+
+
+## SHUFFLE (an item): the tickets not sold yet come in another order, from the seed and
+## the shuffles before, so a saved box shuffles the same way again. Every ticket takes
+## its new place's number (`no` is where it sits in the box).
+func shuffle_rest() -> void:
+	var r := SeededRng.new("%s|shuffle|%d" % [seed, shuffles.size()])
+	shuffles.append(cursor)
+	var rest := tickets.slice(cursor)
+	for j in range(rest.size() - 1, 0, -1):
+		var k := r.next_int(j + 1)
+		var tmp = rest[j]
+		rest[j] = rest[k]
+		rest[k] = tmp
+	for j in rest.size():
+		tickets[cursor + j] = rest[j]
+		rest[j].no = cursor + j + 1
 
 
 func gross() -> int:

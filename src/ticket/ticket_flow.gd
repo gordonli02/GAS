@@ -8,7 +8,8 @@ signal dealt(ticket: Dictionary, form: FormDef)
 signal revealed(ticket: Dictionary, form: FormDef)
 signal tossed
 
-enum State { IDLE, DEAL, FRONT, FLIP, BACK, REVEALED, TOSS }
+## AWAY: an unopened ticket on its way back into the tray or into the trash can.
+enum State { IDLE, DEAL, FRONT, FLIP, BACK, REVEALED, TOSS, AWAY }
 
 const DEAL_TIME := 0.42
 const FLIP_TIME := 0.24
@@ -41,6 +42,7 @@ var _to_pile := Vector3.ZERO
 var _to_pile_basis := Basis.IDENTITY
 var _dest: DiscardPile       ## the pile the ticket being tossed lands on
 var _deal_back := false      ## this deal ends back side up
+var _deal_after_away := false
 var _drag := []              ## [{flap, dx, y, start, mode}] while the pointer holds flaps
 var _band_start = null       ## card point where a band drag started, or null
 var _band_mode := ""         ## "slide" / "split" once the band drag's direction is read
@@ -244,6 +246,22 @@ func flip() -> void:
 	Sfx.play("flip")
 
 
+## The unopened ticket in hand flies to `to` (the tray, the trash can) and is gone from
+## the hand; what becomes of it is the caller's. `deal_next`: deal the next one after.
+func send_away(to: Vector3, deal_next: bool) -> bool:
+	if state != State.FRONT and state != State.BACK:
+		return false
+	release()
+	_from = view.global_transform
+	_to_pile = to
+	_to_pile_basis = _flat_basis()
+	_deal_after_away = deal_next
+	_anim = 0.0
+	state = State.AWAY
+	Sfx.play("flip")
+	return true
+
+
 func collect() -> void:
 	if state != State.REVEALED:
 		return
@@ -309,6 +327,18 @@ func _process(dt: float) -> void:
 				state = State.IDLE
 				tossed.emit()
 				if deal_after_toss.call():
+					deal()
+		State.AWAY:
+			_anim = minf(1.0, _anim + dt / TOSS_TIME)
+			var t := _ease(_anim)
+			var pos := _from.origin.lerp(_to_pile, t) + Vector3(0, sin(t * PI) * 0.6, 0)
+			var q := _from.basis.get_rotation_quaternion().slerp(_to_pile_basis.get_rotation_quaternion(), t)
+			view.global_transform = Transform3D(Basis(q).scaled(Vector3.ONE * (1.0 - 0.6 * t)), pos)
+			if _anim >= 1.0:
+				view.visible = false
+				Sfx.play("toss")
+				state = State.IDLE
+				if _deal_after_away:
 					deal()
 
 

@@ -160,6 +160,45 @@ static func _load_form(ctx: _Ctx, pack: PackDef, path: String) -> FormDef:
 
 	f.layout = _load_layout(ctx, d.get("layout"), f, path)
 
+	if d.has("shape"):
+		var s = d.shape
+		if not s is Dictionary:
+			ctx.err(path + ": shape must be an object with top and/or mid")
+		else:
+			for k in s:
+				if k == "prizes":
+					continue
+				if not ["top", "mid"].has(k):
+					ctx.err(path + ": shape." + str(k) + " is not a share (top, mid) or prizes")
+					continue
+				var v = s[k]
+				var ok: bool = v is Array and v.size() == 2 and (v[0] is float or v[0] is int) and (v[1] is float or v[1] is int)
+				if ok:
+					ok = float(v[0]) >= 0.0 and float(v[0]) <= float(v[1]) and float(v[1]) <= 1.0
+				if not ok:
+					ctx.err(path + ": shape." + str(k) + " must be [min, max] between 0 and 1")
+				else:
+					f.shape[k] = [float(v[0]), float(v[1])]
+			if s.has("prizes"):
+				var p = s.prizes
+				var keys := []
+				for t in f.tiers:
+					keys.append(t.key)
+				if not p is Dictionary or p.is_empty():
+					ctx.err(path + ": shape.prizes must map tier keys to prizes")
+				else:
+					var prizes := {}
+					for k in p:
+						if not keys.has(k):
+							ctx.err(path + ": shape.prizes names no tier '" + str(k) + "'")
+						elif not (p[k] is int or p[k] is float) or int(p[k]) < 1:
+							ctx.err(path + ": shape.prizes." + str(k) + " must be a whole prize")
+						else:
+							prizes[k] = int(p[k])
+					if not prizes.is_empty():
+						f.shape["prizes"] = prizes
+						_check_prize_roles(ctx, f.shaped(), path + " shape.prizes")
+
 	if d.has("tear_sounds"):
 		f.tear_clips = _load_tear_sounds(ctx, d.tear_sounds, path)
 	return f

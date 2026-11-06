@@ -36,6 +36,32 @@ func test_front_prints_serial_and_form_data() -> void:
 	check(_texts(TicketArt.front(f, "")).has("SERIAL NO. "), "box art has an empty serial")
 
 
+## G, M9.6: in the run a form prints its own prize table (shaped()); the pack's form
+## prints the pack's, so free play's tickets are what they were.
+func test_run_prizes_print_on_the_ticket() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var f := pack.form("catch")
+	var run_form := f.shaped()
+	check(_texts(TicketArt.front(f, "Q1")).has("$500"), "the pack's top prize on the pack's form")
+	var texts := _texts(TicketArt.front(run_form, "Q1"))
+	check(texts.has("$1000") and not texts.has("$500"), "the run's top prize on the run's form")
+	check(run_form.art_key() != f.art_key(), "its own painted art")
+	eq(run_form.scaled(5).art_key(), f.art_key() + "~@5", "art key at a stake")
+	check(_texts(TicketArt.front(run_form.scaled(5), "Q1")).has("$5000"), "the run's prize at the layer's stake")
+	# A top winner dealt from the run's form carries the run's prize inside.
+	var model := RunConfig.standard().box_model(0)
+	for n in 50:
+		var box := BoxGenerator.build(run_form, "ART-R%d" % n, model)
+		for t in box.tickets:
+			if run_form.is_top(t.tier):
+				eq(int(t.prize), 1000, "the run's top prize on the ticket")
+				check(_texts(TicketArt.interior(run_form, t)).has("$1000"), "and printed inside")
+				return
+	check(false, "no top winner in 50 run boxes of Big Catch")
+
+
 func test_inside_loser_shows_its_digits() -> void:
 	var pack := core_pack()
 	if pack == null:

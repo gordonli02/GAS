@@ -185,7 +185,7 @@ The design is in `docs/roadmap.md` (G's decisions, in Chinese); this is how it l
 - **LEAVE asks first, then throws unopened tickets away** (G, M8 review; at first tickets still to
   open blocked it, which meant opening a hundred tickets to end a day). The LEAVE card says how
   many would go; NEXT DAY or PAY on it confirms. They stay paid for and are never opened, whatever
-  they held; an opened ticket in hand goes on the pile. So no ticket crosses a day or a layer.
+  they held; an opened ticket in hand goes on the pile. So no ticket crosses a day or a layer (changed after M9: tickets now stay overnight within a layer; see "After M9").
 - **Paying is always the player's own press** (G): PAY is a key on the cards and nothing presses
   it for them. The one exception is the deadline: ending the last day with the money there pays.
 - **The run's card** (`RunCard`) carries the story beats, the day's choice, the shift worked, LEAVE
@@ -345,3 +345,146 @@ The plan is in `docs/roadmap.md`; pictures are in `docs/m8.6/`.
     tray is deep lies turned in it (`TableTray.set_stack`, `MachineView.set_trays`).
   - `tools/preview_tickets.tscn` holds a ticket of each form at the table and saves it dealt,
     turned over and open, for looking at a shape in the game.
+
+## Milestone 9: perks, items and the phone
+The plan and the numbers are in `docs/roadmap.md` (M9, in Chinese); this is how it landed in code.
+- **The phone** (`Phone`, a CanvasLayer over the run's card and under the menu) has LOAN, SHOP and
+  CONTACTS; free play has LOAN only. It lies on the table (`TablePhone`, across from the notepad;
+  clicking it opens it), and the HUD's PHONE key, P, and a PHONE key on the run's card open it too.
+  Like the card it shows a translated state the game builds (`Game.phone_state`) and reports keys
+  (`acted`); the game decides. Nothing reaches the table, the machine or the card while it is up;
+  Esc puts it away before it opens the menu.
+- **LOAN left the bill plate and the card** (G: it lives on the phone). The plate is the bills,
+  CASH OUT and NEW BOX.
+- **Perks, items and services are data** (`Catalog`), the rules are the effect hooks in `RunState`:
+  `effect(name)` sums the levels of every perk on that effect, and the rules ask it
+  (`prize_bonus`, `loan_limit`, `change_fee`, `last_sale_prize`, `luck`, `reading`). A new perk on an
+  existing effect is data only. Effects: `prize_pct`, `luck`, `loan_line`, `fee_cut`, `last_sale_pct`,
+  `reading`. Text is translation keys; `test_locale` checks every key the catalog shows.
+- **The shop is open all the time in the run** and takes cash only (not machine credit); what it
+  takes is `paid` in the ledger, so the identity holds. Prices are the catalog's times the layer's
+  stake. Perks stay for the run; items are used up; a service may be capped per layer.
+- **LUCKY STREAK passes losing boxes over when they load** (`MachineLogic.luck`): a box of a losing
+  type is, with that chance, replaced by the next seed's box, once at most. The roll comes from the
+  seed (`"<seed>|luck"`), so a seed always loads the same way and saved boxes, kept by their seed,
+  are untouched. Boxes already in the machine do not change when the perk is bought.
+- **A prize's bonus is paid with it** (`RunState.open_ticket`): the perk's share, rounded, plus the
+  prize again for a LUCKY COIN (used up on the next winner). It counts as won. Free play is unchanged.
+- **Box reading** (`BoxReading`) reads what the machine still holds: tickets sold are gone whether
+  they were opened or not. Levels 1-3 show on the LCD's status line for the column named on its
+  third line (pointed at or pressed last); level 3's prize counts take turns with the name on the
+  third line. Level 4 turns the notepad into a page of boxes (opened, won), so the ledger's lines
+  are off the notepad then (NET stays on the HUD). A BOX REPORT reads one box at level 3 until that
+  box leaves the machine (`RunState.reports`, saved).
+- **Items used on a column** (PEEK, BOX REPORT) arm the machine like NEW BOX: the phone goes away, the
+  LCD blinks PICK A COLUMN, and the next column press reads that column instead of selling; PLAY ALL
+  lets it go. Only at the machine on a day of play.
+- **Contacts are a shell with a calling flow**: ring, then the contact picks up (a line, their
+  services) or nobody does. Two placeholders: the lender (ONE MORE DAY, once a layer:
+  `RunState.extra_days`) and an unknown number. Who is in the phone is M12.
+- **The save keeps the run's purchases** in `RunState.to_dict` (`perks`, `items`, `extra_days`,
+  `services`, `reports`); a run saved before M9 loads with nothing bought, so the save version did
+  not change. Perks not in the catalog are dropped, levels are kept within the perk.
+- **`tools/sim_runs` also prints what a dollar of tickets pays back** at some perk levels, boxes
+  bought out whole (`RunSim.box_return`): about 1.00 without perks, 1.30 with FAT PRIZES at the top,
+  1.56 with the three money and luck perks at the top. A `perks` bot buys perks before playing; it
+  buys too few to change the clear rate yet (that is the balance pass).
+
+### After M9 (G)
+- **Unopened tickets stay overnight within a layer** (G). This replaces the M8 rule that LEAVE throws
+  them away: leaving puts a ticket in hand that is not revealed back on top of the tray, and the tray
+  is kept into the next day. They are thrown away (and counted in `stats.discarded`) only when the
+  layer ends: paying it, or the end of its last day (`Game._layer_ended`). The day's cards say how many
+  are waiting, and that paying now throws them away.
+- **Putting a ticket back** (G): an untouched ticket in hand (what `TableNav` lets go back when leaving
+  for the machine) goes back into the tray by a click on the wooden tray, or R. It goes to the bottom
+  (`TicketTray.put_last`), so the next ticket comes up; with no other ticket in the tray nothing is dealt.
+  The ticket flies there (`TicketFlow.send_away`, state AWAY).
+- **The trash can** (G; `TrashCan`, at the near right of the table, in front of the tray): a click, or
+  Delete, puts up a card first (both modes): THIS ONE (the unopened ticket in hand) or ALL (that and
+  the whole tray). They stay paid for and are never opened. An opened ticket in hand just goes on its
+  pile. "盒子" in G's note is read as the wooden tray of unopened tickets, not the machine's box.
+- **The phone on the table opens the phone in every state of the ticket in hand** (it did not while a
+  ticket was back side up).
+
+## Perk tree and items (after M9, with G)
+The tree, the numbers and why are in `docs/roadmap.md` ("技能树与道具", in Chinese); this is how it
+landed in code. It replaces M9's six placeholder perks, four items, four reading levels and the
+perk shop.
+- **Perks are offered, not shelved** (G). `RunState._new_day` deals `Catalog.OFFERS` (plus
+  `offer_bonus`, the hook for money kept between runs) at the start of the run, after every day and
+  at each new layer: `deal_offers` draws from `offerable()` (requirements met, not at the top) by
+  `Catalog.RARITY_WEIGHT`, a level up x1.5 and a perk with requirements x2, two branches at least.
+  The draw is seeded by the run's seed, layer, day and reroll count, and the offers are saved, so
+  loading never deals new ones. Any offer the cash covers can be bought (`buy_offer`); a reroll costs
+  double each time in a day; `close_offers` with nothing bought gives a random item. The day's card
+  shows the offers first (`Game._offer_card`, keys `offer_<k>`, `offer_free_<k>`, `offer_reroll`,
+  `offer_done`); the phone's perk page is the tree to look at, one branch a page.
+- **One prize formula** (`RunState.pay_ticket`): printed prize x bet x (1 + the "+%" effects) x the
+  "x" effects, an ENCORE paying it twice; every prize in the run goes through it (by hand
+  `open_ticket`, at once `open_batch`). The effect names and their slot are in `Catalog`'s header.
+  Counters the effects need are run state and saved: `dry` (losers in a row), `snow` (boxes cleared
+  under SNOWBALL), `layer_losers` and `layer_tops` (reset with the layer), `scrap` (SCRAP DEALER's
+  cents, paid in whole dollars, since 10% of a $1 ticket is not a dollar).
+- **An opening is one unit**: `open_batch` counts its winners (every prize on a ticket and every
+  ENCORE, rolled from the box seed and ticket number) for CHAIN, and NET WORTH reads the cash the
+  opening started with, so the prizes of one opening do not feed each other (with every perk at the
+  top an ALL IN paid $100 million before that).
+- **The machine** got a bet (`MachineLogic.bet`, `price(i)`; a tray entry keeps the bet it was bought
+  at, and the save keeps it), FORTUNE's repeated passes (`luck_tries`, each on its own seed's roll) and
+  ASSEMBLY LINE (`flow_line`: a box loaded after a sell-out is never a losing one). The rolls come from
+  seeds, so a saved box is still found by its seed.
+- **SHUFFLE reorders a box** (`TicketBox.shuffle_rest`): the tickets not sold yet are permuted from
+  the seed and the shuffle count, and renumbered by their new places (`no` stays the index the tray
+  and the pile look tickets up by). The machine's save keeps the cursor of each shuffle and replays
+  them on load. A box that was changed out and is rebuilt only for the winners' pile
+  (`Game._ticket_for`) is rebuilt unshuffled, so a winner bought after a shuffle from such a box may
+  show another ticket's inside on the pile.
+- **ALL IN and QUICK HANDS skip the hand**: the tickets go straight onto their piles
+  (`DiscardPile.land_many`, one rebuild); ALL IN pays from credit, then cash (`Economy.spend`, counted
+  as spent), and the box's last sale is paid as usual.
+- **Items** have four uses: `column` (armed like NEW BOX, the next column press), `now` (from the
+  phone: TIP-OFF, HAPPY HOUR, SAFETY NET, COPIER), `auto` (LUCKY COIN, WHITE-OUT, BOX KEY) and `offer`
+  (CHEAT SHEET, a key on the offers card). Items are bought off a daily shelf (`deal_shelf`, seeded and
+  saved), and held up to `item_cap()`.
+- **Box reading is a chain of five perks** on the `reading` effect (one level each), so the tree can
+  hang other perks off its first node. `BoxReading`: TOP IN / NO TOP, the box's nature by its type,
+  heat, the exact numbers (`COUNT`, also a BOX REPORT's level), the notepad (`BOOKS`).
+- **`tools/sim_runs`** has two more bots (`skip` never buys a perk; `build` only takes the money and
+  luck engines) and prints the return of the builds in `RunSim.EV_SETS`.
+
+## Milestone 9.6: ticket shapes (the run only)
+The plan is `docs/roadmap.md` (M9.6, in Chinese); this is the first layer of it in code.
+- **A form may carry a `shape`** (`FormDef.shape`, from the form's json; `PackLoader` checks it):
+  `top` and `mid`, each a `[min, max]` share, and `prizes`, the form's prize table in the run
+  (tier key to prize at stake 1).
+  - The shares replace `BoxModel`'s top and mid shares in `BoxGenerator._roll`, so the money
+    moves between the tiers while the box's type, size and prize money (set by its type, to the
+    rounding of the smallest prize) are what they were: the same draws are made, with other
+    ranges. So every form pays back the same on average, whatever its shape.
+  - The prizes go on by `FormDef.shaped()`, a copy with its own tiers, the way `scaled()` puts a
+    layer's stake on (`RunState.stage_forms` does `shaped()` then `scaled()`). Its tickets print
+    its prizes (the layouts squeeze a wider number into the box), and `art_key` carries a `~`
+    so its painted art is its own. The game only ever looks a form up in the machine
+    (`Game._form_for`), so the run's tray, piles and saves all see the shaped form.
+- **Only the run deals shapes** (G): `BoxModel.shapes`, set by `RunConfig.box_model`, and
+  `shaped()` is called by the run alone. Free play's machine has no model and sells the pack's
+  forms, so its boxes and tickets are the web build's still and the golden test did not move. A
+  box is always rebuilt with its machine's model and form (`SessionState`, `Game`), so a saved
+  run gets its shaped boxes back; a run saved before this gets other prizes in a box it was in
+  the middle of (no save version bump, runs are in development).
+- **The shapes, first guess** (stake 1; G to tune): Big Catch $1,000 / $100 / $25, top
+  0.5–1.0, mid 0–0.1 (a $1,000 in about one box in five, little in between: the jackpot form);
+  Ka-Bawk! $500 / $250 / $50, top 0.75–1.0, mid 0–0.1 (about 1.3 tops and 8 small prizes a box:
+  all or nothing); Hot Plate $200 / $50 / $10, top 0–0.3, mid 0–0.05 (about 90 small prizes a
+  box, 8 winners in 100 tickets); Nugget Rush $100 / $50 / $5, top 0–0.2, mid 0.1–0.3 (about
+  150 nuggets a box, one ticket in eight wins); Lucky Spur $500 / $200 / $25, top 0.05–0.25, mid
+  0.5–0.8 (two to four $200s, no top). Pecking Order, One Flock and Peckeye have no shape until
+  their signature rules.
+- **`tools/sim_runs` prints each form's boxes** in the run's model (`RunSim.form_table`): return,
+  winners per 100 tickets, tops a box and the standard deviation of one ticket's prize, the
+  measure of how bumpy a form is: about 4 for Nugget Rush, 5 for Hot Plate, 8 for a plain form,
+  11 for Lucky Spur, 15 for Big Catch, 18 for Ka-Bawk!. The returns are all about 1.
+- **`tools/preview_tickets` takes `--run`**: the forms as the run sells them, each opened on a top
+  winner (a box with one is found and sold up to it). The pictures of the five shaped forms are in
+  `docs/m9.6/`: the $1,000, $10 and $5 fit the layouts' boxes as they are.

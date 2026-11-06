@@ -65,9 +65,11 @@ func layer(i: int) -> Dictionary:
 	return layers[clampi(i, 0, layers.size() - 1)]
 
 
-## The box model of layer `i`: the standard odds at the layer's box sizes.
+## The box model of layer `i`: the standard odds at the layer's box sizes, with the
+## forms' own shapes (G, M9.6: the run only; free play keeps the web build's boxes).
 func box_model(i: int) -> BoxModel:
 	var m := BoxModel.standard()
+	m.shapes = true
 	var b: Dictionary = layer(i).get("box", {})
 	m.size_min = int(b.get("size_min", m.size_min))
 	m.size_step = int(b.get("size_step", m.size_step))

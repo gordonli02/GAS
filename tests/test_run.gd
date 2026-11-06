@@ -227,7 +227,7 @@ func test_stage_machine() -> void:
 	r.pay(e)
 	var m2 := r.new_machine(pack.forms)
 	eq(m2.forms[0].price, 5, "price")
-	eq(int(m2.forms[0].tiers[0].prize), 2500, "top prize")
+	eq(int(m2.forms[0].tiers[0].prize), 5000, "top prize (the run's $1,000 Big Catch at stake 5)")
 	eq(m2.forms[0].uid(), pack.forms[0].uid(), "same form id")
 	check(m2.forms[0].art_key() != pack.forms[0].art_key(), "its own printed art")
 	eq(pack.forms[0].price, 1, "the pack's form is untouched")
@@ -237,6 +237,47 @@ func test_stage_machine() -> void:
 	m2.armed = true
 	eq(m2.press(0, 23), "", "PLAY ALL with $23")
 	eq(m2.queue[0].n, 4, "buys four")
+
+
+## G, M9.6: the run's machine deals the forms' shapes; free play's machine does not.
+func test_run_boxes_are_shaped_free_play_boxes_are_not() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var r := _run()
+	var m := r.new_machine(pack.forms, true)
+	check(m.model != null and m.model.shapes, "the run's machine carries the shaped model")
+	var free := MachineLogic.new(pack.forms, "S-FREE", null, true)
+	check(free.model == null, "free play's machine has the standard model")
+	var catch := pack.form("catch")
+	eq(int(catch.tiers[0].prize), 500, "the pack's Big Catch pays $500 (free play)")
+	check(not free.forms[0].shaped_prizes, "free play sells the pack's form")
+	var run_catch: FormDef = null
+	for f in m.forms:
+		if f.id == "catch":
+			run_catch = f
+	if not check(run_catch != null, "the run sells Big Catch"):
+		return
+	check(run_catch.shaped_prizes, "the run sells the shaped form")
+	eq(int(run_catch.tiers[0].prize), 1000, "the run's Big Catch pays $1,000 at stake 1")
+	eq(run_catch.price, 1, "at the pack's price")
+	var differ := 0
+	for n in 20:
+		var seed := "RB-%02d" % n
+		var in_run := BoxGenerator.build(run_catch, seed, m.model, true)
+		var in_free := BoxGenerator.build(catch, seed, free.model, true)
+		eq(in_free.counts, BoxGenerator.build(catch, seed, null, true).counts, "free play: the standard box")
+		eq(in_run.prize_total(), in_free.prize_total(), "the same money either way")
+		if in_run.counts != in_free.counts:
+			differ += 1
+	check(differ > 10, "Big Catch is dealt differently in the run (%d of 20 boxes)" % differ)
+	# The next layer: the run's prizes at that layer's stake.
+	r.layer = 1
+	var m2 := r.new_machine(pack.forms, true)
+	for f in m2.forms:
+		if f.id == "catch":
+			eq(int(f.tiers[0].prize), 5000, "layer 2: the run's top prize at stake 5")
+			eq(f.price, 5, "layer 2: price at stake 5")
 
 
 func test_prizes_only_boxes_match() -> void:

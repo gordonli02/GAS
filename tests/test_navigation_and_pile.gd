@@ -61,3 +61,16 @@ func test_pile_spots_stable_and_rising() -> void:
 	check(top_big > top_small * 1.5, "the pile rises as it grows (%.2f -> %.2f)" % [top_small, top_big])
 	eq(a.landing_spot(0), a.spots[0].pos, "first ticket lands on the first spot")
 	eq(a.landing_spot(53), a.spots[PileModel.shown(54) - 1].pos, "a toss lands where it will stay")
+
+
+func test_tray_put_back_and_put_last() -> void:
+	var t := TicketTray.new()
+	for n in 3:
+		t.add(null, {"no": n + 1}, null)
+	var a := t.take()
+	t.put_last(a)
+	eq(t.peek().ticket.no, 2, "a ticket put back by hand goes to the bottom: the next one comes up")
+	eq(t.newest().ticket.no, 1, "and it is last")
+	var b := t.take()
+	t.put_back(b)
+	eq(t.peek().ticket.no, 2, "one put back when leaving for the machine is next again")

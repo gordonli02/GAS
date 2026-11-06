@@ -149,6 +149,68 @@ func test_summary_matches_web_numbers() -> void:
 	eq(box.summary().paid, paid, "paid after 10 opened")
 
 
+## G, M9.6: a form's shape moves the box's money between the tiers and gives the run
+## its own prize table, in the run's model only. The box is otherwise the same (type,
+## size, and the prize money its type sets, to the rounding of the smallest prize), so
+## every form pays back the same on average; free play's boxes do not change at all.
+func test_shapes_move_money_between_tiers_only_in_the_run() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var run_model := RunConfig.standard().box_model(0)
+	check(run_model.shapes, "the run's model asks for shapes")
+	check(not BoxModel.standard().shapes, "the standard model (free play) does not")
+	var shaped := ["catch", "plate", "spur", "kabawk", "nugget"]
+	var stats := {}
+	for form in pack.forms:
+		var has_shape: bool = not form.shape.is_empty()
+		eq(has_shape, shaped.has(form.id), form.id + ": has a shape")
+		eq(form.shape.has("prizes"), has_shape, form.id + ": a shaped form has the run's prize table")
+		var run_form: FormDef = form.shaped()
+		eq(run_form.shaped_prizes, has_shape, form.id + ": shaped() puts the prizes on")
+		check(run_form.uid() == form.uid(), form.id + ": the same form")
+		var low := int(run_form.tiers[run_form.tier_indices("low")[0]].prize)
+		var differ := 0
+		var tops := 0
+		var lows := 0
+		var winners := 0
+		var tickets := 0
+		var total := 0
+		for n in 100:
+			var seed := "SH-%03d" % n
+			var plain := BoxGenerator.build(form, seed, null, true)
+			var run := BoxGenerator.build(run_form, seed, run_model, true)
+			eq(run.type_id, plain.type_id, "%s %s: same type" % [form.id, seed])
+			eq(run.size, plain.size, "%s %s: same size" % [form.id, seed])
+			check(absi(run.prize_total() - plain.prize_total()) <= 25, "%s %s: the same money, to the rounding ($%d against $%d)" % [form.id, seed, run.prize_total(), plain.prize_total()])
+			if run.counts != plain.counts:
+				differ += 1
+			var paid := 0
+			for t in run.tickets:
+				paid += t.prize
+				if t.prize > 0:
+					winners += 1
+			tickets += run.size
+			eq(paid, run.prize_total(), "%s %s: the tickets pay the box" % [form.id, seed])
+			for i in run.counts.size():
+				if run_form.is_top(i):
+					tops += run.counts[i]
+			lows += run.counts[run_form.tier_indices("low")[0]]
+			total += run.prize_total()
+		if has_shape:
+			check(differ > 50, "%s: the shape changes the counts (%d of 100 boxes)" % [form.id, differ])
+		else:
+			eq(differ, 0, form.id + ": without a shape the run's box is the standard box")
+		stats[form.id] = {"tops": tops / 100.0, "lows": lows / 100.0, "winners": 100.0 * winners / tickets}
+		note("%s: %.2f tops and %.0f lows ($%d) a box, %.1f winners in 100, $%.0f a box (100 run boxes)" % [form.id, tops / 100.0, lows / 100.0, low, 100.0 * winners / tickets, total / 100.0])
+	# The shapes as G chose them: Ka-Bawk! is all or nothing, Big Catch the jackpot form,
+	# Hot Plate and Nugget Rush pay small and often; Pecking Order is the plain form.
+	check(stats.kabawk.tops > stats.catch.tops and stats.catch.tops > stats.order.tops, "top prizes: Ka-Bawk! > Big Catch > plain")
+	check(stats.nugget.winners > stats.plate.winners and stats.plate.winners > stats.order.winners, "winners: Nugget Rush > Hot Plate > plain")
+	check(stats.order.winners > stats.catch.winners and stats.catch.winners > stats.kabawk.winners, "winners: plain > Big Catch > Ka-Bawk!")
+	check(stats.plate.lows > stats.order.lows and stats.order.lows > stats.kabawk.lows, "small prizes: Hot Plate > plain > Ka-Bawk!")
+
+
 ## G, M8.5: Hot Plate and Lucky Spur win by group. The box is the one the old deal
 ## made (same type, size, prize counts, so the same money); only where the prizes
 ## sit changes, and now and then one ticket holds two.

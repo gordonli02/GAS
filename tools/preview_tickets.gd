@@ -1,8 +1,10 @@
 extends Node
 ## Holds a ticket of each form at the table and saves three pictures of it: dealt, turned
 ## over, and open. For looking at a card's shape and layout in the game itself:
-##   godot --path . --resolution 1920x1080 res://tools/preview_tickets.tscn -- <out dir> [--forms=plate,kabawk]
+##   godot --path . --resolution 1920x1080 res://tools/preview_tickets.tscn -- <out dir> [--forms=plate,kabawk] [--run]
 ## Writes <form>_1_front.png, <form>_2_back.png and <form>_3_open.png. No save file is used.
+## --run: the forms as the run sells them (their shape: the run's prize table and odds,
+## G, M9.6), and the ticket shown is a top winner, so the inside prints the top prize.
 
 
 func _ready() -> void:
@@ -21,10 +23,29 @@ func _run() -> void:
 	game.use_save = false
 	add_child(game)
 	await _wait(3.0)
+	var as_run := args.has("--run")
+	if as_run:
+		game.machine.model = RunConfig.standard().box_model(0)
 	for i in game.machine.forms.size():
 		var form: FormDef = game.machine.forms[i]
 		if not only.is_empty() and not only.has(form.id):
 			continue
+		if as_run:
+			form = form.shaped()
+			game.machine.forms[i] = form
+			# A box with a top winner, sold up to it.
+			var found := false
+			for n in 60:
+				var seed := "PV-%d" % n
+				var box := BoxGenerator.build(form, seed, game.machine.model, true)
+				for k in box.size:
+					if form.is_top(box.tickets[k].tier):
+						game.dev_new_box(i, seed)
+						game.machine.boxes[i].cursor = k
+						found = true
+						break
+				if found:
+					break
 		game.dev_free_ticket(i)
 		await _wait(2.0)
 		if game.view.band_on:
