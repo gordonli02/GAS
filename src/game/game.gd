@@ -1001,7 +1001,7 @@ func phone_state() -> Dictionary:
 	st.subline = tr("LAYER %d · DAY %d OF %d") % [run.layer + 1, run.day, run.days()]
 	st.loan = {"left": m.call(run.loan_left()), "button": tr("LOAN %s") % m.call(run.loan_step()), "ok": run.can_borrow(),
 		"lines": [tr("ONE PRESS LENDS %s") % m.call(run.loan_step()),
-			tr("INTEREST %d%%, ADDED TO WHAT IS DUE") % run.config.loan_interest,
+			tr("INTEREST %d%% A DAY ON WHAT IS OWED") % run.interest(),
 			tr("BORROWED %s") % m.call(run.borrowed), tr("DUE %s") % m.call(run.due())]}
 	var branches := []
 	for b in run.catalog.branches:

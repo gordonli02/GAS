@@ -170,7 +170,7 @@ func _run() -> void:
 	await _shot("06c_phone_loan")
 	_phone("loan")
 	await _wait(0.3)
-	_expect(e.cash == cash - 25 + 100 and run.due() == 1125, "LOAN $100: cash now, $125 more due")
+	_expect(e.cash == cash - 25 + 100 and run.due() == int(run.config.layer(0).debt) + 100, "LOAN $100: cash now, $100 more due (the interest comes each morning)")
 	_key(KEY_1)
 	await _wait(0.3)
 	_expect(game.tray.is_empty() and e.spent == 5, "keys do not reach the machine behind the phone")

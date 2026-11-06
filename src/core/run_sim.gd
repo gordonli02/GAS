@@ -5,7 +5,8 @@ extends RefCounted
 ## once instead of through the motor, the tray and the table.
 ##
 ## Bots:
-##   work    works every day, never buys a ticket
+##   work    works every day, never buys a ticket; buys SAVINGS as the work line does
+##           (RunConfig.line_buys), so it clears every layer to the dollar
 ##   blind   plays whenever it can pay for a ticket, works when it cannot
 ##   borrow  as blind, but takes the whole house line before giving a day up
 ##   mixed   works the first two days of each layer, then plays as blind
@@ -58,6 +59,8 @@ static func play(bot: String, base_forms: Array, seed_text: String, config: RunC
 			_build(run, e, m)
 		elif bot == "skip":
 			run.close_offers()
+		elif bot == "work":
+			_save(run, e)
 		var price := m.min_price()
 		var wants_play := bot != "work" and not (bot == "mixed" and run.day <= 2)
 		if wants_play and e.cash + e.credit < price and bot == "borrow":
@@ -149,6 +152,13 @@ static func _shop(run: RunState, e: Economy, m: MachineLogic) -> void:
 		if e.cash >= int(b) * m.forms[0].price * 100:
 			run.bet = int(b)
 	run.apply(m)
+
+
+## The work line's morning: one level of SAVINGS off the shelf when the layer allows it
+## and the cash is there (RunConfig.line_buys). The offers are left alone.
+static func _save(run: RunState, e: Economy) -> void:
+	if RunConfig.line_buys(run.level(RunConfig.SAVINGS) + 1, run.layer):
+		run.buy_perk(RunConfig.SAVINGS, e)
 
 
 ## The build bot's round of offers: the best of BUILD it can pay with 60% of its cash,

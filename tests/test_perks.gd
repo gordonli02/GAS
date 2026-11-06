@@ -54,7 +54,8 @@ func test_catalog_holds_together() -> void:
 	# G's numbers.
 	eq(c.perk("haggler").levels.size(), 1, "HAGGLER has one level")
 	eq(int(c.perk("haggler").levels[0].value), 15, "items 15% less")
-	eq(c.perk("savings").levels.map(func(l): return int(l.value)), [4, 7, 10], "SAVINGS 4, 7, 10")
+	eq(c.perk("savings").levels.map(func(l): return int(l.value)), [10, 20, 30], "SAVINGS 10, 20, 30 (the work line's perk)")
+	check(c.perk("savings").get("requires", {}).is_empty(), "SAVINGS has no requirement: the work line buys it first")
 	eq(c.perk("debt").levels.map(func(l): return int(l.value)), [25, 50], "BORROWED LUCK at half")
 	eq(c.perk("credit").effect, "loan_pct", "GOOD CREDIT in percent")
 	var bad := Catalog.from_dict(Catalog.STANDARD)
@@ -162,9 +163,9 @@ func test_money_perks() -> void:
 	r.perks = {"credit": 3}
 	eq(r.loan_limit(), line * 3, "GOOD CREDIT 3: +200%")
 	r.perks = {"credit": 3, "lowrate": 1}
-	eq(r.interest(), 10, "LOW RATE 1: 10%")
+	eq(r.interest(), 10, "LOW RATE 1: 10% a day")
 	r.perks = {"credit": 3, "lowrate": 2}
-	eq(r.interest(), 0, "LOW RATE 2: nothing")
+	eq(r.interest(), 5, "LOW RATE 2: 5% a day (never free: it compounds against SAVINGS)")
 	r.borrow(e)
 	eq(r.loan_due, r.borrowed, "so nothing on top")
 	var fee := r.change_fee()
@@ -202,7 +203,7 @@ func test_money_perks() -> void:
 	eq(r3.prize_pct(e3), 4, "at stake 5, $500 a step")
 
 
-func test_savings_grow_after_a_day_of_play() -> void:
+func test_savings_grow_every_morning() -> void:
 	var r := _run()
 	var e := r.new_economy()
 	r.perks = {"savings": 3}
@@ -210,13 +211,14 @@ func test_savings_grow_after_a_day_of_play() -> void:
 	r.work(e)
 	var cash := e.cash
 	r.end_day(e)
-	eq(e.cash, cash, "not after a shift")
+	eq(e.cash, cash + roundi(cash * 0.3), "SAVINGS 3: +30% the morning after a shift too (G)")
+	var grown := roundi(cash * 0.3)
 	r.close_offers()
 	r.play(e)
 	cash = e.cash
 	r.end_day(e)
-	eq(e.cash, cash + roundi(cash * 0.1), "SAVINGS 3: +10% the morning after play")
-	eq(r.stats.savings, roundi(cash * 0.1), "counted")
+	eq(e.cash, cash + roundi(cash * 0.3), "and the morning after play")
+	eq(r.stats.savings, grown + roundi(cash * 0.3), "counted")
 	check(e.balanced(), "ledger balanced")
 
 

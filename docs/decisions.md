@@ -488,3 +488,46 @@ The plan is `docs/roadmap.md` (M9.6, in Chinese); this is the first layer of it 
 - **`tools/preview_tickets` takes `--run`**: the forms as the run sells them, each opened on a top
   winner (a box with one is found and sold up to it). The pictures of the five shaped forms are in
   `docs/m9.6/`: the $1,000, $10 and $5 fit the layouts' boxes as they are.
+
+## Milestone 9.5, step 1: wages and SAVINGS (the work line)
+G, 2026-11-06: no more hidden raises; working alone is not enough, working and buying SAVINGS is
+exactly enough. How it landed:
+- **A layer has one `wage`** (`RunConfig.STANDARD`), the same every day; `RunState.wage` reads
+  it, `shifts` stays a statistic. `last_wage` is the wage.
+- **A layer's debt is not written in the config: it is the work line's cash on the last day**
+  (`RunConfig.work_line`, filled into `layers[i].debt` by `from_dict`). The line: each morning
+  after the first, cash grows by SAVINGS' percentage; then one level of SAVINGS is bought when
+  the layer allows it (level k from layer k on, `line_buys`) and the cash is there; then the day
+  is worked. So the rule holds by construction and the debts are as ugly as compound interest
+  ($1,136 / $5,250 / $21,883 with the placeholders). `problems()` reports a debt that is not the
+  line's, a layer where wages alone would meet the debt, and a line that never reaches the top
+  of SAVINGS. `from_dict` takes a catalog (the standard one by default) for SAVINGS' numbers.
+- **SAVINGS grows cash every morning**, a day of work included (it was the morning after play
+  only), and has no requirement, so it can be bought first thing; `shelf: true` marks it for the
+  fixed shelf (M9.5, not built yet). Placeholders: $50 / $150 / $400 for 10 / 20 / 30% a day
+  (they were $300 / $800 / $2,000 for 4 / 7 / 10%). Wages: $150 / $700 / $2,500.
+- **The simulator's work bot walks the line** (`RunSim._save`): it buys SAVINGS as `line_buys`
+  says and nothing else, so it clears every layer with nothing left. `test_run` walks it too, and
+  checks that one day off, one dollar spent, one loan, or never buying SAVINGS all fail.
+- What went: "the player sees only today's wage and cannot add it up" (the wage is flat now);
+  the price of the sure path is the SAVINGS it has to buy.
+- **Found on the way: a first-day loan pays for itself.** The house line's interest is 25% once;
+  SAVINGS compounds daily, so $100 borrowed on day one grows by about 46% over the first layer's
+  four mornings and the line clears with money to spare. A loan on the last day (no morning to
+  grow) still fails, and that is what `test_run` checks now. The rule "one loan and working is
+  not enough" cannot hold with a one-off interest under any daily SAVINGS that outgrows its own
+  price; the fix is G's call: interest that compounds daily like SAVINGS (the story is about
+  compound interest, after all), or accepting borrow-to-invest as a line of play.
+- **Loan interest compounds daily** (G, after the finding above): `RunConfig.loan_interest` is
+  percent a day; `RunState.borrow` adds the principal only and `accrue`, each morning of a layer
+  (with SAVINGS), adds the interest to everything owed. Placeholder 15% a day, above SAVINGS'
+  first level, so a loan on the first day of the work line loses (the test is back); at
+  SAVINGS 3 (30%) borrowing to invest wins, which is the money-makes-money build. LOW RATE now
+  takes 5 / 10 points off (10% / 5% a day), never to zero. BORROWED LUCK keeps growing while a
+  loan is kept, which G wanted. The phone says "INTEREST n% A DAY ON WHAT IS OWED" with LOW RATE
+  taken off.
+- **The line's checkpoints are in the config** (G: SAVINGS on the first day, then each level
+  on time): `from_dict` fills `layers[i].savings_day` with the day of the layer the line buys
+  on (1 / 2 / 4 with the placeholders), `problems()` insists the first is day 1, `line_text()`
+  says it in words and `tools/sim_runs` prints it. Buying later than the checkpoint grows less,
+  and the line falls short.

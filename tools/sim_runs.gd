@@ -41,6 +41,7 @@ func _run() -> void:
 	var problems := config.problems()
 	for p in problems:
 		print("CONFIG: " + p)
+	print("work line: " + config.line_text())
 	print("%d runs per bot, seeds %s-0 .. %s-%d" % [runs, prefix, prefix, runs - 1])
 	print("%-8s %8s %8s %8s %8s %9s %8s %8s %6s" % ["bot", "cleared", "layer 2", "layer 3", "days", "tickets", "return", "spared", "perks"])
 	for bot in bots:

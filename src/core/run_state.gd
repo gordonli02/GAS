@@ -156,16 +156,15 @@ func due() -> int:
 	return int(stage().debt) + loan_due
 
 
-## Pay for the next shift. It rises at fixed shifts; the player only ever sees today's.
+## Pay for a shift: the same every day of the layer (G, 2026-11-06: no hidden raises;
+## SAVINGS is what makes working alone fall short, RunConfig).
 func wage() -> int:
-	var wages: Array = stage().wages
-	return int(wages[mini(shifts, wages.size() - 1)])
+	return int(stage().wage)
 
 
 ## What the last shift worked in this layer paid.
 func last_wage() -> int:
-	var wages: Array = stage().wages
-	return int(wages[clampi(shifts - 1, 0, wages.size() - 1)])
+	return wage()
 
 
 func can_choose() -> bool:
@@ -216,23 +215,32 @@ func can_borrow() -> bool:
 	return playing() and loan_left() >= loan_step()
 
 
-## The loan interest in percent, LOW RATE's cut taken off.
+## The loan interest in percent a day, LOW RATE's cut taken off. It compounds each
+## morning on everything owed (G, 2026-11-06: compound interest, like SAVINGS, so a
+## loan is never free money against SAVINGS' first level, and BORROWED LUCK keeps
+## growing while the loan is kept).
 func interest() -> int:
 	return maxi(0, config.loan_interest - effect("rate_cut"))
 
 
-## One press of LOAN: cash now, the same plus interest on top of what is due.
+## One press of LOAN: cash now, the same on top of what is due; the interest comes
+## with the mornings (accrue).
 func borrow(e: Economy) -> bool:
 	if not can_borrow():
 		return false
 	var amount := loan_step()
-	var cost := amount * interest() / 100
 	e.add_loan(amount)
 	borrowed += amount
-	loan_due += amount + cost
+	loan_due += amount
 	stats.borrowed += amount
-	stats.interest += cost
 	return true
+
+
+## A morning's interest on what is owed.
+func accrue() -> void:
+	var cost := roundi(loan_due * interest() / 100.0)
+	loan_due += cost
+	stats.interest += cost
 
 
 ## What NEW BOX costs now: the stage's fee less the perk's cut, nothing with a BOX KEY.
@@ -328,8 +336,11 @@ func end_day(e: Economy) -> void:
 	stats.days += 1
 	day += 1
 	today = ""
+	# A morning: the loan's interest, then SAVINGS on the cash (every morning of a layer
+	# after the first, a day of work included; G).
+	accrue()
 	var pct := effect("savings")
-	if played and pct > 0 and e.cash > 0:
+	if pct > 0 and e.cash > 0:
 		var grown := roundi(e.cash * pct / 100.0)
 		e.earn(grown)
 		stats.savings += grown

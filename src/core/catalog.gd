@@ -50,7 +50,7 @@ extends RefCounted
 ##   debt_pct     + % while the principal owed is half the line or more   (+ slot)
 ##   free_peek    a free PEEK every day of play
 ##   pockets      room for this many more items
-##   savings      the morning after a day of play, cash grows by %
+##   savings      every morning of a layer after its first, cash grows by % (the work line's perk)
 ##   worth_pct    + % per WORTH_STEP (times the stake) in cash   (+ slot)
 ##   reading      the box-reading level (BoxReading), one per perk of the chain
 ##   peek_n       PEEK sees this many tickets
@@ -128,15 +128,17 @@ const STANDARD := {
 		{"id": "haggler", "branch": "hustle", "rarity": "common", "name": "HAGGLER", "desc": "ITEMS -%d%%",
 			"effect": "item_cut", "levels": [{"price": 100, "value": 15}]},
 		{"id": "lowrate", "branch": "hustle", "rarity": "rare", "name": "LOW RATE", "desc": "LOAN INTEREST %d%%", "requires": {"credit": 1},
-			"effect": "rate_cut", "levels": [{"price": 100, "value": 15, "show": 10}, {"price": 250, "value": 25, "show": 0}]},
+			"effect": "rate_cut", "levels": [{"price": 100, "value": 5, "show": 10}, {"price": 250, "value": 10, "show": 5}]},
 		{"id": "debt", "branch": "hustle", "rarity": "rare", "name": "BORROWED LUCK", "desc": "OWING HALF THE LINE: PRIZES +%d%%", "requires": {"credit": 1},
 			"effect": "debt_pct", "levels": [{"price": 150, "value": 25}, {"price": 400, "value": 50}]},
 		{"id": "friend", "branch": "hustle", "rarity": "rare", "name": "HOUSE FRIEND", "desc": "A FREE PEEK EVERY DAY OF PLAY", "requires": {"regular": 1},
 			"effect": "free_peek", "levels": [{"price": 300, "value": 1}]},
 		{"id": "pockets", "branch": "hustle", "rarity": "common", "name": "BIG POCKETS", "desc": "ROOM FOR %d ITEMS", "requires": {"haggler": 1},
 			"effect": "pockets", "levels": [{"price": 80, "value": 2, "show": 5}, {"price": 200, "value": 5, "show": 8}]},
-		{"id": "savings", "branch": "hustle", "rarity": "rare", "name": "SAVINGS", "desc": "MORNING AFTER PLAY: CASH +%d%%", "requires": {"lowrate": 1},
-			"effect": "savings", "levels": [{"price": 300, "value": 4}, {"price": 800, "value": 7}, {"price": 2000, "value": 10}]},
+		# SAVINGS is the work line's perk (RunConfig): every morning, cash grows; sold off the
+		# shelf (M9.5), so no requirement. Its numbers set the layers' debts.
+		{"id": "savings", "branch": "hustle", "rarity": "rare", "name": "SAVINGS", "desc": "EVERY MORNING: CASH +%d%%", "shelf": true,
+			"effect": "savings", "levels": [{"price": 50, "value": 10}, {"price": 150, "value": 20}, {"price": 400, "value": 30}]},
 		{"id": "worth", "branch": "hustle", "rarity": "legendary", "name": "NET WORTH", "desc": "PRIZES +2%% PER %s IN CASH", "money": true, "requires": {"debt": 1},
 			"effect": "worth_pct", "levels": [{"price": 1500, "value": 2, "show": 100}]},
 		# Reading: late and dear; the low levels only hint (BoxReading).
