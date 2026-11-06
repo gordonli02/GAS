@@ -17,6 +17,7 @@ const RATE_HELD := 30.0
 const RATE_FREE := 16.0
 const RATE_K := 14.0
 const AUTO_SPEED := 2.8       ## widths per second when finishing by itself
+const SPACE_SPEED := 1.5      ## a flap opened with Space tears and settles this much faster (G, M8.5)
 const SETTLE_TIME := 0.22
 const STEPS := 15             ## progress steps that drive tear crackles
 const K_GAIN := 0.45
@@ -35,6 +36,7 @@ var r := R_START
 var torn := false
 var auto := false
 var open := false
+var speed := 1.0            ## time scale of this flap's own motion (SPACE_SPEED once Space opens it)
 var settle := 0.0
 var ticks := 0              ## progress steps already turned into crackles
 var tear_clip := -1         ## which recorded rip this flap uses; chosen by the audio side
@@ -57,6 +59,7 @@ func reset() -> void:
 	torn = false
 	auto = false
 	open = false
+	speed = 1.0
 	settle = 0.0
 	ticks = 0
 	tear_clip = -1
@@ -146,6 +149,7 @@ func release() -> void:
 ## Returns true if this started the tear (so the caller can play the break).
 func start_auto(from_top: bool) -> bool:
 	auto = true
+	speed = SPACE_SPEED
 	if torn:
 		return false
 	y_grab = h / 2.0 if from_top else -h / 2.0
@@ -158,6 +162,7 @@ func start_auto(from_top: bool) -> bool:
 ##   "opened": true on the frame the flap finishes opening
 func step(dt: float, held: bool) -> Dictionary:
 	var ev := {}
+	dt *= speed
 	if open:
 		settle = minf(1.0, settle + dt / SETTLE_TIME)
 		f = lerpf(f, 0.0, 1.0 - pow(0.65, dt * 60.0))

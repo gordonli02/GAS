@@ -3,7 +3,7 @@ extends RefCounted
 ## One ticket form as loaded from a pack. Plain data, no scene access.
 
 const ROLES := ["top", "mid", "low"]
-const WIN_DISPLAYS := ["whole", "one_group"]
+const WIN_DISPLAYS := ["whole", "one_group", "each_group"]
 
 var pack_id := ""
 var id := ""                 ## unique inside its pack
@@ -14,7 +14,10 @@ var price := 1
 var colors := {}             ## edge, head, ink: Color; tiles: Array[Color]
 var tiers: Array = []        ## {key, label: Dictionary, prize, printed_count, role, symbol}
 var digit_groups: PackedInt32Array = []   ## loser digit group lengths, shuffled per ticket
-var win_display := "whole"   ## "whole": winner replaces the inside; "one_group": one group shows the win
+## How a ticket wins: "whole": one prize, it replaces the inside; "one_group": one prize,
+## shown in one group; "each_group": every group can win on its own, so a ticket holds
+## up to as many prizes as it has groups.
+var win_display := "whole"
 var layout := {}             ## presentation; see packs/README.md
 var tear_clips: Array = []    ## optional per-form rips; empty means use the pack or core rips
 var source_dir := ""         ## pack directory; every path in a pack is relative to it
@@ -32,6 +35,11 @@ func tier_indices(role: String) -> Array:
 		if tiers[i].role == role:
 			out.append(i)
 	return out
+
+
+## Every digit group of a ticket wins on its own (win_display "each_group").
+func wins_by_group() -> bool:
+	return win_display == "each_group"
 
 
 func is_top(tier_index: int) -> bool:

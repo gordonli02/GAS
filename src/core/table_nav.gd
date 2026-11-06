@@ -24,6 +24,8 @@ static func leave(hand: Hand, has_band: bool, band_on: bool, any_torn: bool, mac
 			if not has_band or band_on:
 				return Action.RETURN_THEN_GO
 		Hand.BACK:
-			if not has_band and not any_torn:
+			# With a band the back is normally reached by breaking it; dealt back side up
+			# (the "back first" setting) the band can still be on, and the ticket untouched.
+			if (not has_band or band_on) and not any_torn:
 				return Action.RETURN_THEN_GO
 	return Action.STAY

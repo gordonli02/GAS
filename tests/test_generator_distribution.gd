@@ -68,13 +68,31 @@ func _check_box(box: TicketBox, model: BoxModel, serial_re: RegEx, sorted_groups
 		seen[t.serial] = true
 		if not serial_re.search(t.serial):
 			check(false, "%s: bad serial %s" % [tag, t.serial])
-		if t.tier >= 0:
-			tier_hits[t.tier] += 1
-			check(t.prize == form.tiers[t.tier].prize, tag + ": prize mismatch")
+		var top := false
+		if form.wins_by_group():
+			# Every group wins on its own: the prize is their sum, the tier the best of them.
+			check(t.wins.size() == t.groups.size(), tag + ": one result per group")
+			var sum := 0
+			var best := 0
+			for w in t.wins:
+				if w >= 0:
+					tier_hits[w] += 1
+					sum += int(form.tiers[w].prize)
+					best = maxi(best, int(form.tiers[w].prize))
+					top = top or form.is_top(w)
+			check(t.prize == sum, tag + ": prize is not the sum of its groups")
+			check((t.tier < 0) == (sum == 0), tag + ": tier and prize disagree")
+			if t.tier >= 0:
+				check(int(form.tiers[t.tier].prize) == best, tag + ": tier is not the best group")
 		else:
-			check(t.prize == 0, tag + ": loser with prize")
-		check(t.win_group >= 0 and t.win_group < t.groups.size(), tag + ": win group out of range")
-		check((t.verify != "") == form.is_top(t.tier), tag + ": verify code only on top prizes")
+			if t.tier >= 0:
+				tier_hits[t.tier] += 1
+				check(t.prize == form.tiers[t.tier].prize, tag + ": prize mismatch")
+			else:
+				check(t.prize == 0, tag + ": loser with prize")
+			check(t.win_group >= 0 and t.win_group < t.groups.size(), tag + ": win group out of range")
+			top = form.is_top(t.tier)
+		check((t.verify != "") == top, tag + ": verify code only on top prizes")
 		var lens := []
 		for gi in t.groups.size():
 			var g: PackedInt32Array = t.groups[gi]
@@ -129,3 +147,63 @@ func test_summary_matches_web_numbers() -> void:
 	for i in 10:
 		paid += box.tickets[i].prize
 	eq(box.summary().paid, paid, "paid after 10 opened")
+
+
+## G, M8.5: Hot Plate and Lucky Spur win by group. The box is the one the old deal
+## made (same type, size, prize counts, so the same money); only where the prizes
+## sit changes, and now and then one ticket holds two.
+func test_group_wins_keep_the_box() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	check(not pack.form("catch").wins_by_group(), "Big Catch still wins as a whole ticket")
+	for id in ["plate", "spur"]:
+		var form := pack.form(id)
+		if not check(form.wins_by_group(), id + " wins by group"):
+			continue
+		var old: FormDef = form.scaled(2)
+		old.win_display = "one_group"
+		var groups := form.digit_groups.size()
+		var doubles := 0
+		var most := 0
+		var winners := 0
+		var prizes := 0
+		var by_group := []
+		by_group.resize(groups)
+		by_group.fill(0)
+		for n in 200:
+			var seed := "GW-%03d" % n
+			var box := BoxGenerator.build(form, seed)
+			var was := BoxGenerator.build(old, seed, null, true)
+			eq(box.size, was.size, "%s %s: size" % [id, seed])
+			eq(box.type_id, was.type_id, "%s %s: type" % [id, seed])
+			eq(box.counts, was.counts, "%s %s: prize counts" % [id, seed])
+			var paid := 0
+			for t in box.tickets:
+				var held := 0
+				for k in groups:
+					if t.wins[k] >= 0:
+						held += 1
+						by_group[k] += 1
+				paid += t.prize
+				prizes += held
+				most = maxi(most, held)
+				if held > 0:
+					winners += 1
+				if held > 1:
+					doubles += 1
+			eq(paid, box.prize_total(), "%s %s: the tickets pay the box's prizes" % [id, seed])
+			# Opened to the end, nothing is left and everything was paid.
+			box.opened = box.size
+			var s := box.summary()
+			eq(s.paid, box.prize_total(), "%s %s: summary paid" % [id, seed])
+			check(s.left.all(func(c): return c == 0), "%s %s: summary leaves no prize" % [id, seed])
+		check(doubles > 0, "%s: some tickets hold more than one prize (%d in 200 boxes)" % [id, doubles])
+		check(most <= groups, "%s: never more prizes than groups" % id)
+		check(winners < prizes, "%s: fewer winning tickets than prizes" % id)
+		# Every group gets its share of the prizes: within 5 standard deviations.
+		var share := 1.0 / groups
+		var sd := sqrt(share * (1.0 - share) / prizes)
+		for k in groups:
+			check(absf(float(by_group[k]) / prizes - share) <= 5.0 * sd, "%s: group %d holds %.4f of the prizes" % [id, k, float(by_group[k]) / prizes])
+		note("%s: %d prizes on %d tickets, %d with two or more, at most %d on one (200 boxes)" % [id, prizes, winners, doubles, most])

@@ -19,6 +19,9 @@ func test_leaving_the_table() -> void:
 	eq(TableNav.leave(N.BACK, false, false, true, true), A.STAY, "partly torn")
 	eq(TableNav.leave(N.FRONT, true, false, false, true), A.STAY, "jar, band broken")
 	eq(TableNav.leave(N.BACK, true, false, false, true), A.STAY, "jar flipped (band gone)")
+	# Dealt back side up (the setting), a jar can still wear its band: untouched.
+	eq(TableNav.leave(N.BACK, true, true, false, false), A.RETURN_THEN_GO, "jar dealt back up, band on")
+	eq(TableNav.leave(N.BACK, true, true, true, false), A.STAY, "torn stays torn")
 	eq(TableNav.leave(N.MOVING, false, false, false, true), A.STAY, "mid deal / flip / toss")
 
 

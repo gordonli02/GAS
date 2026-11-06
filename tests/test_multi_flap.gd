@@ -182,6 +182,26 @@ func test_space_breaks_band_first() -> void:
 	_free_rig(rig)
 
 
+## Dealt back side up (the setting), a jar still wears its band: Space breaks the band
+## first and only then starts the tear; a drag on the card takes the band, not the flap.
+func test_band_comes_first_from_the_back_too() -> void:
+	var rig := _band_rig()
+	var view: TicketView = rig.view
+	var flow: TicketFlow = rig.flow
+	view.sims.append(FlapSim.new(1.9, 1.1))
+	flow.state = TicketFlow.State.BACK
+	eq(flow.hand(), TableNav.Hand.BACK, "in hand, back up")
+	eq(TableNav.leave(flow.hand(), flow.has_band(), view.band_on, view.any_torn(), false), TableNav.Action.RETURN_THEN_GO,
+		"untouched: it can go back to the tray")
+	flow.primary()
+	check(not view.band_on, "space breaks the band")
+	check(not view.sims[0].torn and not view.sims[0].auto, "and does not start the tear in the same press")
+	eq(TableNav.leave(flow.hand(), flow.has_band(), view.band_on, view.any_torn(), false), TableNav.Action.STAY,
+		"band broken: it stays in hand")
+	view.sims.clear()
+	_free_rig(rig)
+
+
 func test_jar_opens_with_a_sideways_swipe() -> void:
 	var pack := core_pack()
 	if pack == null:

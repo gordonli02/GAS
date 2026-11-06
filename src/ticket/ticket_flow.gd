@@ -21,6 +21,10 @@ var view: TicketView
 var flecks: Flecks
 var tray: Node3D             ## where tickets are dealt from
 var pile: DiscardPile
+var win_pile: DiscardPile    ## where winning tickets are tossed; null: everything goes on `pile`
+## Setting: tickets come to the hand back side up, so there is no flip. A banded ticket
+## still has its band to break first, which then works from the back.
+var back_first := false
 ## Returns the next ticket as {form: FormDef, ticket: Dictionary}, or {} when the tray is empty.
 var next_ticket: Callable
 ## Asked after a toss lands: deal the next ticket straight away?
@@ -29,11 +33,14 @@ var deal_after_toss: Callable = func() -> bool: return true
 var state := State.IDLE
 var form: FormDef
 var ticket: Dictionary
+var entry: Dictionary = {}   ## the ticket in hand as next_ticket gave it ({form, ticket, box})
 var pulse := 0.0
 var _anim := 0.0
 var _from := Transform3D.IDENTITY
 var _to_pile := Vector3.ZERO
 var _to_pile_basis := Basis.IDENTITY
+var _dest: DiscardPile       ## the pile the ticket being tossed lands on
+var _deal_back := false      ## this deal ends back side up
 var _drag := []              ## [{flap, dx, y, start, mode}] while the pointer holds flaps
 var _band_start = null       ## card point where a band drag started, or null
 var _band_mode := ""         ## "slide" / "split" once the band drag's direction is read
@@ -82,11 +89,13 @@ func primary() -> void:
 			deal()
 		State.FRONT:
 			if view.band_on:
-				view.break_band(BandRules.random_mode(view.band_breaks(), randf()), 1.0)
-				_on_band_break()
+				_snap_band()
 			else:
 				flip()
 		State.BACK:
+			if view.band_on:
+				_snap_band()
+				return
 			if not _drag.is_empty():
 				return
 			for i in view.sims.size():
@@ -103,6 +112,8 @@ func primary() -> void:
 func press(screen: Vector2) -> bool:
 	match state:
 		State.BACK:
+			if view.band_on:
+				return _press_band(screen)
 			var from := camera.project_ray_origin(screen)
 			var dir := camera.project_ray_normal(screen)
 			var hit := view.flap_at(from, dir)
@@ -122,19 +133,30 @@ func press(screen: Vector2) -> bool:
 			return true
 		State.FRONT:
 			if view.band_on:
-				var from := camera.project_ray_origin(screen)
-				var dir := camera.project_ray_normal(screen)
-				if view.on_card(from, dir):
-					_band_start = view.card_point(from, dir)
-					_band_mode = ""
-					return true
-				return false
+				return _press_band(screen)
 			flip()
 		State.REVEALED:
 			collect()
 		State.IDLE:
 			deal()
 	return false
+
+
+## Pointer pressed on a banded ticket: grabs the band if it landed on the card.
+func _press_band(screen: Vector2) -> bool:
+	var from := camera.project_ray_origin(screen)
+	var dir := camera.project_ray_normal(screen)
+	if not view.on_card(from, dir):
+		return false
+	_band_start = view.card_point(from, dir)
+	_band_mode = ""
+	return true
+
+
+## Space on a banded ticket: the band breaks one of its ways, picked at random.
+func _snap_band() -> void:
+	view.break_band(BandRules.random_mode(view.band_breaks(), randf()), 1.0)
+	_on_band_break()
 
 
 func move(screen: Vector2) -> void:
@@ -183,7 +205,7 @@ func release() -> void:
 func can_grab(screen: Vector2) -> bool:
 	var from := camera.project_ray_origin(screen)
 	var dir := camera.project_ray_normal(screen)
-	if state == State.FRONT and view.band_on:
+	if (state == State.FRONT or state == State.BACK) and view.band_on:
 		return view.on_card(from, dir)
 	if state != State.BACK:
 		return false
@@ -197,6 +219,7 @@ func deal() -> void:
 	if next.is_empty():
 		return
 	_busy = true
+	entry = next
 	form = next.form
 	ticket = next.ticket
 	await view.use_form(form)
@@ -206,6 +229,7 @@ func deal() -> void:
 	view.global_transform = _from
 	view.visible = true
 	_anim = 0.0
+	_deal_back = back_first
 	state = State.DEAL
 	Sfx.play("deal")
 	dealt.emit(ticket, form)
@@ -224,8 +248,9 @@ func collect() -> void:
 	if state != State.REVEALED:
 		return
 	_from = view.global_transform
-	_to_pile = pile.next_spot()
-	_to_pile_basis = pile.next_basis()
+	_dest = win_pile if win_pile != null and ticket.prize > 0 else pile
+	_to_pile = _dest.next_spot()
+	_to_pile_basis = _dest.next_basis()
 	_anim = 0.0
 	state = State.TOSS
 	Sfx.play("flip")
@@ -256,10 +281,11 @@ func _process(dt: float) -> void:
 			_anim = minf(1.0, _anim + dt / DEAL_TIME)
 			var t := _ease(_anim)
 			var pos := _from.origin.lerp(target, t) + Vector3(0, sin(t * PI) * 0.5, 0)
-			var q := _from.basis.get_rotation_quaternion().slerp(turned.get_rotation_quaternion(), t)
+			var end := facing if _deal_back else turned
+			var q := _from.basis.get_rotation_quaternion().slerp(end.get_rotation_quaternion(), t)
 			view.global_transform = Transform3D(Basis(q).scaled(sc), pos)
 			if _anim >= 1.0:
-				state = State.FRONT
+				state = State.BACK if _deal_back else State.FRONT
 		State.FRONT:
 			view.global_transform = Transform3D(turned.scaled(sc), target)
 		State.FLIP:
@@ -278,7 +304,7 @@ func _process(dt: float) -> void:
 			view.global_transform = Transform3D(Basis(q), pos)
 			if _anim >= 1.0:
 				view.visible = false
-				pile.land(form, _to_pile)
+				_dest.land(form, _to_pile, entry)
 				Sfx.play("toss")
 				state = State.IDLE
 				tossed.emit()

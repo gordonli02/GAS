@@ -32,5 +32,10 @@ func peek() -> Dictionary:
 	return items[0] if not items.is_empty() else {}
 
 
+## The ticket bought last, or {} when empty.
+func newest() -> Dictionary:
+	return items[-1] if not items.is_empty() else {}
+
+
 func clear() -> void:
 	items.clear()

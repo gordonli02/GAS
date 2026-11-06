@@ -35,7 +35,7 @@ Where packs come from (`Platform.pack_dirs()`): `res://packs/core`, then each fo
 | `colors` | `edge`, `head`, `ink` and one `tiles` colour per tier, as `#rrggbb` |
 | `tiers` | 3–8 entries: `key`, `label` (text or localized), `prize`, `printed_count` (decoration only), `role`, `symbol` (square transparent image) and optional `symbol_large` (used by symbol layers with `"variant": "large"`) |
 | `digit_groups` | loser digit group lengths, 2–6 each; shuffled per ticket |
-| `win_display` | `whole` (the win replaces the inside) or `one_group` (the win shows in one group) |
+| `win_display` | `whole` (one prize a ticket; it replaces the inside), `one_group` (one prize a ticket, shown in one group) or `each_group` (every group can win on its own: a ticket holds up to one prize per group, each shown in its group) |
 | `layout` | a layout file in this pack (`"layouts/x.json"`) or a built-in one (`"core:single"`, `"core:windows"`, `"core:jar"`) |
 | `tear_sounds` | optional, same shape as in `pack.json`; overrides the pack's rips for this form |
 
@@ -67,12 +67,15 @@ with the engine. The three built-in layouts in `core/layouts/` are complete exam
   left) used by every layer; the game paints at twice this resolution.
 - `front`: the printed face. `interior.base`: the paper under the flaps, drawn for every ticket.
 - `interior.slots`: one per digit group, in order. Each has an `anchor`; `rect` is required when the
-  form's `win_display` is `one_group`. Each ticket's (shuffled) groups fill the slots in order.
+  form's `win_display` is `one_group` or `each_group`. Each ticket's (shuffled) groups fill the slots in order.
 - `interior.digits`: `direction` (`row` or `column`, centred on the anchor), `pitch`, `color`, and the
   text styles `digit`, `caption` (ZERO, ONE…) and `mark` (the small digit): `font`, `size`,
   `offset` from the digit's spot, optional `max_width`.
 - `interior.winner` (for `whole`): drawn instead of the slots on a winner.
-  `interior.win_slot` (for `one_group`): drawn in the winning slot, relative to its `rect`.
+  `interior.win_slot` (for `one_group` and `each_group`): drawn in a winning slot, relative to its
+  `rect`. With `each_group` it is drawn once per group that won, with that group's own tier and
+  prize (`{prize}`, `win_tile`, `"tier": "win"`), and `if: "verify"` holds where that group won a
+  top prize.
 - `flaps`: 1–12, inside the card, not overlapping. `hinge` (`left`, `right`, `top`, `bottom`) is the
   edge that stays fixed. `cover` is a cover object or the name of a `cover_templates` entry; covers
   are drawn upright on the card and stretched to the flap. List order is the order Space opens them.

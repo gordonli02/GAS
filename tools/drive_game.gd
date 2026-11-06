@@ -60,6 +60,17 @@ func _run() -> void:
 	_key(KEY_2)
 	await _wait(0.15)
 	await _shot("04_dispensing")
+	# G, M8.5: the tickets that fly out show the form that was bought (they were all blue).
+	var plate_art: Texture2D = game.pile.cached_art(game.machine.forms[1])
+	var flying := 0
+	var right := 0
+	for i in game.machine_view._fly.size():
+		if game.machine_view._fly[i].visible:
+			flying += 1
+			if plate_art != null and game.machine_view._fly_mats[i].albedo_texture == plate_art:
+				right += 1
+	_expect(flying > 0 and right == flying, "Hot Plate tickets fly out as Hot Plate (%d of %d)" % [right, flying])
+	_expect(game.machine_view._stack_mat.albedo_texture == plate_art, "the machine's tray shows the ticket sold last on top")
 	await _wait(1.6)
 	_expect(e.credit == 0 and e.spent == 5, "PLAY ALL bought what the credit allowed")
 	_expect(not game.at_machine, "credit gone: back to the table 0.7 s after dispensing")
@@ -79,7 +90,7 @@ func _run() -> void:
 	_expect(game.flow.state == TicketFlow.State.REVEALED and e.opened == 1, "ticket opened")
 	_key(KEY_SPACE)   # toss; the next one is dealt
 	await _wait(1.0)
-	_expect(game.pile.opened == 1, "tossed onto the pile")
+	_expect(game.piled() == 1, "tossed onto a pile")
 	_expect(game.flow.state == TicketFlow.State.FRONT and game.tray.size() == 3, "next ticket dealt")
 
 	# B with an untouched ticket: it goes back to the tray.
@@ -119,10 +130,10 @@ func _run() -> void:
 	_key(KEY_B)
 	await _wait(0.5)
 	_expect(not game.at_machine, "B with an opened ticket does nothing (web build)")
-	var piled := game.pile.opened
+	var piled := game.piled()
 	_click(_machine_point())
 	await _wait(1.2)
-	_expect(game.pile.opened == piled + 1 and game.at_machine, "clicking the machine discards the opened ticket, then goes")
+	_expect(game.piled() == piled + 1 and game.at_machine, "clicking the machine discards the opened ticket, then goes")
 
 	# Clicking the room (not the machine) in the machine view returns to the table.
 	_click(Vector2(120, 900))
@@ -139,6 +150,8 @@ func _run() -> void:
 		if game.at_machine:
 			break
 	_expect(e.opened == 5, "all five opened (%d)" % e.opened)
+	_expect(game.win_pile.opened == e.wins and game.pile.opened == e.opened - e.wins,
+		"winners on their own pile, the rest on the discard pile (%d and %d)" % [game.win_pile.opened, game.pile.opened])
 	if game.at_machine:
 		_key(KEY_B)
 		await _wait(1.0)
@@ -325,7 +338,7 @@ func _milestone_6() -> void:
 	_click(_button_center(_dev_button("重置桌上的票和钱")))
 	await _wait(0.8)
 	e = game.economy
-	_expect(e.cash == 200 and e.credit == 0 and e.spent == 0 and e.loans == 0 and game.tray.is_empty() and game.pile.opened == 0
+	_expect(e.cash == 200 and e.credit == 0 and e.spent == 0 and e.loans == 0 and game.tray.is_empty() and game.piled() == 0
 		and game.flow.state == TicketFlow.State.IDLE and game.at_machine, "dev panel: reset clears the tickets and money, back at the machine")
 	_key(KEY_QUOTELEFT)
 	await _wait(0.2)
@@ -343,8 +356,11 @@ func _milestone_6() -> void:
 	await _open_by_space()
 	_expect(game.flow.state == TicketFlow.State.REVEALED, "first one revealed")
 	var snap := game.capture_session()
-	_expect(snap.pile.opened == game.pile.opened + 1 and snap.tray.size() == game.tray.size(),
+	_expect(int(snap.pile.opened) + int(snap.pile.wins.opened) == game.piled() + 1 and snap.tray.size() == game.tray.size(),
 		"a revealed ticket in hand is saved on the pile, not in the tray")
+	var bound_for: Dictionary = snap.pile.wins if game.flow.ticket.prize > 0 else snap.pile
+	var there_now: int = game.win_pile.opened if game.flow.ticket.prize > 0 else game.pile.opened
+	_expect(int(bound_for.opened) == there_now + 1, "on the pile it is bound for (a winner: the winners' pile)")
 	_key(KEY_SPACE)
 	await _wait(1.2)
 	_key(KEY_SPACE)
@@ -356,8 +372,8 @@ func _milestone_6() -> void:
 	for it in game.tray.items:
 		serials.append(it.ticket.serial)
 	var money := e.to_dict()
-	var piled := game.pile.opened
-	var pile_forms := game.pile._forms.duplicate()
+	var piled := game.piled()
+	var pile_forms := [game.pile._forms.duplicate(), game.win_pile._forms.duplicate(), game.win_pile.opened]
 	var cursors := []
 	for b in game.machine.boxes:
 		cursors.append([b.seed, b.cursor, b.opened])
@@ -377,7 +393,8 @@ func _milestone_6() -> void:
 	for it in game.tray.items:
 		got.append(it.ticket.serial)
 	_expect(got == serials, "reload: tray in purchase order, the partly torn ticket first (%d)" % got.size())
-	_expect(game.pile.opened == piled and game.pile._forms == pile_forms, "reload: the pile as it was (%d)" % piled)
+	_expect(game.piled() == piled and [game.pile._forms, game.win_pile._forms, game.win_pile.opened] == pile_forms,
+		"reload: both piles as they were (%d, %d of them winners)" % [piled, game.win_pile.opened])
 	var got_boxes := []
 	for b in game.machine.boxes:
 		got_boxes.append([b.seed, b.cursor, b.opened])
@@ -393,6 +410,96 @@ func _milestone_6() -> void:
 	await _wait(1.6)
 	_expect(game.flow.state == TicketFlow.State.FRONT and game.flow.ticket.serial == hand_serial and not game.view.any_torn(),
 		"reload: the partly torn ticket is dealt again, untouched")
+	# G, M8.5: the menu's TICKETS BACK SIDE UP. The ticket in hand goes back; the next deal
+	# comes back side up, so one Space starts the tear. Kept in the settings.
+	_key(KEY_B)
+	await _wait(1.0)
+	_key(KEY_ESCAPE)
+	await _wait(0.2)
+	_expect(not game.menu.key("back_first").button_pressed, "menu: tickets come front up by default")
+	_click(_button_center(game.menu.key("back_first")))
+	await _wait(0.2)
+	_expect(Save.setting("back_first") and game.flow.back_first and game.menu.key("back_first").button_pressed, "menu: TICKETS BACK SIDE UP on, remembered")
+	await _shot("16_menu_back_side_up")
+	_key(KEY_ESCAPE)
+	await _wait(0.2)
+	_key(KEY_B)
+	await _wait(1.6)
+	_expect(game.flow.state == TicketFlow.State.BACK and game.flow.ticket.serial == hand_serial, "dealt back side up: no flip")
+	await _shot("17_dealt_back_side_up")
+	_key(KEY_B)
+	await _wait(1.0)
+	_expect(game.at_machine and game.tray.peek().ticket.serial == hand_serial, "untouched, it still goes back to the tray")
+	_key(KEY_B)
+	await _wait(1.6)
+	var opened_before := e.opened
+	_key(KEY_SPACE)
+	await _wait(1.0)
+	_expect(game.flow.state == TicketFlow.State.REVEALED and e.opened == opened_before + 1, "one Space opens it")
+	_key(KEY_SPACE)
+	await _wait(1.2)
+	_expect(game.flow.state == TicketFlow.State.BACK, "the next one comes back side up too")
+	# A banded ticket (Lucky Spur) comes back side up with its band on: the band first.
+	_key(KEY_B)
+	await _wait(1.0)
+	await _dev_click(game.dev._forms[2])
+	await _wait(1.6)
+	_expect(game.flow.state == TicketFlow.State.BACK and game.flow.form.id == "spur" and game.view.band_on, "Lucky Spur back side up, band on")
+	await _shot("18_spur_back_side_up")
+	_key(KEY_SPACE)
+	await _wait(0.5)
+	_expect(not game.view.band_on and not game.view.any_torn(), "Space breaks the band first")
+	_key(KEY_SPACE)
+	await _wait(1.2)
+	_expect(game.flow.state == TicketFlow.State.REVEALED, "then opens it")
+	_key(KEY_SPACE)
+	await _wait(1.2)
+	_key(KEY_ESCAPE)
+	await _wait(0.2)
+	_click(_button_center(game.menu.key("back_first")))
+	await _wait(0.2)
+	_expect(not Save.setting("back_first") and not game.flow.back_first, "menu: and off again")
+	_key(KEY_ESCAPE)
+	await _wait(0.2)
+	# G, M8.5: Hot Plate wins window by window. A ticket holding two prizes pays both,
+	# and a winner lands on the winners' pile, not the discard pile.
+	_key(KEY_B)
+	await _wait(1.0)
+	var plate: FormDef = game.machine.forms[1]
+	var two_seed := ""
+	for n in 5000:
+		var first: Dictionary = BoxGenerator.build(plate, "TWO-%d" % n, game.machine.model, true).tickets[0]
+		if first.wins.count(-1) <= first.wins.size() - 2:
+			two_seed = "TWO-%d" % n
+			break
+	_expect(two_seed != "", "found a box whose first Hot Plate holds two prizes (%s)" % two_seed)
+	game.dev_new_box(1, two_seed)
+	var won_before := e.won
+	var winners := game.win_pile.opened
+	var losers := game.pile.opened
+	game.dev_free_ticket(1)
+	await _wait(1.6)
+	await _open_by_space()
+	var two: Dictionary = game.flow.ticket
+	var sum := 0
+	for w in two.wins:
+		if w >= 0:
+			sum += int(plate.tiers[w].prize)
+	_expect(game.flow.state == TicketFlow.State.REVEALED and two.prize == sum and e.won == won_before + sum,
+		"two windows won: both prizes paid ($%d, wins %s)" % [sum, two.wins])
+	await _shot("19_two_prizes")
+	_key(KEY_SPACE)
+	await _wait(1.2)
+	_expect(game.win_pile.opened == winners + 1 and game.pile.opened == losers, "the winner lands on the winners' pile")
+	# G: it lies inside up, showing its own prizes; the pile finds the ticket again from
+	# its box's seed, also once that box has been changed for a new one (and after a reload).
+	var face: String = game.win_pile._forms[-1]
+	_expect(face == "%s#%s#%d" % [plate.uid(), two_seed, int(two.no)] and game.win_pile._batches.has(face),
+		"the winners' pile shows that ticket's inside (%s)" % face)
+	await _shot("20_winners_pile")
+	game.dev_new_box(1, "AFTER-1")
+	var again: Dictionary = game._ticket_for(plate.uid(), two_seed, int(two.no))
+	_expect(again.get("wins") == two.wins and again.get("serial") == two.serial, "its box changed for a new one: the ticket is still found")
 	# A bill being fed is saved as credit.
 	_key(KEY_B)
 	await _wait(1.0)

@@ -1,7 +1,7 @@
 class_name Menu
 extends CanvasLayer
 ## Player menu (Esc or the MENU key): mode (free play or the story's run), table,
-## volume, sound, full screen, language, resume and quit. Same plate and LCD look as the HUD; layout after the web build's
+## volume, sound, full screen, tickets back side up, language, resume and quit. Same plate and LCD look as the HUD; layout after the web build's
 ## menu. Shows state only; the game applies the choices.
 
 signal mode_picked(id: String)   ## "free" / "run"
@@ -10,6 +10,7 @@ signal room_picked(id: String)
 signal volume_changed(linear: float)
 signal mute_toggled
 signal fullscreen_toggled
+signal back_first_toggled        ## tickets come to the hand back side up
 signal language_picked(code: String)
 signal quit_pressed
 
@@ -24,6 +25,7 @@ var _langs := {}
 var _volume := HSlider.new()
 var _sound: Button
 var _full: Button
+var _back: Button
 var _resume: Button
 var _quit: Button
 var _shade := ColorRect.new()
@@ -91,6 +93,9 @@ func _ready() -> void:
 	_full.pressed.connect(func(): fullscreen_toggled.emit())
 	two.add_child(_sound)
 	two.add_child(_full)
+	_back = _toggle_key("TICKETS BACK SIDE UP")
+	_back.pressed.connect(func(): back_first_toggled.emit())
+	_row(col).add_child(_back)
 
 	col.add_child(_caption("LANGUAGE"))
 	var langs := _row(col)
@@ -149,6 +154,7 @@ func show_state(settings: Dictionary, room: String, language: String, mode := "f
 	_sound.set_pressed_no_signal(muted)
 	_sound.text = "MUTED" if muted else "SOUND"
 	_full.set_pressed_no_signal(bool(settings.get("fullscreen", false)))
+	_back.set_pressed_no_signal(bool(settings.get("back_first", false)))
 
 
 ## Developer and test access to the keys.
@@ -156,6 +162,7 @@ func key(id: String) -> Button:
 	match id:
 		"sound": return _sound
 		"fullscreen": return _full
+		"back_first": return _back
 		"resume": return _resume
 		"quit": return _quit
 		"volume": return null

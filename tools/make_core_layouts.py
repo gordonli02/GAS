@@ -167,20 +167,21 @@ jar = {
     "interior": {
         "base": [
             R([0, 0, 640, 400], "#ece7da"), R([12, 12, 616, 376], STOCK),
-            perf([218, 28], [218, 358], "#b9b2a2", repeat={"count": 2, "step": [204, 0]}, **{"if": "lose"}),
+            perf([218, 28], [218, 358], "#b9b2a2", repeat={"count": 2, "step": [204, 0]}),
             T("PAYABLE IN EGG MONEY", [320, 376], "cond_bold", 12, fill="#5c5850")],
-        "slots": [{"anchor": [116 + 204 * i, 200]} for i in range(3)],
+        # Each column wins on its own (G, M8.5): a column's rect holds its win.
+        "slots": [{"rect": [20 + 204 * i, 28, 192, 330], "anchor": [116 + 204 * i, 200]} for i in range(3)],
         "digits": {"direction": "column", "pitch": 84, "color": DIG,
                    "digit": {"font": "slab", "size": 70, "offset": [-14, 24]},
                    "caption": {"font": "cond_bold", "size": 15, "offset": [46, 14], "max_width": 52},
                    "mark": {"font": "cond_bold", "size": 15, "offset": [46, -10]}},
-        "winner": [
-            R([36, 36, 568, 306], "win_tile"),
-            {"type": "circle", "center": [190, 189], "radius": 126, "fill": "#ffffff30"},
-            {"type": "symbol", "tier": "win", "variant": "large", "center": [190, 189], "size": 235.2},
-            R([350, 92, 230, 194], YEL),
-            T("${prize}", [465, 214], "slab", 72, max_width=208),
-            T("VERIFY {verify}", [465, 258], "lcd", 22, **{"if": "verify"})]},
+        "win_slot": [
+            R([0, 0, 192, 330], "win_tile"),
+            {"type": "circle", "center": [96, 112], "radius": 84, "fill": "#ffffff30"},
+            {"type": "symbol", "tier": "win", "variant": "large", "center": [96, 112], "size": 168},
+            R([0, 222, 192, 108], YEL),
+            T("${prize}", [96, 288], "slab", 60, max_width=176),
+            T("VERIFY {verify}", [96, 316], "lcd", 20, **{"if": "verify"})]},
     # side_pull: G's change after M3 review: a sideways swipe also opens it, from the bottom corner
     # the hand moves away from.
     "flaps": [{"rect": [r4(TM * PX), r4(TM * PX), r4((JW - 2 * TM) * PX), r4((JH - 2 * TM) * PX)], "hinge": "top",

@@ -24,6 +24,13 @@ var top_share_span := 0.3
 ## Share of what is left spent on mid prizes: min + span * r (0.10 to 0.25).
 var mid_share_min := 0.1
 var mid_share_span := 0.15
+## Forms that win by group only (not in the web build). The chance that a prize lands
+## on a ticket that already holds one, in one of its free groups, instead of anywhere
+## in the box. At 0 a box of about 34 prizes in 3,000 to 5,000 groups has a ticket with
+## two prizes once in two boxes; at 0.12 it has about four, and one with three now and
+## then. The box's prizes and money are the same either way. G settled on 0.12
+## (2026-11-06, M8.5).
+var stack_share := 0.12
 
 
 static func standard() -> BoxModel:

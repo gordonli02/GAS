@@ -140,7 +140,7 @@ func _run() -> void:
 
 	# Quit and start again mid-run.
 	var before := {"cash": e.cash, "credit": e.credit, "due": run.due(), "day": run.day, "tickets": run.stats.tickets,
-		"seed": game.machine.boxes[2].seed, "pile": game.pile.opened}
+		"seed": game.machine.boxes[2].seed, "pile": game.piled()}
 	game.save_now()
 	game.free()
 	game = _new_game()
@@ -150,7 +150,7 @@ func _run() -> void:
 	e = game.economy
 	_expect(game.mode == "run" and run != null and run.today == "play" and not game.run_card.visible, "reload: back in the run, mid-day")
 	_expect(e.cash + e.credit == before.cash + before.credit and run.due() == before.due and run.day == before.day, "money, debt and day as left")
-	_expect(run.stats.tickets == before.tickets and game.machine.boxes[2].seed == before.seed and game.pile.opened == before.pile, "tickets counted, boxes and pile as left")
+	_expect(run.stats.tickets == before.tickets and game.machine.boxes[2].seed == before.seed and game.piled() == before.pile, "tickets counted, boxes and pile as left")
 	_expect(e.balanced(), "ledger balanced after the reload")
 
 	# LEAVE: the day's summary, then the next day.
@@ -197,7 +197,7 @@ func _run() -> void:
 	_expect(run.stats.days_spared == 2, "two days spared")
 	_expect(game.rooms.id != room_before and game.rooms.id == run.scene(), "a new table (%s)" % game.rooms.id)
 	_expect(game.machine.forms[0].price == 5 and e.bills == [25, 50, 100, 250, 500], "tickets $5, bills at five times")
-	_expect(game.pile.opened == 0 and game.tray.is_empty(), "a clean table")
+	_expect(game.piled() == 0 and game.tray.is_empty(), "a clean table")
 	await _shot("11_story_twist")
 	_card("ok")
 	await _wait(0.3)

@@ -53,7 +53,9 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
   `src/core/run_config.gd`: `godot --headless --path . res://tools/sim_runs.tscn -- --runs=200`
 - `tools/drive_game.tscn` plays the full loop (bills, PLAY ALL, camera swing, leaving rules, cash out, loan,
   menu, language, developer panel, save and reload) and checks the money identity every frame; its save file
-  goes under the output dir. `tools/preview_pile.tscn` renders the discard pile at several sizes.
+  goes under the output dir. `tools/preview_pile.tscn` renders the discard pile at several sizes;
+  `tools/preview_win_pile.tscn` renders every room's table with the discard pile and the winners' pile,
+  for placing the winners' pile (`--at=x,z` tries another spot).
 - `tools/preview_rooms.tscn` screenshots every room from the table and the machine
   (`--gains=h,k,p` overrides the light gains, used to fit them against the web build).
 - `tools/export_room_art.js` (Node) re-exports the room textures in `assets/rooms/` from the web build's

@@ -1,6 +1,9 @@
 extends "res://tests/test_case.gd"
 ## The Godot generator must reproduce the web build bit for bit.
 ## Golden data: tools/make_generator_golden.js runs the web code under Node.
+## Forms that win by group (G, M8.5: Hot Plate, Lucky Spur) keep the web build's box
+## (type, size, prize counts); their tickets are dealt differently, so only the box is
+## compared. The same forms dealt the old way still match ticket for ticket.
 
 const GOLDEN := "res://tests/fixtures/generator_golden.json"
 
@@ -47,6 +50,13 @@ func test_boxes_match_js() -> void:
 		eq(box.type_id, zh_to_id[b.heat], tag + " type")
 		eq(box.size, int(b.size), tag + " size")
 		eq(box.counts, Array(b.counts).map(func(x): return int(x)), tag + " counts")
+		if box.form.wins_by_group():
+			# Dealt as the web build dealt it (one prize a ticket), it is the web's box still.
+			var old: FormDef = box.form.scaled(2)
+			old.win_display = "one_group"
+			box = BoxGenerator.build(old, b.seed)
+			for t in box.tickets:
+				t.prize /= 2
 		var lines := PackedStringArray()
 		for t in box.tickets:
 			lines.append(ticket_line(t))

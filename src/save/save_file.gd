@@ -22,6 +22,7 @@ const SETTINGS := {
 	"muted": false,
 	"fullscreen": false,
 	"language": "",          ## "" follows the system, else "en" / "zh"
+	"back_first": false,     ## tickets come to the hand back side up, ready to open (no flip)
 	"sounds": {},            ## developer: sound id -> {file, name, volume}
 	"lamp": 0,               ## developer: red button brightness step
 }

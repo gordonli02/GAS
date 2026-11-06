@@ -7,7 +7,10 @@ var seed := ""
 var type_id := ""
 var size := 0
 var counts: Array = []       ## real count per tier, same order as form.tiers
-var tickets: Array = []      ## Dictionary per ticket: no, tier, prize, win_group, serial, groups, marks, verify
+## Dictionary per ticket: no, tier, prize, win_group, serial, groups, marks, verify.
+## A form that wins by group adds wins: the tier each group won, or -1; prize is then
+## their sum and tier the best of them.
+var tickets: Array = []
 var cursor := 0              ## next ticket to sell
 var opened := 0              ## tickets opened so far (by ticket number)
 
@@ -33,9 +36,10 @@ func summary() -> Dictionary:
 	var paid := 0
 	for i in opened:
 		var t: Dictionary = tickets[i]
-		if t.tier >= 0:
-			left[t.tier] -= 1
-			paid += t.prize
+		for tier in t.get("wins", [t.tier]):
+			if tier >= 0:
+				left[tier] -= 1
+		paid += t.prize
 	var remain := size - opened
 	var prizes := prize_total()
 	return {

@@ -36,6 +36,7 @@ static func lamp(i := lamp_preset) -> Dictionary:
 	return out
 const BEZEL := Color("#0c0c10")
 const FLY_COUNT := 14
+const FLY_SIZE := Vector2(0.95, 1.3)   ## a flying ticket of the usual card (1.4 x 2.0), as the web build drew it
 const FONT_LCD := preload("res://assets/fonts/vt323-latin-400-normal.woff2")
 
 var painter: TicketPainter
@@ -50,6 +51,7 @@ var _stock: Array[MeshInstance3D] = []
 var _tray_pile: MeshInstance3D
 var _stack_mat := StandardMaterial3D.new()
 var _fly: Array[MeshInstance3D] = []
+var _fly_mats: Array[StandardMaterial3D] = []   ## each flying ticket shows its own form
 var _fly_state: Array = []
 var _bill: MeshInstance3D
 var _bill_mat := StandardMaterial3D.new()
@@ -133,9 +135,11 @@ func build(machine_forms: Array) -> void:
 	_tray_pile = _card(Vector2(1.4, 2.0), _stack_mat, false, 1.0)
 	_tray_pile.visible = false
 	for i in FLY_COUNT:
-		var f := _card(Vector2(0.95, 1.3), _stack_mat, false)
+		var mat := StandardMaterial3D.new()
+		var f := _card(FLY_SIZE, mat, false)
 		f.visible = false
 		_fly.append(f)
+		_fly_mats.append(mat)
 		_fly_state.append({"life": 0.0, "x": 0.0, "spin": 0.0})
 	body_collider = StaticBody3D.new()
 	var shape := CollisionShape3D.new()
@@ -167,7 +171,8 @@ func set_stock(shares: Array) -> void:
 		_stock[i].position.y = 4.0 + h / 2.0
 
 
-## The stack in the output tray: how many tickets are held and the top one's art.
+## The stack in the output tray: how many tickets are held, and the art and card size
+## of the one on top (the ticket sold last).
 func set_tray(count: int, art: Texture2D, card: Vector2) -> void:
 	_tray_pile.visible = count > 0
 	var th := clampf(count / 500.0 * 1.3, 0.02, 1.3)
@@ -177,11 +182,14 @@ func set_tray(count: int, art: Texture2D, card: Vector2) -> void:
 		_stack_mat.albedo_texture = art
 
 
-## A ticket shoots out into the tray.
-func launch_card() -> void:
+## A ticket shoots out into the tray, showing the front of the form that was bought
+## (`art`, with `card` its size in table units).
+func launch_card(art: Texture2D = null, card := Vector2(1.4, 2.0)) -> void:
 	for i in _fly.size():
 		if not _fly[i].visible:
 			_fly[i].visible = true
+			_fly_mats[i].albedo_texture = art
+			_fly[i].scale = Vector3(card.x / 1.4, 1.0, card.y / 2.0)
 			_fly_state[i] = {"life": 0.0, "x": (randf() - 0.5) * 1.1, "spin": (randf() - 0.5) * 3.0}
 			_fly[i].position = Vector3(0, 0.15, 1.7)
 			return

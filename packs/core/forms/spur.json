@@ -73,6 +73,6 @@
     4,
     3
   ],
-  "win_display": "whole",
+  "win_display": "each_group",
   "layout": "layouts/jar.json"
 }

@@ -26,6 +26,16 @@ func _run() -> void:
 		w.tier = 0
 		w.prize = 500
 		w.verify = "123456"
+		if f.wins_by_group():
+			# By group: a top prize in the first group and the smallest in the last.
+			t = t.duplicate()
+			t.wins = []
+			t.wins.resize(f.digit_groups.size())
+			t.wins.fill(-1)
+			w.wins = t.wins.duplicate()
+			w.wins[0] = 0
+			w.wins[-1] = f.tiers.size() - 1
+			w.prize = int(f.tiers[0].prize) + int(f.tiers[-1].prize)
 		var size := TicketArt.canvas_size(f)
 		await _save(painter, size, TicketArt.front(f, "K482910"), out_dir.path_join(f.id + "_front.png"))
 		await _save(painter, size, TicketArt.interior(f, t), out_dir.path_join(f.id + "_inside_lose.png"))

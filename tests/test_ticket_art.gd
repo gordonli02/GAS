@@ -70,11 +70,13 @@ func test_inside_winner_whole() -> void:
 	check(symbol, "winning tier's large symbol drawn")
 
 
+## The old way, still in the format: one prize a ticket, shown in one window.
 func test_inside_winner_one_window() -> void:
 	var pack := core_pack()
 	if pack == null:
 		return
-	var f := pack.form("plate")
+	var f: FormDef = pack.form("plate").scaled(2)
+	f.win_display = "one_group"
 	var box := BoxGenerator.build(f, "ART-2")
 	var t: Dictionary = {}
 	for x in box.tickets:
@@ -101,20 +103,70 @@ func test_inside_winner_one_window() -> void:
 			check(c.pos.y > slot[1] and c.pos.y < slot[1] + slot[3], "prize inside window %d" % t.win_group)
 
 
+## Every window (Hot Plate) or column (Lucky Spur) shows its own result: its prize where
+## it won, its digits where it did not.
+func test_inside_wins_by_group() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	for id in ["plate", "spur"]:
+		var f := pack.form(id)
+		# A ticket holding two prizes, one of them a top prize if the seeds give one.
+		var t: Dictionary = {}
+		for n in 400:
+			for x in BoxGenerator.build(f, "ART-%d" % n).tickets:
+				if x.wins.count(-1) <= x.wins.size() - 2 and (t.is_empty() or (x.verify != "" and t.verify == "")):
+					t = x
+			if not t.is_empty() and t.verify != "":
+				break
+		if not check(not t.is_empty(), id + ": found a ticket with two prizes"):
+			continue
+		var cmds := TicketArt.interior(f, t)
+		var digits := 0
+		var digit_size: float = f.layout.interior.digits.digit.size
+		for c in cmds:
+			if c.k == "text" and c.text.length() == 1 and c.text.is_valid_int() and c.size == digit_size:
+				digits += 1
+		var expected := 0
+		var top := false
+		for gi in t.wins.size():
+			var slot := Rect2(f.layout.interior.slots[gi].rect[0], f.layout.interior.slots[gi].rect[1],
+				f.layout.interior.slots[gi].rect[2], f.layout.interior.slots[gi].rect[3])
+			var tier: int = t.wins[gi]
+			var prize_here := false
+			var symbol_here := false
+			for c in cmds:
+				if c.k == "text" and c.text.begins_with("$") and slot.has_point(c.pos):
+					prize_here = true
+					if tier >= 0:
+						eq(c.text, "$%d" % int(f.tiers[tier].prize), "%s group %d: its own prize" % [id, gi])
+				if c.k == "tex" and tier >= 0 and slot.has_point(c.rect.get_center()) \
+						and (c.path == f.tiers[tier].symbol or c.path == f.tiers[tier].symbol_large):
+					symbol_here = true
+			eq(prize_here, tier >= 0, "%s group %d: a prize only where it won" % [id, gi])
+			eq(symbol_here, tier >= 0, "%s group %d: its tier's symbol" % [id, gi])
+			if tier < 0:
+				expected += t.groups[gi].size()
+			top = top or f.is_top(tier)
+		eq(digits, expected, id + ": digits in the groups that did not win")
+		eq(t.verify != "", top, id + ": a verify code with a top prize")
+
+
 func test_conditions_and_tier_colours() -> void:
 	var pack := core_pack()
 	if pack == null:
 		return
 	var f := pack.form("spur")
-	var lose := _ticket(pack, "spur", false)
-	var dividers := 0
-	for c in TicketArt.interior(f, lose):
-		if c.k == "stroke" and c.color == Color("#b9b2a2"):
-			dividers += 1
-	eq(dividers, 2, "jar loser: two column dividers ('if': lose)")
-	var win := _ticket(pack, "spur", true)
-	for c in TicketArt.interior(f, win):
-		check(not (c.k == "stroke" and c.color == Color("#b9b2a2")), "no dividers on a win")
+	# The jar's columns win one by one, so their dividers are always printed.
+	for want_win in [false, true]:
+		var dividers := 0
+		for c in TicketArt.interior(f, _ticket(pack, "spur", want_win)):
+			if c.k == "stroke" and c.color == Color("#b9b2a2"):
+				dividers += 1
+		eq(dividers, 2, "jar: two column dividers")
+	# 'if': verify prints only on a top prize (Big Catch's winner).
+	var plain := _ticket(pack, "catch", false)
+	check(not "".join(_texts(TicketArt.interior(pack.form("catch"), plain))).contains("VERIFY"), "no verify line on a loser")
 	var tiles := []
 	for c in TicketArt.front(f, "A100000"):
 		if c.k == "poly" and f.colors.tiles.has(c.color):

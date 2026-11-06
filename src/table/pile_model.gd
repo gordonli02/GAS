@@ -33,8 +33,9 @@ const CANDIDATES := 3
 var spots: Array = []   ## {pos: Vector3 (relative to the pile centre), yaw, tilt: Vector2}
 
 
-func _init(seed_text := "pile") -> void:
-	_drop_all(SeededRng.new(seed_text))
+## `spread` scales how far from the middle cards drop: under 1 gives a tighter heap.
+func _init(seed_text := "pile", spread := 1.0) -> void:
+	_drop_all(SeededRng.new(seed_text), spread)
 
 
 ## Heap cards (not counting toppers) for a number of tickets opened.
@@ -93,13 +94,13 @@ func landing_spot(opened_before: int) -> Vector3:
 ## Where the pile under it is steeper than REPOSE it slides downhill until it can
 ## rest, so the pile spreads into a mound instead of a tower. It then settles onto
 ## the slope (a plane fitted to what it lands on) and becomes part of the slope.
-func _drop_all(r: SeededRng) -> void:
+func _drop_all(r: SeededRng, spread_scale := 1.0) -> void:
 	var half := 4.0
 	var n := int(half * 2.0 / CELL)
 	var heights := PackedFloat32Array()
 	heights.resize(n * n)
 	for i in MAX_CARDS:
-		var radius := 0.35 + 0.075 * sqrt(float(i))
+		var radius := (0.35 + 0.075 * sqrt(float(i))) * spread_scale
 		var spread := 0.7 if i < INDIVIDUAL else 1.3
 		var yaw := (r.next_float() - 0.5) * 2.0 * spread
 		var axis_x := Vector2(cos(yaw), -sin(yaw))     # card width direction on the table

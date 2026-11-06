@@ -197,3 +197,52 @@ The design is in `docs/roadmap.md` (G's decisions, in Chinese); this is how it l
 - **Run statistics are kept from now on** (`RunState.stats`): tickets, shifts, loans, box changes,
   last sales, days spared. The settlement shows them; achievements and the money kept between runs
   (M13) will read them.
+
+## Milestone 8.5: small fixes and feel
+From G's own to-do list (2026-11-06); the plan is in `docs/roadmap.md`.
+- **A ticket flies out of the machine as the form that was bought.** The flying tickets all shared
+  the tray stack's picture, which showed the next ticket to be opened: usually a Big Catch. Each
+  now has its own, in the bought form's card shape (Lucky Spur is wide). The machine's tray shows
+  the ticket sold last on top; the wooden tray on the table still shows the one opened next.
+- **Space opens a flap half again as fast** (`FlapSim.SPACE_SPEED`, 1.5): the tear and its settle,
+  for a flap Space started. A tear the hand lets go of keeps its pace, and so do the deal, the
+  flip and the toss.
+- **Winners get a pile of their own** (looks only; the prize is paid on the reveal as before): a
+  second `DiscardPile` behind the tray, across the table from the discards, dropped tighter
+  (`Game.WIN_PILE_AT`, `WIN_PILE_SPREAD`; `tools/preview_win_pile.tscn` shows it in every room).
+  It is saved inside the session's pile (`pile.wins`); a save from before has none and starts it
+  empty.
+- **A winner lies prize side up** (G, M8.5 review): on the winners' pile a card shows its own
+  ticket's inside, the prizes it held and the digits of the groups that did not win, where the
+  discard pile shows the printed front. So there a card is one ticket
+  (`"<form>#<box seed>#<number>"`, kept in the save), painted once at half the hand's
+  resolution and let go when no card shows it; the game finds the ticket again from its box's
+  seed. The flaps themselves are not drawn on the pile.
+- **TICKETS BACK SIDE UP** (menu; setting `back_first`, off by default): a ticket comes to the hand
+  back side up, so there is no flip. A setting in both modes, not a perk (G). A banded ticket
+  arrives with its band on: the band breaks first, from the back, by drag or Space, and until
+  then the ticket can still go back to the tray (`TableNav`: a banded ticket back up was always
+  one whose band was broken). It takes hold from the next deal.
+- **Hot Plate and Lucky Spur win by group** (`win_display: "each_group"`, G): each window or column
+  can win on its own, so a ticket holds up to five (Hot Plate) or three (Lucky Spur) prizes; a
+  group that did not win prints its digits. Big Catch still wins as a whole ticket.
+  - **The box is the web build's**: type, size and prize counts are rolled as before, so the money
+    in a box and what a ticket is worth on average do not change. Only the deal differs: each
+    prize lands on one group of one ticket (`BoxGenerator._deal_cells`). The golden test compares
+    these two forms' boxes only; dealt the old way they still match ticket for ticket.
+  - **Both modes** (G): free play's Hot Plate and Lucky Spur are no longer the web build's tickets.
+    A save from before keeps its money and its place in each box, but the tickets left in those
+    two forms' boxes (and any in the tray) are dealt anew.
+  - **`BoxModel.stack_share` is 0.12** (proposed here, G agreed in the M8.5 review). G first chose
+    "prizes land at random", but a box has about 34 prizes in 3,000 to 5,000 groups, so at random
+    a ticket with two prizes turns up once in two boxes: the new rule would hardly ever show. With
+    `stack_share`, a prize lands that often on a ticket that already holds one: about four such
+    tickets a box, one with three now and then (200 boxes: Hot Plate 6,864 prizes on 6,033
+    tickets, 743 holding two or more). 0 gives the plain random deal.
+  - A ticket's `prize` is the sum, its `tier` the best of its groups (the sound and the shake follow
+    the sum); `wins` lists the tier per group. A top prize in any group gives the ticket its verify
+    code; Lucky Spur prints it in that column, Hot Plate's windows have no room for one (as before).
+  - Lucky Spur's layout (`core:jar`) lost its whole-card winner: its columns have rects and a
+    `win_slot`, and the dividers are always printed.
+- **The developer panel's free ticket** puts back any untouched ticket in hand, front or back up
+  (it only did so for one front up).

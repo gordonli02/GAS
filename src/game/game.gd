@@ -17,6 +17,10 @@ const MACHINE_LIGHT_ENERGY := 0.8 / 6.5
 const UI_TICK := 0.09
 const MESSAGE_TIME := 1.6
 const AUTOSAVE := 2.0
+## The winners' pile: behind the tray, across the table from the discard pile. x as a
+## share of the tray's offset from the middle; a tighter heap than the discards.
+const WIN_PILE_AT := Vector3(1.03, 0, -1.8)
+const WIN_PILE_SPREAD := 0.55
 
 var painter := TicketPainter.new()
 var rooms := RoomSet.new()
@@ -27,6 +31,9 @@ var flecks := Flecks.new()
 var flow := TicketFlow.new()
 var table_tray := TableTray.new()
 var pile := DiscardPile.new()
+## Winning tickets get a pile of their own (looks only), lying inside up: each shows the
+## prizes it held (G).
+var win_pile := DiscardPile.new()
 var machine_view := MachineView.new()
 var hud := Hud.new()
 var notepad := Notepad.new()
@@ -84,6 +91,12 @@ func _ready() -> void:
 	pile.painter = painter
 	pile.find_form = _form_for
 	add_child(pile)
+	win_pile.painter = painter
+	win_pile.find_form = _form_for
+	win_pile.find_ticket = _ticket_for
+	win_pile.show_inside = true
+	win_pile.use_seed("wins", WIN_PILE_SPREAD)
+	add_child(win_pile)
 	notepad.painter = painter
 	add_child(notepad)
 	add_child(hud)
@@ -118,6 +131,8 @@ func _ready() -> void:
 	flow.flecks = flecks
 	flow.tray = table_tray
 	flow.pile = pile
+	flow.win_pile = win_pile
+	flow.back_first = use_save and bool(Save.setting("back_first"))
 	flow.next_ticket = _take_ticket
 	flow.deal_after_toss = _deal_after_toss
 	flow.dealt.connect(_on_dealt)
@@ -140,6 +155,7 @@ func _ready() -> void:
 	menu.volume_changed.connect(set_master)
 	menu.mute_toggled.connect(toggle_mute)
 	menu.fullscreen_toggled.connect(toggle_fullscreen)
+	menu.back_first_toggled.connect(toggle_back_first)
 	menu.language_picked.connect(set_language)
 	menu.quit_pressed.connect(quit_game)
 	await _enter_mode(str(Save.setting("mode")) if use_save else "free", true)
@@ -411,6 +427,8 @@ func _clear_table() -> void:
 	_leaving = false
 	tray.clear()
 	pile.clear()
+	win_pile.clear()
+	_old_boxes.clear()
 	Sfx.motor(false)
 	machine_view.show_bill(0, 0.0)
 	run_card.hide_card()
@@ -422,6 +440,9 @@ func _apply_stage() -> void:
 	var room: String = run.scene() if run != null else Save.setting("room")
 	set_room(room if RoomSet.ORDER.has(room) else START_ROOM, run == null)
 	await machine_view.paint_bills(economy.bills)
+	# The fronts of what this machine sells, painted before the first ticket flies out.
+	for f in machine.forms:
+		await pile.art(f)
 
 
 ## Run: the LEAVE key puts the LEAVE card up: the day so far, and how many tickets
@@ -435,6 +456,11 @@ func leave_day() -> void:
 	machine.change_armed = false
 	_leaving = true
 	_show_run_card()
+
+
+## Tickets tossed so far, on either pile.
+func piled() -> int:
+	return pile.opened + win_pile.opened
 
 
 ## Run: tickets bought and not opened yet (the tray, and one in hand not revealed).
@@ -635,6 +661,13 @@ func toggle_fullscreen() -> void:
 	_menu_state()
 
 
+## Setting: tickets come to the hand back side up. Takes hold from the next deal.
+func toggle_back_first() -> void:
+	Save.set_setting("back_first", not bool(Save.setting("back_first")))
+	flow.back_first = bool(Save.setting("back_first"))
+	_menu_state()
+
+
 func set_language(code: String) -> void:
 	Save.set_setting("language", code)
 	Lang.set_language(code)
@@ -662,19 +695,25 @@ func _apply_window() -> void:
 # --- saving ---------------------------------------------------------------------
 
 ## The session as SessionState keeps it: a ticket in hand that is not revealed goes
-## back to the tray, a revealed one counts on the pile.
+## back to the tray, a revealed one counts on the pile it is bound for.
 func capture_session() -> Dictionary:
 	var hand := {}
 	var landing := ""
+	var landing_win := ""
 	match flow.state:
 		TicketFlow.State.REVEALED, TicketFlow.State.TOSS:
-			landing = flow.form.uid()
+			if flow.ticket.prize > 0:
+				landing_win = win_pile.face_id(flow.form, flow.entry)
+			else:
+				landing = flow.form.uid()
 		TicketFlow.State.DEAL, TicketFlow.State.FRONT, TicketFlow.State.FLIP, TicketFlow.State.BACK:
 			hand = current
 		TicketFlow.State.IDLE:
 			if flow.dealing():
 				hand = current
-	return SessionState.capture(economy, machine, tray, hand, pile.to_dict(landing))
+	var piles := pile.to_dict(landing)
+	piles["wins"] = win_pile.to_dict(landing_win)
+	return SessionState.capture(economy, machine, tray, hand, piles)
 
 
 ## Puts the table and the money in the save slot of the mode in play.
@@ -700,7 +739,7 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_PREDELETE:
 		# Parts never added (run-tool, missing data). Its own parts only.
 		Orphans.free_members(self, ["painter", "rooms", "machine_light", "camera", "view", "flecks", "flow",
-			"table_tray", "pile", "machine_view", "hud", "notepad", "input", "menu", "run_card"])
+			"table_tray", "pile", "win_pile", "machine_view", "hud", "notepad", "input", "menu", "run_card"])
 
 
 
@@ -712,6 +751,8 @@ func _restore_session(d: Dictionary) -> bool:
 	var p = d.get("pile", {})
 	if typeof(p) == TYPE_DICTIONARY:
 		await pile.from_dict(p)
+		var w = p.get("wins", {})
+		await win_pile.from_dict(w if typeof(w) == TYPE_DICTIONARY else {})
 	return true
 
 
@@ -722,6 +763,27 @@ func _form_for(uid: String) -> FormDef:
 			if f.uid() == uid:
 				return f
 	return null
+
+
+## A ticket by its form, its box's seed and its number, for the winners' pile (which
+## shows each ticket's inside): from the machine's boxes, or a box built again from its
+## seed (one that was changed for a new one, or a save's).
+var _old_boxes := {}
+
+func _ticket_for(uid: String, seed_text: String, no: int) -> Dictionary:
+	var form := _form_for(uid)
+	if form == null or seed_text == "":
+		return {}
+	var box: TicketBox = null
+	for b in machine.boxes:
+		if b.form == form and b.seed == seed_text:
+			box = b
+	if box == null:
+		var key := "%s|%s" % [form.art_key(), seed_text]
+		if not _old_boxes.has(key):
+			_old_boxes[key] = BoxGenerator.build(form, seed_text, machine.model)
+		box = _old_boxes[key]
+	return box.tickets[no - 1] if no >= 1 and no <= box.size else {}
 
 
 # --- developer panel --------------------------------------------------------------
@@ -736,7 +798,7 @@ func set_lamp(step: int) -> void:
 ## A free ticket of machine column `i` (web build's bench): an untouched ticket in hand
 ## goes back to the tray first; the free one is dealt at the table. Not counted as spent.
 func dev_free_ticket(i: int) -> void:
-	if flow.state == TicketFlow.State.FRONT and TableNav.leave(flow.hand(), flow.has_band(), view.band_on, view.any_torn(), false) == TableNav.Action.RETURN_THEN_GO:
+	if flow.has_ticket() and TableNav.leave(flow.hand(), flow.has_band(), view.band_on, view.any_torn(), false) == TableNav.Action.RETURN_THEN_GO:
 		flow.cancel()
 		tray.put_back(current)
 		current = {}
@@ -766,6 +828,7 @@ func dev_reset() -> void:
 	_go_machine = false
 	tray.clear()
 	pile.clear()
+	win_pile.clear()
 	economy = Economy.new()
 	machine.queue.clear()
 	machine.armed = false
@@ -874,7 +937,9 @@ func _process(dt: float) -> void:
 	var m := machine.step(dt, _time, economy, tray)
 	Sfx.motor(m.motor)
 	for s in m.sold:
-		machine_view.launch_card()
+		var sold: FormDef = machine.forms[s.form]
+		var sold_card: Array = sold.layout.card.size
+		machine_view.launch_card(pile.cached_art(sold), Vector2(sold_card[0], sold_card[1]))
 	if run != null:
 		run.count_sales(m.sold.size(), m.last_sale.size())
 	if not m.last_sale.is_empty():
@@ -928,6 +993,12 @@ func _refresh_ui() -> void:
 		var s: Array = next.form.layout.card.size
 		card = Vector2(s[0], s[1])
 	table_tray.set_stack(tray.size(), art, card)
+	# The machine's tray shows the ticket that came out last, lying on top.
+	var newest := tray.newest()
+	if not newest.is_empty():
+		art = pile.cached_art(newest.form)
+		var s: Array = newest.form.layout.card.size
+		card = Vector2(s[0], s[1])
 	machine_view.set_tray(tray.size(), art, card)
 	var loan := {"step": Economy.LOAN, "left": economy.loan_left(), "ok": economy.loan_available()}
 	var change := {}
@@ -974,6 +1045,7 @@ func _place_tray_and_pile() -> void:
 	table_tray.position = Vector3(sx - 0.05, 0, 1.2)
 	table_tray.rotation = Vector3(0, -0.12, 0)
 	pile.position = Vector3(-sx, 0, 1.25)
+	win_pile.position = WIN_PILE_AT * Vector3(sx, 1, 1)
 	# The notepad lies in front of the pile, toward the player, clear of the held ticket.
 	notepad.position = Vector3(-sx * 0.6, 0, 2.6)
 	notepad.rotation = Vector3(0, 0.18, 0)

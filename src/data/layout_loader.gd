@@ -69,7 +69,7 @@ static func validate(ctx, layout, form: FormDef, where: String) -> Dictionary:
 					v.err(p, "must be an object")
 					continue
 				v.vec2(s, "anchor", p + ".anchor")
-				if form.win_display == "one_group" or s.has("rect"):
+				if form.win_display != "whole" or s.has("rect"):
 					v.rect(s, "rect", p + ".rect")
 		v.digits(inside.get("digits"), "interior.digits")
 		if form.win_display == "whole":

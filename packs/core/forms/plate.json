@@ -75,6 +75,6 @@
     3,
     4
   ],
-  "win_display": "one_group",
+  "win_display": "each_group",
   "layout": "layouts/windows.json"
 }

@@ -114,7 +114,39 @@ func test_auto_finish_speed_and_open() -> void:
 			break
 	check(opened_at > 0, "auto flap opens")
 	# Target runs to 0 in 1/2.8 s; f trails it at 16/s, so it opens a little later.
-	check(opened_at > 1.0 / 2.8 and opened_at < 1.0 / 2.8 + 0.3, "opens at the auto-finish pace (%.3f s)" % opened_at)
+	# Space runs the flap SPACE_SPEED times as fast as a tear the hand let go of.
+	var pace := 1.0 / 2.8 / FlapSim.SPACE_SPEED
+	check(opened_at > pace and opened_at < pace + 0.3 / FlapSim.SPACE_SPEED, "opens at the auto-finish pace (%.3f s)" % opened_at)
+
+
+## Seconds until a flap that finishes by itself has settled open.
+func _settle_time(s: FlapSim) -> float:
+	var t := 0.0
+	while not s.is_settled() and t < 3.0:
+		s.step(DT, false)
+		t += DT
+	return t
+
+
+func test_space_opens_half_again_as_fast() -> void:
+	eq(FlapSim.SPACE_SPEED, 1.5, "Space: 50% faster (G, M8.5)")
+	var space := FlapSim.new(W, H)
+	space.start_auto(true)
+	# The same tear at the hand's pace: torn at the same corner, let go, finishing by itself.
+	var hand := FlapSim.new(W, H)
+	hand.start_auto(true)
+	hand.speed = 1.0
+	var a := _settle_time(space)
+	var b := _settle_time(hand)
+	check(absf(b / a - 1.5) < 0.05, "Space settles 1.5 times as fast (%.3f s against %.3f s)" % [a, b])
+	# A tear the hand lets go of keeps the old pace, and a fresh ticket starts over.
+	var let_go := FlapSim.new(W, H)
+	let_go.pull_to(W * 0.3, 0.0)
+	let_go.f = let_go.target
+	let_go.release()
+	check(let_go.auto and let_go.speed == 1.0, "released by hand: the usual pace")
+	space.reset()
+	eq(space.speed, 1.0, "reset: the usual pace again")
 
 
 func test_settles_open() -> void:

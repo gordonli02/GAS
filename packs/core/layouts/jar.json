@@ -366,8 +366,7 @@
       204,
       0
      ]
-    },
-    "if": "lose"
+    }
    },
    {
     "type": "text",
@@ -384,18 +383,36 @@
   ],
   "slots": [
    {
+    "rect": [
+     20,
+     28,
+     192,
+     330
+    ],
     "anchor": [
      116,
      200
     ]
    },
    {
+    "rect": [
+     224,
+     28,
+     192,
+     330
+    ],
     "anchor": [
      320,
      200
     ]
    },
    {
+    "rect": [
+     428,
+     28,
+     192,
+     330
+    ],
     "anchor": [
      524,
      200
@@ -432,24 +449,24 @@
     ]
    }
   },
-  "winner": [
+  "win_slot": [
    {
     "type": "rect",
     "rect": [
-     36,
-     36,
-     568,
-     306
+     0,
+     0,
+     192,
+     330
     ],
     "fill": "win_tile"
    },
    {
     "type": "circle",
     "center": [
-     190,
-     189
+     96,
+     112
     ],
-    "radius": 126,
+    "radius": 84,
     "fill": "#ffffff30"
    },
    {
@@ -457,18 +474,18 @@
     "tier": "win",
     "variant": "large",
     "center": [
-     190,
-     189
+     96,
+     112
     ],
-    "size": 235.2
+    "size": 168
    },
    {
     "type": "rect",
     "rect": [
-     350,
-     92,
-     230,
-     194
+     0,
+     222,
+     192,
+     108
     ],
     "fill": "#ffe600"
    },
@@ -476,24 +493,24 @@
     "type": "text",
     "text": "${prize}",
     "pos": [
-     465,
-     214
+     96,
+     288
     ],
     "font": "slab",
-    "size": 72,
+    "size": 60,
     "fill": "#111111",
     "align": "center",
-    "max_width": 208
+    "max_width": 176
    },
    {
     "type": "text",
     "text": "VERIFY {verify}",
     "pos": [
-     465,
-     258
+     96,
+     316
     ],
     "font": "lcd",
-    "size": 22,
+    "size": 20,
     "fill": "#111111",
     "align": "center",
     "if": "verify"

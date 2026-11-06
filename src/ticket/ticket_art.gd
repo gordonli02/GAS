@@ -32,7 +32,15 @@ static func interior(form: FormDef, t: Dictionary) -> Array:
 		return out
 	for i in inside.slots.size():
 		var slot: Dictionary = inside.slots[i]
-		if win and i == t.win_group:
+		if form.wins_by_group() and t.wins[i] >= 0:
+			# This group's own prize: its tier, its amount, a verify code on a top prize.
+			var tier: int = t.wins[i]
+			var own := _ctx(form, {"serial": t.serial, "prize": str(int(form.tiers[tier].prize)),
+				"verify": t.get("verify", "")}, tier,
+				{"win": true, "lose": false, "verify": form.is_top(tier) and t.get("verify", "") != ""})
+			var r: Array = slot.rect
+			out.append_array(_layers(inside.win_slot, own, Transform2D(0, Vector2(r[0], r[1]))))
+		elif win and not form.wins_by_group() and i == t.win_group:
 			var r: Array = slot.rect
 			out.append_array(_layers(inside.win_slot, ctx, Transform2D(0, Vector2(r[0], r[1]))))
 		else:
