@@ -7,12 +7,15 @@ extends Node3D
 const HISTORY := 300
 
 var painter: TicketPainter
+## Form for a uid; the game points this at the forms of the stage in play, whose print
+## shows that stage's price and prizes.
+var find_form: Callable = func(uid: String) -> FormDef: return Packs.form(uid)
 var model := PileModel.new()
 var opened := 0
 var _forms: Array[String] = []     ## form uid shown by each card spot, in drop order
 var _history: Array[String] = []   ## recent forms tossed, newest last
-var _batches := {}                 ## form uid -> MultiMeshInstance3D
-var _art := {}                     ## form uid -> Texture2D
+var _batches := {}                 ## form art key -> MultiMeshInstance3D
+var _art := {}                     ## form art key -> Texture2D
 var _rng := RandomNumberGenerator.new()
 
 
@@ -104,17 +107,21 @@ func clear() -> void:
 
 ## Box art if already painted, else null (and starts painting it).
 func cached_art(form: FormDef) -> Texture2D:
-	if not _art.has(form.uid()):
+	if not _art.has(form.art_key()):
 		art(form)
 		return null
-	return _art[form.uid()]
+	return _art[form.art_key()]
 
 
 ## The form's printed front without a serial, as seen on the box art.
 func art(form: FormDef) -> Texture2D:
-	if not _art.has(form.uid()):
-		_art[form.uid()] = await painter.paint(TicketArt.canvas_size(form), TicketArt.front(form, ""))
-	return _art[form.uid()]
+	var key := form.art_key()
+	if not _art.has(key):
+		_art[key] = null   # being painted: a second caller waits for the same picture
+		_art[key] = await painter.paint(TicketArt.canvas_size(form), TicketArt.front(form, ""))
+	while _art[key] == null:
+		await get_tree().process_frame
+	return _art[key]
 
 
 func _rebuild() -> void:
@@ -123,13 +130,18 @@ func _rebuild() -> void:
 		if not by_form.has(_forms[i]):
 			by_form[_forms[i]] = []
 		by_form[_forms[i]].append(i)
-	for uid in _batches:
-		if not by_form.has(uid):
-			_batches[uid].multimesh.instance_count = 0
+	var used := {}
+	var forms := {}
 	for uid in by_form:
-		var form := Packs.form(uid)
-		if form == null:
-			continue
+		var form: FormDef = find_form.call(uid)
+		if form != null:
+			forms[uid] = form
+			used[form.art_key()] = true
+	for key in _batches:
+		if not used.has(key):
+			_batches[key].multimesh.instance_count = 0
+	for uid in forms:
+		var form: FormDef = forms[uid]
 		var mm := await _batch(form)
 		var list: Array = by_form[uid]
 		mm.instance_count = list.size()
@@ -146,9 +158,9 @@ func _spot_basis(i: int) -> Basis:
 
 ## One batch per form: a thin card with the form's art on top.
 func _batch(form: FormDef) -> MultiMesh:
-	var uid := form.uid()
-	if _batches.has(uid):
-		return _batches[uid].multimesh
+	var key := form.art_key()
+	if _batches.has(key):
+		return _batches[key].multimesh
 	var s: Array = form.layout.card.size
 	var mesh := ArrayMesh.new()
 	var box := BoxMesh.new()
@@ -177,5 +189,5 @@ func _batch(form: FormDef) -> MultiMesh:
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
 	add_child(inst)
-	_batches[uid] = inst
+	_batches[key] = inst
 	return mm

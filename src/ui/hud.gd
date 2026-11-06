@@ -10,6 +10,8 @@ signal bill_pressed(value: int)
 signal cash_out_pressed
 signal loan_pressed
 signal menu_pressed
+signal leave_pressed       ## run: leave for today
+signal new_box_pressed     ## run: change a column's box
 
 var _cash := LcdStyle.label("", 46)
 var _status := LcdStyle.label("", 24)
@@ -18,6 +20,10 @@ var _held := LcdStyle.label("0", 20, LcdStyle.BRIGHT_TEXT)
 var _opened := LcdStyle.label("0", 20, LcdStyle.BRIGHT_TEXT)
 var _net := LcdStyle.label("$0", 20, LcdStyle.BRIGHT_TEXT)
 var _bills: Array[Button] = []
+var _bill_values: Array = Economy.BILLS
+var _run_line := LcdStyle.label("", 20, LcdStyle.BRIGHT_TEXT)
+var _leave: Button
+var _new_box: Button
 var _cash_out: Button
 var _loan: Button
 var _line := LcdStyle.label("", 20, LcdStyle.GREY_TEXT)
@@ -60,10 +66,21 @@ func _ready() -> void:
 		gap.custom_minimum_size = Vector2(8, 0)
 		mini.add_child(gap)
 	col.add_child(mini)
+	_run_line.visible = false
+	_run_line.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	col.add_child(_run_line)
+	var keys := HBoxContainer.new()
+	keys.add_theme_constant_override("separation", 8)
 	menu_key = LcdStyle.chrome("MENU", 18)
-	menu_key.custom_minimum_size = Vector2(0, 34)
+	_leave = LcdStyle.chrome("LEAVE", 18)
+	_leave.visible = false
+	_leave.pressed.connect(func(): leave_pressed.emit())
+	for b in [menu_key, _leave]:
+		b.custom_minimum_size = Vector2(0, 34)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		keys.add_child(b)
 	menu_key.pressed.connect(func(): menu_pressed.emit())
-	col.add_child(menu_key)
+	col.add_child(keys)
 
 	_window = LcdStyle.plate()
 	_window.custom_minimum_size = Vector2(270, 0)
@@ -85,10 +102,11 @@ func _ready() -> void:
 	pad.columns = 3
 	pad.add_theme_constant_override("h_separation", 12)
 	pad.add_theme_constant_override("v_separation", 12)
-	for v in Economy.BILLS:
-		var b := LcdStyle.key("$%d" % v, 30)
+	for i in Economy.BILLS.size():
+		var b := LcdStyle.key("$%d" % Economy.BILLS[i], 30)
+		b.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 		b.custom_minimum_size = Vector2(74, 74)
-		b.pressed.connect(func(): bill_pressed.emit(v))
+		b.pressed.connect(func(): bill_pressed.emit(_bill_values[i]))
 		pad.add_child(b)
 		_bills.append(b)
 	var center := CenterContainer.new()
@@ -97,7 +115,8 @@ func _ready() -> void:
 	var two := HBoxContainer.new()
 	two.add_theme_constant_override("separation", 10)
 	_cash_out = LcdStyle.chrome("CASH OUT", 20)
-	_loan = LcdStyle.chrome("LOAN $200", 20)
+	_loan = LcdStyle.chrome("", 20)
+	_loan.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	for b in [_cash_out, _loan]:
 		b.custom_minimum_size = Vector2(0, 44)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -105,6 +124,13 @@ func _ready() -> void:
 	_cash_out.pressed.connect(func(): cash_out_pressed.emit())
 	_loan.pressed.connect(func(): loan_pressed.emit())
 	wv.add_child(two)
+	_new_box = LcdStyle.chrome("", 20)
+	_new_box.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	_new_box.toggle_mode = true
+	_new_box.custom_minimum_size = Vector2(0, 44)
+	_new_box.visible = false
+	_new_box.pressed.connect(func(): new_box_pressed.emit())
+	wv.add_child(_new_box)
 	_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	wv.add_child(_line)
 	_window.add_child(wv)
@@ -156,15 +182,42 @@ func set_ledger(held: int, e: Economy) -> void:
 
 ## Bill plate: shown beside the slot; keys dark while a bill feeds or cash is short;
 ## LOAN always there, dark once the house line is used up.
-func set_bill_window(show: bool, e: Economy, machine_busy: bool) -> void:
+## loan: {step, left, ok}: what one press lends, what the house still lends, and
+## whether it lends now. change: {} in free play, else {fee, armed, ok} for NEW BOX.
+func set_bill_window(show: bool, e: Economy, machine_busy: bool, loan: Dictionary, change := {}) -> void:
 	_window.visible = show
 	if not show:
 		return
+	if _bill_values != e.bills:
+		_bill_values = e.bills
+		for i in _bills.size():
+			_bills[i].text = "$%d" % _bill_values[i]
+			LcdStyle.set_sizes(_bills[i], 30 if _bills[i].text.length() <= 4 else 24)
 	for i in _bills.size():
-		_bills[i].disabled = e.bill > 0 or e.cash < Economy.BILLS[i]
+		_bills[i].disabled = e.bill > 0 or e.cash < int(_bill_values[i])
 	_cash_out.disabled = e.credit <= 0 or machine_busy
-	_loan.disabled = not e.loan_available()
-	_line.text = tr("HOUSE LINE %s LEFT") % _money(e.loan_left())
+	_loan.text = tr("LOAN %s") % _money(loan.step)
+	_loan.disabled = not loan.ok
+	_line.text = tr("HOUSE LINE %s LEFT") % _money(loan.left)
+	_new_box.visible = not change.is_empty()
+	if not change.is_empty():
+		_new_box.text = tr("NEW BOX %s") % _money(change.fee)
+		_new_box.set_pressed_no_signal(change.armed)
+		_new_box.disabled = not change.ok
+
+
+## Run (story mode): the line with what is due and the day, and the LEAVE key.
+## An empty text hides both (free play).
+func set_run(text: String, can_leave := false) -> void:
+	_run_line.visible = text != ""
+	_run_line.text = text
+	_leave.visible = text != ""
+	_leave.disabled = not can_leave
+
+
+## Tools: the run keys.
+func run_key(id: String) -> Button:
+	return _leave if id == "leave" else _new_box
 
 
 ## Lines the plate up beside the machine: x right of the slot side, centred on the

@@ -5,6 +5,9 @@ extends RefCounted
 ## to credit when it finishes feeding; tickets are paid from credit; prizes go to
 ## cash; CASH OUT moves credit to cash; a loan adds cash but never counts in NET.
 ## Invariant: cash + credit + bill being fed = 200 + loans + won - spent.
+## A run (RunState) adds its own lines: a starting cash of its own, wages and other
+## income (`earned`), repayments, fees and purchases (`paid`), and bills at the stage's
+## stake. The invariant then reads start + loans + won + earned - spent - paid.
 
 const START_CASH := 200
 const LOAN := 200
@@ -15,11 +18,15 @@ const BILLS := [5, 10, 20, 50, 100]
 const BILL_TIME := 2.05          ## seconds from click to credit
 const BILL_SOUND_AT := 0.16      ## share of the feed when the bill sound starts
 
+var start_cash := START_CASH
+var bills: Array = BILLS     ## what the bill slot takes (a stage scales them with its stake)
 var cash := START_CASH
 var credit := 0
 var loans := 0
 var spent := 0
 var won := 0
+var earned := 0      ## wages and other income that is not a prize
+var paid := 0        ## repayments, fees, purchases: cash spent on anything but tickets
 var opened := 0      ## tickets opened
 var wins := 0        ## winning tickets opened
 var bill := 0        ## value of the bill being fed, 0 when none
@@ -32,11 +39,11 @@ func net() -> int:
 
 
 func balanced() -> bool:
-	return cash + credit + bill == START_CASH + loans + won - spent
+	return cash + credit + bill == start_cash + loans + won + earned - spent - paid
 
 
 func can_insert(value: int) -> bool:
-	return bill == 0 and BILLS.has(value) and cash >= value
+	return bill == 0 and bills.has(value) and cash >= value
 
 
 ## Starts feeding a bill: the cash leaves now, the credit arrives later.
@@ -85,6 +92,27 @@ func open_ticket(prize: int) -> void:
 		cash += prize
 
 
+## A prize that is not printed on a ticket (the last sale of a box): straight to cash.
+func bonus(prize: int) -> void:
+	won += prize
+	cash += prize
+
+
+## Income that is not a prize: wages.
+func earn(amount: int) -> void:
+	earned += amount
+	cash += amount
+
+
+## Cash spent on anything but tickets. False, changing nothing, if the cash is short.
+func pay(amount: int) -> bool:
+	if amount < 0 or cash < amount:
+		return false
+	cash -= amount
+	paid += amount
+	return true
+
+
 func cash_out() -> int:
 	var amount := credit
 	cash += credit
@@ -106,18 +134,23 @@ func loan_left() -> int:
 func take_loan() -> bool:
 	if not loan_available():
 		return false
-	cash += LOAN
-	loans += LOAN
+	add_loan(LOAN)
 	return true
+
+
+## Borrowed money: cash now, never part of NET. Who lends how much is the caller's rule.
+func add_loan(amount: int) -> void:
+	cash += amount
+	loans += amount
 
 
 func to_dict() -> Dictionary:
 	return {"cash": cash, "credit": credit, "loans": loans, "spent": spent, "won": won,
-		"opened": opened, "wins": wins}
+		"opened": opened, "wins": wins, "start_cash": start_cash, "earned": earned, "paid": paid}
 
 
 func from_dict(d: Dictionary) -> void:
-	for k in ["cash", "credit", "loans", "spent", "won", "opened", "wins"]:
+	for k in ["cash", "credit", "loans", "spent", "won", "opened", "wins", "start_cash", "earned", "paid"]:
 		set(k, int(d.get(k, get(k))))
 	bill = 0
 	bill_t = 0.0

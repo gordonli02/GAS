@@ -21,7 +21,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			game.dev.toggle()
 			get_viewport().set_input_as_handled()
 			return
-	if game.menu.visible:
+	if game.menu.visible or game.run_card.visible:
 		return
 	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
 		if e.pressed:
@@ -41,6 +41,8 @@ func _unhandled_input(e: InputEvent) -> void:
 				game.primary()
 			KEY_B:
 				game.toggle_view()
+			KEY_N:
+				game.toggle_change()
 			KEY_1, KEY_2, KEY_3:
 				if game.at_machine and game.camera.cam > 0.9:
 					game.press_machine(e.keycode - KEY_1)

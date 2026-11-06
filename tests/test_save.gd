@@ -8,7 +8,7 @@ const DIR := "user://test_save"
 func _path(name: String) -> String:
 	DirAccess.make_dir_recursive_absolute(DIR)
 	var p := DIR.path_join(name)
-	for suffix in ["", ".tmp", ".bad", ".v2", ".v99"]:
+	for suffix in ["", ".tmp", ".bad", ".v2", ".v3", ".v99"]:
 		if FileAccess.file_exists(p + suffix):
 			DirAccess.remove_absolute(p + suffix)
 	return p
@@ -37,6 +37,28 @@ func test_round_trip_and_overwrite() -> void:
 	eq(r.note, "", "no complaint")
 	var data = JSON.parse_string(FileAccess.get_file_as_string(p))
 	eq(int(data.version), SaveFile.VERSION, "version number written")
+
+
+func test_run_slot_and_version_1() -> void:
+	var p := _path("r.json")
+	var run := {"state": {"seed": "R-1", "layer": 1}, "session": {"economy": {"cash": 7}}}
+	check(SaveFile.write(p, SaveFile.SETTINGS, {"economy": {"cash": 1}}, run), "write with a run")
+	var r := SaveFile.read(p)
+	eq(int(r.session.economy.cash), 1, "free play keeps its own session")
+	eq(str(r.run.state.seed), "R-1", "the run beside it")
+	eq(int(r.run.session.economy.cash), 7, "with its own table and money")
+	# A version 1 file (the demo): free play carries over, there is no run, the mode is free.
+	SaveFile.write_text(p, JSON.stringify({"version": 1, "settings": {"room": "bar"}, "session": {"economy": {"cash": 3}}}))
+	r = SaveFile.read(p)
+	eq(r.note, "", "version 1 reads without complaint")
+	eq(r.settings.room, "bar", "settings kept")
+	eq(r.settings.mode, "free", "opens in free play")
+	eq(int(r.session.economy.cash), 3, "session kept")
+	eq(r.run, {}, "no run")
+	SaveFile.write_text(p, JSON.stringify({"version": 2, "settings": {"mode": "arcade"}, "session": {}, "run": []}))
+	r = SaveFile.read(p)
+	eq(r.settings.mode, "free", "an unknown mode falls back to free play")
+	eq(r.run, {}, "a run that is not an object is dropped")
 
 
 func test_bad_files_start_fresh() -> void:

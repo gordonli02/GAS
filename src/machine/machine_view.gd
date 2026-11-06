@@ -126,12 +126,7 @@ func build(machine_forms: Array) -> void:
 	_box(Vector3(0.5, 0.08, 0.04), _flat(Color("#ffb13b")), Vector3(1.6, 0.56, 1.78), false)
 	_bill = _card(Vector2(0.62, 1.3), _bill_mat, true)
 	_bill.visible = false
-	for v in Economy.BILLS:
-		_bill_tex[v] = await _paint(Vector2(136, 64), [
-			_rect(0, 0, 136, 64, Color("#8fbf8a")),
-			{"k": "stroke", "pts": PackedVector2Array([Vector2(5, 5), Vector2(131, 5), Vector2(131, 59), Vector2(5, 59)]),
-				"closed": true, "width": 3.0, "color": Color("#27553a"), "join": "miter", "dash": null},
-			_text("$%d" % v, Vector2(68, 44), "slab", 34, Color("#17392a"))])
+	await paint_bills(Economy.BILLS)
 	_box(Vector3(4.1, 0.9, 0.06), _flat(Color("#b8751f")), Vector3(0, -0.52, 1.61), false)
 	_box(Vector3(4.5, 0.24, 1.7), chrome, Vector3(0, -0.72, 2.35))
 	_box(Vector3(4.5, 0.34, 0.12), chrome, Vector3(0, -0.7, 3.2))
@@ -190,6 +185,20 @@ func launch_card() -> void:
 			_fly_state[i] = {"life": 0.0, "x": (randf() - 0.5) * 1.1, "spin": (randf() - 0.5) * 3.0}
 			_fly[i].position = Vector3(0, 0.15, 1.7)
 			return
+
+
+## Paints the bills the slot takes (a stage's stake changes their values).
+func paint_bills(values: Array) -> void:
+	for v in values:
+		if _bill_tex.has(v):
+			continue
+		_bill_tex[v] = null
+		var label := "$%d" % v
+		_bill_tex[v] = await _paint(Vector2(136, 64), [
+			_rect(0, 0, 136, 64, Color("#8fbf8a")),
+			{"k": "stroke", "pts": PackedVector2Array([Vector2(5, 5), Vector2(131, 5), Vector2(131, 59), Vector2(5, 59)]),
+				"closed": true, "width": 3.0, "color": Color("#27553a"), "join": "miter", "dash": null},
+			_text(label, Vector2(68, 44), "slab", 34 if label.length() <= 4 else 27, Color("#17392a"))])
 
 
 ## The bill sliding into the slot; t is the feed progress 0..1, value 0 hides it.

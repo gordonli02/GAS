@@ -13,11 +13,12 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 
 - Engine: Godot 4.7.2 (stable), Compatibility renderer.
 - Open `project.godot` in Godot. Main scene: `src/game/game.tscn` (the Diner, Bar or Bingo Hall with table, machine and money).
+  Two modes (menu, MODE): free play, and the story's run (a debt in three layers; `docs/roadmap.md`).
   Esc or the MENU key opens the player menu. In debug builds the backquote key opens the developer panel
   (rooms, a free ticket of any form, box seeds and counts, reset of tickets and money, lamp step, sound bench).
   Dev scenes: `src/table/test_table.tscn` (the core forms in turn, no economy), `src/dev/m1_check.tscn` (fonts, sounds, boxes).
 - Save: one versioned JSON file, `user://save.json` (Windows: `%APPDATA%\Godot\app_userdata\Last Sale\save.json`),
-  with the settings and the session in progress. Delete it to start over.
+  with the settings, the free-play session and the run in progress. Delete it to start over.
 - Tests (headless, no addons):
 
   ```
@@ -46,6 +47,10 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
   Big Catch front: `godot --path . -s res://tools/make_icon.gd`, then export again.
 - `tools/drive_table.tscn` plays one ticket of each form with synthetic input and saves screenshots:
   `godot --path . --resolution 1920x1080 res://tools/drive_table.tscn -- <output dir>`
+- `tools/drive_run.tscn` plays the story mode the same way (cards, a day at the machine, NEW BOX, LOAN,
+  last sale, LEAVE, work, paying into the next layer, reload, deadline, a run cleared by work alone).
+- `tools/sim_runs.tscn` plays bots through whole runs and prints clear rates, for the numbers in
+  `src/core/run_config.gd`: `godot --headless --path . res://tools/sim_runs.tscn -- --runs=200`
 - `tools/drive_game.tscn` plays the full loop (bills, PLAY ALL, camera swing, leaving rules, cash out, loan,
   menu, language, developer panel, save and reload) and checks the money identity every frame; its save file
   goes under the output dir. `tools/preview_pile.tscn` renders the discard pile at several sizes.
@@ -62,12 +67,14 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 
 ### Layout
 
-- `src/core/`: plain logic with no scene access (random numbers, box generator, economy, machine, tray, navigation rules)
+- `src/core/`: plain logic with no scene access (random numbers, box generator, economy, machine, tray, navigation rules,
+  the run: `run_state.gd`, `run_config.gd`, `run_sim.gd`)
 - `src/data/`: data pack loading and validation
 - `src/rooms/`: the three rooms, built from code with a port of the web build's low-poly kit (`room_kit.gd`)
 - `src/platform/`: thin platform layer (`Platform` autoload); offline backend only for now
 - `src/save/`: the save file (`SaveFile`, `Save` autoload); `src/core/session_state.gd` says what a session keeps
-- `src/ui/`: HUD, menu, LCD look, language (`Lang` autoload); `src/dev/`: developer panel and dev scenes
+- `src/ui/`: HUD, menu, the run's card, LCD look, language (`Lang` autoload); `src/dev/`: developer panel and dev scenes
+- `docs/roadmap.md`: what comes after the demo (G's decisions, in Chinese)
 - `locale/ui.csv`: player text, English and Chinese (keys are the English text)
 - `docs/decisions.md`: where the code deliberately differs from MIGRATION.md or the web build
 - `packs/core/`: built-in ticket forms, in the same format Workshop packs will use (see `packs/README.md`)

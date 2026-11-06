@@ -26,6 +26,7 @@ static func capture(economy: Economy, machine: MachineLogic, tray: TicketTray, h
 ## Loads a captured session into `economy`, `machine` and `tray`. find_form(uid) gives
 ## a FormDef or null. Returns false, changing nothing, if the money does not add up.
 ## Tickets of forms no longer installed are left out (they stay counted as spent).
+## Boxes are rebuilt with the machine's own box model.
 static func restore(d: Dictionary, economy: Economy, machine: MachineLogic, tray: TicketTray, find_form: Callable) -> bool:
 	var money = d.get("economy")
 	if typeof(money) != TYPE_DICTIONARY:
@@ -39,7 +40,7 @@ static func restore(d: Dictionary, economy: Economy, machine: MachineLogic, tray
 		var key := uid + "|" + seed_text
 		if not cache.has(key):
 			var f: FormDef = find_form.call(uid)
-			cache[key] = BoxGenerator.build(f, seed_text) if f != null and seed_text != "" else null
+			cache[key] = BoxGenerator.build(f, seed_text, machine.model) if f != null and seed_text != "" else null
 		return cache[key]
 	var m = d.get("machine", {})
 	if typeof(m) == TYPE_DICTIONARY and typeof(m.get("boxes")) == TYPE_ARRAY:

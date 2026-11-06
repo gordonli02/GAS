@@ -4,7 +4,7 @@ extends "res://tests/test_case.gd"
 
 const CSV := "res://locale/ui.csv"
 ## Player text set from tables rather than a literal call.
-const EXTRA_KEYS := ["DINER", "BAR", "BINGO", "MUTED", "SOUND", "HELD", "OPENED", "NET"]
+const EXTRA_KEYS := ["DINER", "BAR", "BINGO", "MUTED", "SOUND", "HELD", "OPENED", "NET", "STORY", "SURE?"]
 const PATTERNS := [
 	"\\btr\\(\"([^\"]+)\"",
 	"\\bset_status\\(\"([^\"]+)\"",

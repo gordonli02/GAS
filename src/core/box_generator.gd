@@ -8,7 +8,9 @@ const LETTERS := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 ## Seed string as used by the web build: "<seed>|<form id>".
-static func build(form: FormDef, seed_text: String, model: BoxModel = null) -> TicketBox:
+## prizes_only: skip what is printed on each ticket (serial, digits, marks); the box,
+## its counts and the order of the prizes are the same. For simulations.
+static func build(form: FormDef, seed_text: String, model: BoxModel = null, prizes_only := false) -> TicketBox:
 	if model == null:
 		model = BoxModel.standard()
 	var r := SeededRng.new(seed_text + "|" + form.id)
@@ -25,6 +27,15 @@ static func build(form: FormDef, seed_text: String, model: BoxModel = null) -> T
 	while slots.size() < box.size:
 		slots.append(-1)
 	r.shuffle(slots)
+
+	if prizes_only:
+		var plain: Array = []
+		plain.resize(box.size)
+		for i in box.size:
+			var tier: int = slots[i]
+			plain[i] = {"no": i + 1, "tier": tier, "prize": 0 if tier < 0 else int(form.tiers[tier].prize)}
+		box.tickets = plain
+		return box
 
 	var used := {}
 	var tickets: Array = []

@@ -150,3 +150,50 @@ Newest last. "G" is the project owner.
   looped only the first 0.20 s of `dispense_loop_fast.wav` (0.98 s), because the engine's sounds
   are imported as QOA and the loop end was computed as if the data were 16-bit PCM
   (`data.size() / 2`). The loop end now comes from the stream's length.
+
+## Milestone 8: the run (story mode)
+The design is in `docs/roadmap.md` (G's decisions, in Chinese); this is how it landed in code.
+- **Two modes, two save slots.** Free play is the demo, unchanged (web-exact boxes, the flat house
+  loan). The run has its own table, money, boxes and pile. The save is version 2: `session` (free
+  play) and `run` (`{state, session, day}`); a version 1 save carries over as free play. The menu's
+  MODE keys switch; NEW RUN asks once (SURE?) before it throws a run away.
+- **A run is three layers of debt** (`RunState`, numbers in `RunConfig`): each layer has its days,
+  its debt, its stake, its wages and its house line. A day is the machine or a shift of work;
+  the debt is paid in one go, any time, and the next layer starts at once on a new day. Leaving on
+  the last day pays it or ends the run.
+- **Working every day and spending nothing clears the run to the dollar** (G). The starting cash
+  counts toward the first layer, so the last dollar of the last wage pays the last debt.
+  `RunConfig.problems()` and `test_run` check it; one day off work, one dollar spent or one loan
+  breaks it.
+- **The wage follows the shifts worked in the layer, not in the run.** The roadmap first said "in
+  the run"; that left a player who gambled through layer one with layer-one wages at layer three's
+  stake, where a shift bought six tickets. The curve is not shown: the card shows today's wage only,
+  and at that wage the layer's days never reach the debt.
+- **The stage's numbers belong to the layer, not the scene.** A scene bought between runs may
+  replace a layer's scene later (roadmap), so the scene is the look and `RunState.scenes` says
+  which room each layer uses. For now: the player's table, then the other two rooms.
+- **A stake multiplies price, prizes and bills** (`FormDef.scaled`): layer two sells the same forms
+  at $5 with a $2,500 top prize and takes $25 to $500 bills. Same form id, so a seed gives the same
+  box at every stake; painted art is cached per stake (`art_key`).
+- **LOAN in the run**: the layer's line (a base that rises each layer, plus `loan_bonus` for perks
+  to come), one step per press, 25% interest added once, all of it on top of what the layer asks.
+  It starts clean in the next layer.
+- **NEW BOX** (bill plate, or N) arms like PLAY ALL: the next column press changes that column's
+  box for the fee, from cash. Tickets already bought keep their box.
+- **Last sale**: the buyer of a box's last ticket gets the stage's prize at once, counted as won.
+  Run only; free play stays as the web build.
+- **LEAVE asks first, then throws unopened tickets away** (G, M8 review; at first tickets still to
+  open blocked it, which meant opening a hundred tickets to end a day). The LEAVE card says how
+  many would go; NEXT DAY or PAY on it confirms. They stay paid for and are never opened, whatever
+  they held; an opened ticket in hand goes on the pile. So no ticket crosses a day or a layer.
+- **Paying is always the player's own press** (G): PAY is a key on the cards and nothing presses
+  it for them. The one exception is the deadline: ending the last day with the money there pays.
+- **The run's card** (`RunCard`) carries the story beats, the day's choice, the shift worked, LEAVE
+  and the settlement; nothing reaches the machine behind it. It has its own MENU key (it covers the
+  HUD's). Story text is a first draft, English and Chinese.
+- **Every number is a placeholder** until the balance pass. `tools/sim_runs` plays bots through
+  whole runs. Without perks (500 runs each): a bot that buys blind clears 3% of runs and reaches
+  the second layer in half of them; one that also uses the whole house line clears 8%.
+- **Run statistics are kept from now on** (`RunState.stats`): tickets, shifts, loans, box changes,
+  last sales, days spared. The settlement shows them; achievements and the money kept between runs
+  (M13) will read them.

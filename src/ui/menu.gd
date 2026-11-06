@@ -1,9 +1,11 @@
 class_name Menu
 extends CanvasLayer
-## Player menu (Esc or the MENU key): table, volume, sound, full screen, language,
-## resume and quit. Same plate and LCD look as the HUD; layout after the web build's
+## Player menu (Esc or the MENU key): mode (free play or the story's run), table,
+## volume, sound, full screen, language, resume and quit. Same plate and LCD look as the HUD; layout after the web build's
 ## menu. Shows state only; the game applies the choices.
 
+signal mode_picked(id: String)   ## "free" / "run"
+signal new_run_pressed           ## give the run up and start another (pressed twice)
 signal room_picked(id: String)
 signal volume_changed(linear: float)
 signal mute_toggled
@@ -12,7 +14,11 @@ signal language_picked(code: String)
 signal quit_pressed
 
 const ROOMS := [["diner", "DINER"], ["bar", "BAR"], ["bingo", "BINGO"]]
+const MODES := [["free", "FREE PLAY"], ["run", "STORY"]]
 
+var _modes := {}
+var _new_run: Button
+var _sure := false
 var _rooms := {}
 var _langs := {}
 var _volume := HSlider.new()
@@ -48,6 +54,18 @@ func _ready() -> void:
 	head.add_child(LcdStyle.label("MENU", 38))
 	head.add_child(LcdStyle.grid_overlay())
 	col.add_child(head)
+
+	col.add_child(_caption("MODE"))
+	var modes := _row(col)
+	for m in MODES:
+		var b := _toggle_key(m[1])
+		b.pressed.connect(func(): mode_picked.emit(m[0]))
+		modes.add_child(b)
+		_modes[m[0]] = b
+	_new_run = LcdStyle.chrome("NEW RUN", 20)
+	_new_run.custom_minimum_size = Vector2(0, 40)
+	_new_run.pressed.connect(_on_new_run)
+	col.add_child(_new_run)
 
 	col.add_child(_caption("TABLE"))
 	var rooms := _row(col)
@@ -105,8 +123,8 @@ func _ready() -> void:
 
 
 ## Opens with the current settings shown.
-func open(settings: Dictionary, room: String, language: String) -> void:
-	show_state(settings, room, language)
+func open(settings: Dictionary, room: String, language: String, mode := "free") -> void:
+	show_state(settings, room, language, mode)
 	visible = true
 
 
@@ -114,9 +132,16 @@ func close() -> void:
 	visible = false
 
 
-func show_state(settings: Dictionary, room: String, language: String) -> void:
+## In the run the table is the layer's, so the table keys only show it.
+func show_state(settings: Dictionary, room: String, language: String, mode := "free") -> void:
+	for id in _modes:
+		_modes[id].set_pressed_no_signal(id == mode)
+	_new_run.visible = mode == "run"
+	_sure = false
+	_new_run.text = "NEW RUN"
 	for id in _rooms:
 		_rooms[id].set_pressed_no_signal(id == room)
+		_rooms[id].disabled = mode == "run" and id != room
 	for code in _langs:
 		_langs[code].set_pressed_no_signal(code == language)
 	_volume.set_value_no_signal(roundf(float(settings.get("master", 0.8)) * 100.0))
@@ -134,6 +159,10 @@ func key(id: String) -> Button:
 		"resume": return _resume
 		"quit": return _quit
 		"volume": return null
+	if id == "new_run":
+		return _new_run
+	if _modes.has(id):
+		return _modes[id]
 	if _rooms.has(id):
 		return _rooms[id]
 	return _langs.get(id)
@@ -141,6 +170,17 @@ func key(id: String) -> Button:
 
 func volume_slider() -> HSlider:
 	return _volume
+
+
+## NEW RUN throws the run in progress away, so it asks once: the second press does it.
+func _on_new_run() -> void:
+	if not _sure:
+		_sure = true
+		_new_run.text = "SURE?"
+		return
+	_sure = false
+	_new_run.text = "NEW RUN"
+	new_run_pressed.emit()
 
 
 func _on_shade_input(e: InputEvent) -> void:

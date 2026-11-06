@@ -5,6 +5,10 @@ extends Node3D
 ## Rules: MIGRATION.md "Money", "Machine", "Table and machine navigation", "Bill window".
 ## Settings and the session are kept through the Save autoload (SessionState says what
 ## is kept); Esc / MENU opens the player menu, backquote the developer panel (debug builds).
+##
+## Two modes, each with its own table, money and save slot: free play (the demo: no
+## goal, the house loan) and the run (story mode: RunState's debt in three layers, a
+## day at the machine or a shift of work, shown on the RunCard).
 
 const SEED := "G-0001"
 const FORM_UIDS := ["core:catch", "core:plate", "core:spur"]
@@ -28,12 +32,17 @@ var hud := Hud.new()
 var notepad := Notepad.new()
 var input := GameInput.new()
 var menu := Menu.new()
+var run_card := RunCard.new()
 var dev: DevPanel
 
 ## Where the save lives ("" = the platform's save folder); tools point it elsewhere.
 var save_path := ""
 var use_save := true
 
+var mode := "free"                 ## "free" play or the "run"
+var run: RunState                  ## the run in progress; null in free play
+var run_seed := ""                 ## tools: the seed of the next new run ("" picks one)
+var base_forms: Array = []         ## the machine's forms as the pack wrote them (stake 1)
 var economy := Economy.new()
 var machine: MachineLogic
 var tray := TicketTray.new()
@@ -46,6 +55,10 @@ var _msg := ""
 var _msg_until := 0.0
 var _ready_done := false
 var _saved_at := 0.0
+var _switching := false             ## a mode or a layer is being set up
+var _leaving := false               ## run: the LEAVE card is up
+var _card_busy := false             ## run: a card key is being carried out
+var _day := {}                      ## run: the ledger when today's play began {spent, won}
 
 
 func _ready() -> void:
@@ -69,6 +82,7 @@ func _ready() -> void:
 	add_child(flecks)
 	add_child(table_tray)
 	pile.painter = painter
+	pile.find_form = _form_for
 	add_child(pile)
 	notepad.painter = painter
 	add_child(notepad)
@@ -80,6 +94,7 @@ func _ready() -> void:
 	if forms.has(null):
 		_show_missing_data()
 		return
+	base_forms = forms
 	machine = MachineLogic.new(forms, SEED)
 	machine_view.painter = painter
 	add_child(machine_view)
@@ -114,15 +129,20 @@ func _ready() -> void:
 	hud.cash_out_pressed.connect(cash_out)
 	hud.loan_pressed.connect(take_loan)
 	hud.menu_pressed.connect(toggle_menu)
+	hud.leave_pressed.connect(leave_day)
+	hud.new_box_pressed.connect(toggle_change)
+	add_child(run_card)
+	run_card.picked.connect(_on_card)
 	add_child(menu)
-	menu.room_picked.connect(set_room)
+	menu.mode_picked.connect(set_mode)
+	menu.new_run_pressed.connect(new_run)
+	menu.room_picked.connect(pick_room)
 	menu.volume_changed.connect(set_master)
 	menu.mute_toggled.connect(toggle_mute)
 	menu.fullscreen_toggled.connect(toggle_fullscreen)
 	menu.language_picked.connect(set_language)
 	menu.quit_pressed.connect(quit_game)
-	if use_save and not Save.session.is_empty():
-		await _restore_session(Save.session)
+	await _enter_mode(str(Save.setting("mode")) if use_save else "free", true)
 	if OS.is_debug_build():
 		dev = DevPanel.new()
 		dev.game = self
@@ -137,9 +157,22 @@ func _ready() -> void:
 
 ## A machine button: 0-2 columns, 3 PLAY ALL. Keys 1-3 and Space press the same buttons.
 func press_machine(i: int) -> void:
+	if run != null and run.today != "play":
+		return
 	Sfx.play("button")
 	machine_view.press_button(i)
 	machine.return_at = 0.0
+	if machine.change_armed:
+		# NEW BOX is armed: a column press changes that column's box; PLAY ALL lets it go.
+		if i == 3:
+			machine.change_armed = false
+		elif run.change_box(economy, machine, i):
+			Sfx.play("toss")
+			say("NEW BOX")
+		else:
+			machine.change_armed = false
+			say("NO CASH")
+		return
 	var r := machine.press_play_all(economy.credit) if i == 3 else machine.press(i, economy.credit)
 	if r == "insert_bill":
 		say("INSERT BILL")
@@ -159,17 +192,27 @@ func cash_out() -> void:
 	Sfx.play("toss")
 
 
+## LOAN: the house's flat line in free play; in the run, the layer's line, which goes
+## on top of what is due with interest.
 func take_loan() -> void:
-	if not economy.take_loan():
+	if not (run.borrow(economy) if run != null else economy.take_loan()):
 		return
 	Sfx.play("toss")
 	hud.set_status("HOUSE LOAN")
 
 
+## Run: the NEW BOX key (or N) arms a box change for the next column press.
+func toggle_change() -> void:
+	if run == null or not at_machine or camera.cam <= 0.9 or machine.busy() or run.today != "play":
+		return
+	Sfx.play("button")
+	machine.press_change()
+
+
 ## Space / Enter.
 func primary() -> void:
 	if at_machine:
-		if economy.credit >= 1:
+		if economy.credit >= machine.min_price():
 			press_machine(3)
 		elif not tray.is_empty():
 			toggle_view()
@@ -227,6 +270,7 @@ func close_machine() -> void:
 	camera.at_machine = false
 	machine.return_at = 0.0
 	machine.armed = false
+	machine.change_armed = false
 
 
 ## A short message on the machine LCD's status line (a translation key).
@@ -274,13 +318,304 @@ func _run_tool() -> bool:
 	return false
 
 
+# --- modes and the run ----------------------------------------------------------------
+
+## Menu: free play or the story's run. Each keeps its own table, money and save slot.
+func set_mode(new_mode: String) -> void:
+	if new_mode == mode or not _ready_done or _switching or not ["free", "run"].has(new_mode):
+		_menu_state()
+		return
+	await _enter_mode(new_mode)
+	_menu_state()
+
+
+## Stores the mode in play (unless this is the start) and sets the other one up from
+## its save slot: a run not found, or one that does not add up, starts fresh.
+func _enter_mode(new_mode: String, first := false) -> void:
+	if not first:
+		_store_session()
+	_switching = true
+	_clear_table()
+	mode = new_mode if new_mode == "run" else "free"
+	Save.set_setting("mode", mode)
+	var saved: Dictionary = {}
+	if mode == "run":
+		var state = Save.run.get("state")
+		run = RunState.from_dict(state, RunConfig.standard()) if typeof(state) == TYPE_DICTIONARY else null
+		if run != null and typeof(Save.run.get("session")) == TYPE_DICTIONARY:
+			saved = Save.run.session
+			var day = Save.run.get("day")
+			_day = day if typeof(day) == TYPE_DICTIONARY else {}
+		if run == null:
+			run = _fresh_run()
+		economy = run.new_economy()
+		machine = run.new_machine(base_forms)
+	else:
+		run = null
+		economy = Economy.new()
+		machine = MachineLogic.new(base_forms, SEED)
+		saved = Save.session
+	if use_save and not saved.is_empty():
+		var restored: bool = await _restore_session(saved)
+		if not restored and run != null:
+			# The run's money does not add up: the run cannot be trusted either.
+			run = _fresh_run()
+			economy = run.new_economy()
+			machine = run.new_machine(base_forms)
+	await _apply_stage()
+	_switching = false
+	open_machine()
+	hud.set_status("READY")
+	_show_run_card()
+
+
+## A new run: the first layer at the player's table, the next two at the other rooms
+## (until the later scenes exist).
+func _fresh_run() -> RunState:
+	var start: String = Save.setting("room")
+	var i := maxi(0, RoomSet.ORDER.find(start))
+	var n := RoomSet.ORDER.size()
+	var scenes := [RoomSet.ORDER[i], RoomSet.ORDER[(i + 1) % n], RoomSet.ORDER[(i + 2) % n]]
+	_day = {}
+	return RunState.start(RunConfig.standard(), run_seed if run_seed != "" else "R-%06d" % (randi() % 1000000), scenes)
+
+
+## Gives the run in progress up and starts another (menu NEW RUN, the settlement card,
+## the developer panel's reset).
+func new_run() -> void:
+	if _switching or not _ready_done:
+		return
+	if run == null:
+		Save.set_run({})
+		await set_mode("run")
+		return
+	_switching = true
+	_clear_table()
+	run = _fresh_run()
+	economy = run.new_economy()
+	machine = run.new_machine(base_forms)
+	await _apply_stage()
+	_switching = false
+	open_machine()
+	hud.set_status("READY")
+	_store_session()
+	_show_run_card()
+	_menu_state()
+
+
+## Empties the table: the ticket in hand, the tray, the pile, anything in the machine.
+func _clear_table() -> void:
+	flow.cancel()
+	current = {}
+	_go_machine = false
+	_leaving = false
+	tray.clear()
+	pile.clear()
+	Sfx.motor(false)
+	machine_view.show_bill(0, 0.0)
+	run_card.hide_card()
+
+
+## The room and the bills of the stage in play: the layer's in the run, the player's
+## table and the pack's stake in free play.
+func _apply_stage() -> void:
+	var room: String = run.scene() if run != null else Save.setting("room")
+	set_room(room if RoomSet.ORDER.has(room) else START_ROOM, run == null)
+	await machine_view.paint_bills(economy.bills)
+
+
+## Run: the LEAVE key puts the LEAVE card up: the day so far, and how many tickets
+## would be thrown away. Nothing is lost until the player confirms there (NEXT DAY or PAY).
+func leave_day() -> void:
+	if run == null or run_card.visible or run.today != "play" or _switching:
+		return
+	Sfx.play("button")
+	machine.queue.clear()   # nothing more is sold while the card is up
+	machine.armed = false
+	machine.change_armed = false
+	_leaving = true
+	_show_run_card()
+
+
+## Run: tickets bought and not opened yet (the tray, and one in hand not revealed).
+func _unopened() -> int:
+	return tray.size() + (0 if _hand_unrevealed().is_empty() else 1)
+
+
+## The tray entry of a ticket in hand that is not revealed yet, or {}.
+func _hand_unrevealed() -> Dictionary:
+	match flow.state:
+		TicketFlow.State.DEAL, TicketFlow.State.FRONT, TicketFlow.State.FLIP, TicketFlow.State.BACK:
+			return current
+		TicketFlow.State.IDLE:
+			if flow.dealing():
+				return current
+	return {}
+
+
+## Run: the player leaves (G: confirmed on the LEAVE card). Tickets not opened are
+## thrown away: paid for, never opened, whatever they held. An opened ticket in hand
+## goes on the pile. A bill being fed lands first, so its money counts.
+func _walk_out() -> void:
+	var n := _unopened()
+	if flow.state == TicketFlow.State.REVEALED:
+		flow.collect()
+	elif flow.state != TicketFlow.State.TOSS:
+		flow.cancel()
+		current = {}
+	_go_machine = false
+	tray.clear()
+	run.stats.discarded += n
+	if economy.bill > 0:
+		economy.step_bill(Economy.BILL_TIME)
+		machine_view.show_bill(0, 0.0)
+	open_machine()
+
+
+## A key on the run's card.
+func _on_card(id: String) -> void:
+	if id == "menu":
+		toggle_menu()
+		return
+	if run == null or _card_busy or _switching:
+		return
+	_card_busy = true
+	Sfx.play("button")
+	match id:
+		"ok":
+			run.story = ""
+		"play":
+			if run.play():
+				_day = {"spent": economy.spent, "won": economy.won}
+		"work":
+			run.work(economy)
+		"loan":
+			take_loan()
+		"back":
+			_leaving = false
+		"pay":
+			var layer := run.layer
+			if _leaving and run.can_pay(economy):
+				_walk_out()
+			if run.pay(economy):
+				Sfx.play_win(50)
+				if run.playing() and run.layer != layer:
+					await _next_layer()
+		"next":
+			var layer := run.layer
+			if _leaving:
+				_walk_out()
+			run.end_day(economy)
+			_leaving = false
+			if run.playing() and run.layer != layer:
+				await _next_layer()
+		"new_run":
+			_card_busy = false
+			await new_run()
+			return
+		"free":
+			_card_busy = false
+			await set_mode("free")
+			Save.set_run({})   # the run was over: free play leaves nothing of it behind
+			return
+	_card_busy = false
+	_store_session()
+	_show_run_card()
+
+
+## The layer was paid: a new venue, a new machine at the new stake, a clean table.
+func _next_layer() -> void:
+	_switching = true
+	_clear_table()
+	machine = run.new_machine(base_forms)
+	await _apply_stage()
+	_switching = false
+	open_machine()
+	hud.set_status("READY")
+
+
+## Shows the card the run calls for, or none while the player is at the machine:
+## a story beat first, then the settlement of a finished run, the day's choice, the
+## shift just worked, or the LEAVE card.
+func _show_run_card() -> void:
+	if run == null:
+		run_card.hide_card()
+		return
+	var due := Hud._money(run.due())
+	var cash := Hud._money(economy.cash + economy.credit)
+	var day_line := tr("LAYER %d · DAY %d OF %d") % [run.layer + 1, run.day, run.days()]
+	var ok := [[{"id": "ok", "text": tr("OK")}]]
+	if run.story == "intro":
+		run_card.show_card(tr("BAD NEWS"), [[tr("STORY INTRO") % [due, run.days()], "story"]], ok)
+		return
+	if run.story == "twist":
+		var text := tr("STORY TWIST 1") if run.layer == 1 else tr("STORY TWIST 2")
+		run_card.show_card(tr("ABOUT THE INTEREST"), [[text % [due, run.days()], "story"]], ok)
+		return
+	if run.story == "ending":
+		run_card.show_card(tr("DEBT CLEARED"), [[tr("STORY ENDING"), "story"]], ok)
+		return
+	if run.story == "failed":
+		run_card.show_card(tr("TIME IS UP"), [[tr("STORY FAILED"), "story"]], ok)
+		return
+	if not run.playing():
+		var s: Dictionary = run.stats
+		run_card.show_card(tr("DEBT CLEARED") if run.status == RunState.CLEARED else tr("RUN OVER"), [
+			[tr("LAYERS PAID %d OF %d") % [s.layers_cleared, run.config.layers.size()], "big"],
+			tr("DAYS %d") % s.days,
+			tr("SHIFTS WORKED %d") % s.shifts,
+			tr("TICKETS BOUGHT %s") % Hud._num(s.tickets),
+			tr("BORROWED %s") % Hud._money(s.borrowed),
+			tr("DAYS SPARED %d") % s.days_spared,
+		], [[{"id": "new_run", "text": tr("NEW RUN")}, {"id": "free", "text": tr("FREE PLAY"), "kind": "chrome"}]])
+		return
+	var money_row := [
+		{"id": "pay", "text": tr("PAY %s") % due, "kind": "chrome", "disabled": not run.can_pay(economy)},
+		{"id": "loan", "text": tr("LOAN %s") % Hud._money(run.loan_step()), "kind": "chrome", "disabled": not run.can_borrow()},
+	]
+	var last := [[tr("LAST DAY: PAY OR IT IS OVER"), "big"]] if run.last_day() else []
+	var line := [[tr("HOUSE LINE %s LEFT") % Hud._money(run.loan_left()), "dim"]]
+	# On the last day there is no next day: the key ends it, paid or over.
+	var next_text := tr("END THE DAY") if run.last_day() else tr("NEXT DAY")
+	if run.today == "":
+		run_card.show_card(day_line, [[tr("DUE %s") % due, "big"], tr("CASH %s") % cash,
+			tr("WAGE TODAY %s") % Hud._money(run.wage())] + last + line,
+			[[{"id": "play", "text": tr("PLAY")}, {"id": "work", "text": tr("WORK")}], money_row])
+	elif run.today == "work":
+		run_card.show_card(tr("SHIFT DONE"), [[tr("WAGE +%s") % Hud._money(run.last_wage()), "big"],
+			tr("CASH %s") % cash, tr("DUE %s") % due, [day_line, "dim"]] + last + line,
+			[[{"id": "next", "text": next_text}], money_row])
+	elif _leaving:
+		var spent: int = economy.spent - int(_day.get("spent", economy.spent))
+		var won: int = economy.won - int(_day.get("won", economy.won))
+		var held := _unopened()
+		var thrown := [[tr("%d UNOPENED TICKETS WILL BE THROWN AWAY") % held, "big"]] if held > 0 else []
+		run_card.show_card(tr("LEAVE FOR TODAY?"), [[day_line, "dim"], tr("SPENT TODAY %s") % Hud._money(spent),
+			tr("WON TODAY %s") % Hud._money(won), tr("CASH %s") % cash, [tr("DUE %s") % due, "big"]] + thrown + last + line,
+			[[{"id": "next", "text": next_text}, {"id": "back", "text": tr("BACK"), "kind": "chrome"}], money_row])
+	else:
+		run_card.hide_card()
+
+
 # --- menu and settings --------------------------------------------------------------
 
 func toggle_menu() -> void:
 	if menu.visible:
 		menu.close()
 	else:
-		menu.open(Save.settings, rooms.id, Lang.current)
+		menu.open(Save.settings, rooms.id, Lang.current, mode)
+
+
+func _menu_state() -> void:
+	if menu.visible:
+		menu.show_state(Save.settings, rooms.id, Lang.current, mode)
+
+
+## The menu's table keys: free play only; in the run the table is the layer's.
+func pick_room(room_id: String) -> void:
+	if run == null:
+		set_room(room_id)
+	_menu_state()
 
 
 func set_master(linear: float) -> void:
@@ -291,19 +626,21 @@ func set_master(linear: float) -> void:
 func toggle_mute() -> void:
 	Save.set_setting("muted", not bool(Save.setting("muted")))
 	Sfx.apply_settings(Save.settings)
-	menu.show_state(Save.settings, rooms.id, Lang.current)
+	_menu_state()
 
 
 func toggle_fullscreen() -> void:
 	Save.set_setting("fullscreen", not bool(Save.setting("fullscreen")))
 	_apply_window()
-	menu.show_state(Save.settings, rooms.id, Lang.current)
+	_menu_state()
 
 
 func set_language(code: String) -> void:
 	Save.set_setting("language", code)
 	Lang.set_language(code)
-	menu.show_state(Save.settings, rooms.id, Lang.current)
+	_menu_state()
+	if run_card.visible:
+		_show_run_card()
 
 
 func quit_game() -> void:
@@ -340,10 +677,20 @@ func capture_session() -> Dictionary:
 	return SessionState.capture(economy, machine, tray, hand, pile.to_dict(landing))
 
 
+## Puts the table and the money in the save slot of the mode in play.
+func _store_session() -> void:
+	if not use_save or _switching:
+		return
+	if run != null:
+		Save.set_run({"state": run.to_dict(), "session": capture_session(), "day": _day})
+	else:
+		Save.set_session(capture_session())
+
+
 func save_now() -> void:
 	if not use_save or not _ready_done:
 		return
-	Save.set_session(capture_session())
+	_store_session()
 	Save.flush()
 
 
@@ -353,17 +700,28 @@ func _notification(what: int) -> void:
 	elif what == NOTIFICATION_PREDELETE:
 		# Parts never added (run-tool, missing data). Its own parts only.
 		Orphans.free_members(self, ["painter", "rooms", "machine_light", "camera", "view", "flecks", "flow",
-			"table_tray", "pile", "machine_view", "hud", "notepad", "input", "menu"])
+			"table_tray", "pile", "machine_view", "hud", "notepad", "input", "menu", "run_card"])
 
 
 
-func _restore_session(d: Dictionary) -> void:
-	if not SessionState.restore(d, economy, machine, tray, Packs.form):
+## False if the saved money does not add up (nothing is restored then).
+func _restore_session(d: Dictionary) -> bool:
+	if not SessionState.restore(d, economy, machine, tray, _form_for):
 		push_warning("Save: the saved session does not add up; starting a new one")
-		return
+		return false
 	var p = d.get("pile", {})
 	if typeof(p) == TYPE_DICTIONARY:
 		await pile.from_dict(p)
+	return true
+
+
+## A form of the machine in play (at the stage's stake) by its id.
+func _form_for(uid: String) -> FormDef:
+	if machine != null:
+		for f in machine.forms:
+			if f.uid() == uid:
+				return f
+	return null
 
 
 # --- developer panel --------------------------------------------------------------
@@ -394,12 +752,15 @@ func dev_free_ticket(i: int) -> void:
 
 ## Replaces column `i`'s box with a new one from `seed_text`, fully loaded.
 func dev_new_box(i: int, seed_text: String) -> void:
-	machine.boxes[i] = BoxGenerator.build(machine.forms[i], seed_text)
+	machine.boxes[i] = BoxGenerator.build(machine.forms[i], seed_text, machine.model)
 	machine.loaded[i] = machine.boxes[i].size
 
 
 ## Clears the table and the money: tray, pile, hand, ledger. The boxes stay as they are.
 func dev_reset() -> void:
+	if run != null:
+		new_run()   # in the run, the money belongs to the run: start it over
+		return
 	flow.cancel()
 	current = {}
 	_go_machine = false
@@ -514,6 +875,14 @@ func _process(dt: float) -> void:
 	Sfx.motor(m.motor)
 	for s in m.sold:
 		machine_view.launch_card()
+	if run != null:
+		run.count_sales(m.sold.size(), m.last_sale.size())
+	if not m.last_sale.is_empty():
+		# The last ticket of a box: its prize is already in the cash.
+		Sfx.play_win(machine.last_sale)
+		hud.set_status("LAST SALE $%d", [machine.last_sale])
+		hud.flash_win()
+		say("LAST SALE")
 	if m.stopped:
 		Sfx.play("dispense_stop")
 	if at_machine and machine.return_at > 0.0 and _time > machine.return_at and not tray.is_empty():
@@ -526,7 +895,7 @@ func _process(dt: float) -> void:
 		_refresh_ui()
 	if use_save and _time - _saved_at > AUTOSAVE:
 		_saved_at = _time
-		Save.set_session(capture_session())
+		_store_session()
 	_place_bill_window()
 
 
@@ -543,8 +912,9 @@ func _refresh_ui() -> void:
 	])
 	var sub := tr("READING BILL") if economy.bill > 0 \
 		else (tr("PLAYALL") if sin(_time * 7.0) > -0.4 else "") if machine.armed \
+		else (tr("NEW BOX?") if sin(_time * 7.0) > -0.4 else "") if machine.change_armed \
 		else tr(_msg) if _time < _msg_until \
-		else tr("SELECT A TICKET") if economy.credit >= 1 else tr("INSERT BILL")
+		else tr("SELECT A TICKET") if economy.credit >= machine.min_price() else tr("INSERT BILL")
 	machine_view.set_lcd("$ %7.2f %s" % [economy.credit, tr("CREDIT")], sub)
 	var shares := []
 	for i in machine.boxes.size():
@@ -559,7 +929,19 @@ func _refresh_ui() -> void:
 		card = Vector2(s[0], s[1])
 	table_tray.set_stack(tray.size(), art, card)
 	machine_view.set_tray(tray.size(), art, card)
-	hud.set_bill_window(at_machine and camera.cam > 0.97, economy, machine.busy())
+	var loan := {"step": Economy.LOAN, "left": economy.loan_left(), "ok": economy.loan_available()}
+	var change := {}
+	if run != null:
+		loan = {"step": run.loan_step(), "left": run.loan_left(), "ok": run.can_borrow()}
+		change = {"fee": run.change_fee(), "armed": machine.change_armed,
+			"ok": not machine.busy() and economy.cash >= run.change_fee()}
+		if run.playing():
+			hud.set_run(tr("DUE %s · DAY %d/%d") % [Hud._money(run.due()), run.day, run.days()], run.today == "play")
+		else:
+			hud.set_run(tr("DEBT CLEARED") if run.status == RunState.CLEARED else tr("RUN OVER"))
+	else:
+		hud.set_run("")
+	hud.set_bill_window(at_machine and camera.cam > 0.97, economy, machine.busy(), loan, change)
 
 
 func _place_bill_window() -> void:
@@ -573,12 +955,13 @@ func _place_bill_window() -> void:
 
 # --- scene ------------------------------------------------------------------------
 
-## Shows a room and stands the machine where that room puts it.
-func set_room(room_id: String) -> void:
+## Shows a room and stands the machine where that room puts it. `remember`: keep it as
+## the player's table (free play); the run's layers set their own without that.
+func set_room(room_id: String, remember := true) -> void:
 	rooms.set_room(room_id)
-	Save.set_setting("room", room_id)
-	if menu.visible:
-		menu.show_state(Save.settings, room_id, Lang.current)
+	if remember:
+		Save.set_setting("room", room_id)
+	_menu_state()
 	var pos := rooms.machine_pos()
 	machine_view.position = pos
 	machine_view.rotation.y = rooms.machine_yaw()

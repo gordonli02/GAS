@@ -1,19 +1,23 @@
 class_name SaveFile
 extends RefCounted
-## The one save file: settings and the session in progress, with a version number.
+## The one save file: settings, the free-play session and the run in progress, with a
+## version number.
 ## Pure file logic (no scene access) so tests can run it on a scratch path.
 ##
-## File: {"version": VERSION, "settings": {...}, "session": {...}}. Older versions are
+## File: {"version": VERSION, "settings": {...}, "session": {...}, "run": {...}}.
+## "session" is free play (SessionState); "run" is the story mode's run:
+## {"state": RunState.to_dict(), "session": its own SessionState}. Older versions are
 ## migrated step by step on load. A file that cannot be read, or that comes from a
 ## newer build, is moved aside (".bad" / ".v<n>") and the game starts from defaults.
 ## Writes go to "<path>.tmp" first and then replace the file, so a crash mid-write
 ## leaves the previous save intact.
 
-const VERSION := 1
+const VERSION := 2    ## 2: the run (story mode) beside the free-play session
 
 ## Defaults for every setting. Unknown keys in a file are dropped; missing ones filled.
 const SETTINGS := {
 	"room": "diner",
+	"mode": "free",          ## "free" play or the "run" (story mode): what the game opens in
 	"master": 0.8,           ## master volume 0..1
 	"muted": false,
 	"fullscreen": false,
@@ -23,9 +27,9 @@ const SETTINGS := {
 }
 
 
-## Reads a save. Returns {settings, session, note}; note says what went wrong, if anything.
+## Reads a save. Returns {settings, session, run, note}; note says what went wrong, if anything.
 static func read(path: String) -> Dictionary:
-	var out := {"settings": SETTINGS.duplicate(true), "session": {}, "note": ""}
+	var out := {"settings": SETTINGS.duplicate(true), "session": {}, "run": {}, "note": ""}
 	if not FileAccess.file_exists(path):
 		return out
 	var json := JSON.new()
@@ -43,16 +47,18 @@ static func read(path: String) -> Dictionary:
 	out.settings = clean_settings(data.get("settings", {}))
 	var session = data.get("session", {})
 	out.session = session if typeof(session) == TYPE_DICTIONARY else {}
+	var run = data.get("run", {})
+	out.run = run if typeof(run) == TYPE_DICTIONARY else {}
 	return out
 
 
-## Writes settings and session. Returns true on success.
-static func write(path: String, settings: Dictionary, session: Dictionary) -> bool:
-	return write_text(path, encode(settings, session))
+## Writes settings, the free-play session and the run. Returns true on success.
+static func write(path: String, settings: Dictionary, session: Dictionary, run := {}) -> bool:
+	return write_text(path, encode(settings, session, run))
 
 
-static func encode(settings: Dictionary, session: Dictionary) -> String:
-	return JSON.stringify({"version": VERSION, "settings": settings, "session": session}, "\t", false)
+static func encode(settings: Dictionary, session: Dictionary, run := {}) -> String:
+	return JSON.stringify({"version": VERSION, "settings": settings, "session": session, "run": run}, "\t", false)
 
 
 static func write_text(path: String, text: String) -> bool:
@@ -73,8 +79,8 @@ static func migrate(data: Dictionary) -> Dictionary:
 	var v := int(data.get("version", VERSION))
 	while v < VERSION:
 		match v:
-			_:
-				pass   # no older versions yet
+			1:
+				data["run"] = {}   # version 1 had free play only
 		v += 1
 	data.version = VERSION
 	return data
@@ -97,6 +103,8 @@ static func clean_settings(s) -> Dictionary:
 		if typeof(got) == want:
 			out[k] = got
 	out.master = clampf(out.master, 0.0, 1.0)
+	if not ["free", "run"].has(out.mode):
+		out.mode = "free"
 	return out
 
 

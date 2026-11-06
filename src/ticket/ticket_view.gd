@@ -74,15 +74,15 @@ func use_form(f: FormDef) -> void:
 	_front.rotation = Vector3(0, PI, 0)
 	_inside.position = Vector3(0, 0, THICKNESS / 2.0 + 0.0004)
 
-	if not _covers.has(f.uid()):
+	if not _covers.has(f.art_key()):
 		var list: Array[Texture2D] = []
 		for i in f.layout.flaps.size():
 			var c := TicketArt.cover(f, i)
 			list.append(await painter.paint(c.canvas, c.cmds))
-		_covers[f.uid()] = list
-	if f.layout.band != null and not _band_tex.has(f.uid()):
+		_covers[f.art_key()] = list
+	if f.layout.band != null and not _band_tex.has(f.art_key()):
 		var b := TicketArt.band(f)
-		_band_tex[f.uid()] = await painter.paint(b.canvas, b.cmds)
+		_band_tex[f.art_key()] = await painter.paint(b.canvas, b.cmds)
 	_build_flaps()
 	_build_band()
 	reset()
@@ -297,7 +297,7 @@ func _build_flaps() -> void:
 			var cp := FlapLayout.to_canvas(xf * Vector2(x, y), canvas, card)
 			return Vector2((cp.x - r.position.x) / r.size.x, (cp.y - r.position.y) / r.size.y)
 		var seg_y := clampi(roundi(14.0 * fr.h / 1.9), 4, 14)
-		mesh.setup(sim, _covers[form.uid()][i], uv_of, 26, seg_y)
+		mesh.setup(sim, _covers[form.art_key()][i], uv_of, 26, seg_y)
 		sims.append(sim)
 		flaps.append(mesh)
 
@@ -313,7 +313,7 @@ func _build_band() -> void:
 	var h := float(form.layout.band.height)
 	var w := size.x + 0.03
 	var d := THICKNESS + 0.03
-	var tex: Texture2D = _band_tex[form.uid()]
+	var tex: Texture2D = _band_tex[form.art_key()]
 	for i in 2:
 		var side := -1.0 if i == 0 else 1.0
 		var pivot := Node3D.new()
