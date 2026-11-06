@@ -342,3 +342,23 @@ func test_invariant_random_run() -> void:
 				s, e.cash, e.credit, e.bill, e.start_cash, e.loans, e.won, e.earned, e.spent, e.paid])
 			return
 	note("random runs: %d steps, %d runs" % [steps, runs])
+
+
+## A layer can name what its machine sells, column by column; without a list it sells
+## every form (M8.6).
+func test_layer_picks_its_columns() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var r := _run()
+	eq(r.stage_forms(pack.forms).map(func(f): return f.uid()), pack.forms.map(func(f): return f.uid()), "no list: every form")
+	var d: Dictionary = RunConfig.STANDARD.duplicate(true)
+	d.layers[0]["forms"] = ["core:spur", "core:nugget", "core:gone", "core:catch"]
+	d.layers[1]["forms"] = ["core:gone"]
+	var picky := RunState.start(RunConfig.from_dict(d), "T-2", ["diner", "bar", "bingo"])
+	var m := picky.new_machine(pack.forms)
+	eq(m.forms.map(func(f): return f.id), ["spur", "nugget", "catch"], "the listed forms, in column order; one not installed is left out")
+	eq(m.boxes.size(), 3, "a box per column")
+	picky.layer = 1
+	eq(picky.stage_forms(pack.forms).size(), pack.forms.size(), "a list with nothing installed: every form")
+	eq(picky.stage_forms(pack.forms)[0].price, 5, "at the layer's stake")

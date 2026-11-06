@@ -11,7 +11,10 @@ extends Node3D
 ## day at the machine or a shift of work, shown on the RunCard).
 
 const SEED := "G-0001"
-const FORM_UIDS := ["core:catch", "core:plate", "core:spur"]
+## The machine's columns, left to right (the first half stands left of the console).
+const FORM_UIDS := ["core:catch", "core:plate", "core:spur", "core:order",
+	"core:kabawk", "core:flock", "core:nugget", "core:peckeye"]
+const INFO_TIME := 2.5           ## how long the LCD names a column pressed by key
 const START_ROOM := "diner"
 const MACHINE_LIGHT_ENERGY := 0.8 / 6.5
 const UI_TICK := 0.09
@@ -46,20 +49,29 @@ var dev: DevPanel
 var save_path := ""
 var use_save := true
 
+## What the machine sells, a column each; tools set another list before the game is added.
+var form_uids: Array = FORM_UIDS
 var mode := "free"                 ## "free" play or the "run"
 var run: RunState                  ## the run in progress; null in free play
 var run_seed := ""                 ## tools: the seed of the next new run ("" picks one)
-var base_forms: Array = []         ## the machine's forms as the pack wrote them (stake 1)
+var base_forms: Array = []         ## every form the game sells, as the pack wrote them (stake 1)
+## The machine's columns in the room in play: indexes into machine.forms. A room may
+## sell fewer forms than the game has (RoomSet "forms"); free play keeps every form's
+## box all the same, so a box goes on where it was when the player comes back.
+var columns: Array = []
 var economy := Economy.new()
 var machine: MachineLogic
 var tray := TicketTray.new()
 var at_machine := true
+var hover_column := -1             ## the machine column under the pointer, or -1 (GameInput)
 var current: Dictionary = {}       ## tray entry of the ticket in hand
 var _go_machine := false            ## after this toss, go to the machine instead of dealing
 var _time := 0.0
 var _ui_at := 0.0
 var _msg := ""
 var _msg_until := 0.0
+var _info_column := -1              ## the column pressed last: the LCD names it for a while
+var _info_until := 0.0
 var _ready_done := false
 var _saved_at := 0.0
 var _switching := false             ## a mode or a layer is being set up
@@ -102,7 +114,7 @@ func _ready() -> void:
 	add_child(hud)
 
 	var forms: Array = []
-	for uid in FORM_UIDS:
+	for uid in form_uids:
 		forms.append(Packs.form(uid))
 	if forms.has(null):
 		_show_missing_data()
@@ -110,8 +122,7 @@ func _ready() -> void:
 	base_forms = forms
 	machine = MachineLogic.new(forms, SEED)
 	machine_view.painter = painter
-	add_child(machine_view)
-	await machine_view.build(forms)
+	add_child(machine_view)   # built by _apply_stage, for the forms and stake of the stage in play
 	machine_light.light_color = Color("#fff0e0")
 	# Web build: PointLight(0xfff0e0, .8, 22, 1.2) with its own gentle falloff. Godot's default
 	# 1/d falloff blew up into a hot spot on the diner booth, which this light stands right
@@ -121,8 +132,6 @@ func _ready() -> void:
 	machine_light.omni_range = 22.0
 	machine_light.omni_attenuation = 0.0
 	add_child(machine_light)
-	var room: String = Save.setting("room")
-	set_room(room if RoomSet.ORDER.has(room) else START_ROOM)
 	camera.at_machine = true
 	camera.cam = 1.0
 
@@ -171,27 +180,37 @@ func _ready() -> void:
 
 # --- actions --------------------------------------------------------------------
 
-## A machine button: 0-2 columns, 3 PLAY ALL. Keys 1-3 and Space press the same buttons.
+## A machine button: a column, or PLAY ALL (the index after the last column). The number
+## keys and Space press the same buttons.
 func press_machine(i: int) -> void:
-	if run != null and run.today != "play":
+	if (run != null and run.today != "play") or i < 0 or i > columns.size():
 		return
+	var play_all := i == columns.size()
 	Sfx.play("button")
 	machine_view.press_button(i)
 	machine.return_at = 0.0
+	if not play_all:
+		_info_column = i
+		_info_until = _time + INFO_TIME
 	if machine.change_armed:
 		# NEW BOX is armed: a column press changes that column's box; PLAY ALL lets it go.
-		if i == 3:
+		if play_all:
 			machine.change_armed = false
-		elif run.change_box(economy, machine, i):
+		elif run.change_box(economy, machine, columns[i]):
 			Sfx.play("toss")
 			say("NEW BOX")
 		else:
 			machine.change_armed = false
 			say("NO CASH")
 		return
-	var r := machine.press_play_all(economy.credit) if i == 3 else machine.press(i, economy.credit)
+	var r := machine.press_play_all(economy.credit) if play_all else machine.press(columns[i], economy.credit)
 	if r == "insert_bill":
 		say("INSERT BILL")
+
+
+## The red PLAY ALL button.
+func press_play_all() -> void:
+	press_machine(columns.size())
 
 
 func insert_bill(value: int) -> void:
@@ -229,7 +248,7 @@ func toggle_change() -> void:
 func primary() -> void:
 	if at_machine:
 		if economy.credit >= machine.min_price():
-			press_machine(3)
+			press_play_all()
 		elif not tray.is_empty():
 			toggle_view()
 		else:
@@ -365,7 +384,7 @@ func _enter_mode(new_mode: String, first := false) -> void:
 		if run == null:
 			run = _fresh_run()
 		economy = run.new_economy()
-		machine = run.new_machine(base_forms)
+		machine = _run_machine()
 	else:
 		run = null
 		economy = Economy.new()
@@ -377,7 +396,7 @@ func _enter_mode(new_mode: String, first := false) -> void:
 			# The run's money does not add up: the run cannot be trusted either.
 			run = _fresh_run()
 			economy = run.new_economy()
-			machine = run.new_machine(base_forms)
+			machine = _run_machine()
 	await _apply_stage()
 	_switching = false
 	open_machine()
@@ -409,7 +428,7 @@ func new_run() -> void:
 	_clear_table()
 	run = _fresh_run()
 	economy = run.new_economy()
-	machine = run.new_machine(base_forms)
+	machine = _run_machine()
 	await _apply_stage()
 	_switching = false
 	open_machine()
@@ -438,11 +457,35 @@ func _clear_table() -> void:
 ## table and the pack's stake in free play.
 func _apply_stage() -> void:
 	var room: String = run.scene() if run != null else Save.setting("room")
-	set_room(room if RoomSet.ORDER.has(room) else START_ROOM, run == null)
-	await machine_view.paint_bills(economy.bills)
-	# The fronts of what this machine sells, painted before the first ticket flies out.
+	await set_room(room if RoomSet.ORDER.has(room) else START_ROOM, run == null)
+	# The fronts of every form, painted before the first ticket flies out.
 	for f in machine.forms:
 		await pile.art(f)
+	await machine_view.paint_bills(economy.bills)
+
+
+## The forms a room's machine sells (RoomSet "forms"), out of every form the game has.
+func _room_forms(room_id: String) -> Array:
+	var wanted := RoomSet.machine_forms(room_id)
+	var out := []
+	for uid in wanted:
+		for f: FormDef in base_forms:
+			if f.uid() == str(uid):
+				out.append(f)
+	return out if not out.is_empty() else base_forms
+
+
+## The run's machine for the layer in play: what its scene's machine sells, at its stake.
+func _run_machine() -> MachineLogic:
+	return run.new_machine(_room_forms(run.scene()))
+
+
+## The forms on the machine's columns, left to right.
+func column_forms() -> Array:
+	var out := []
+	for c in columns:
+		out.append(machine.forms[c])
+	return out
 
 
 ## Run: the LEAVE key puts the LEAVE card up: the day so far, and how many tickets
@@ -553,7 +596,7 @@ func _on_card(id: String) -> void:
 func _next_layer() -> void:
 	_switching = true
 	_clear_table()
-	machine = run.new_machine(base_forms)
+	machine = _run_machine()
 	await _apply_stage()
 	_switching = false
 	open_machine()
@@ -939,7 +982,7 @@ func _process(dt: float) -> void:
 	for s in m.sold:
 		var sold: FormDef = machine.forms[s.form]
 		var sold_card: Array = sold.layout.card.size
-		machine_view.launch_card(pile.cached_art(sold), Vector2(sold_card[0], sold_card[1]))
+		machine_view.launch_card(pile.cached_art(sold), Vector2(sold_card[0], sold_card[1]), maxi(0, columns.find(s.form)))
 	if run != null:
 		run.count_sales(m.sold.size(), m.last_sale.size())
 	if not m.last_sale.is_empty():
@@ -980,9 +1023,15 @@ func _refresh_ui() -> void:
 		else (tr("NEW BOX?") if sin(_time * 7.0) > -0.4 else "") if machine.change_armed \
 		else tr(_msg) if _time < _msg_until \
 		else tr("SELECT A TICKET") if economy.credit >= machine.min_price() else tr("INSERT BILL")
-	machine_view.set_lcd("$ %7.2f %s" % [economy.credit, tr("CREDIT")], sub)
+	# The third line names a column: the one under the pointer, or one just pressed.
+	var named := hover_column if hover_column >= 0 else _info_column if _time < _info_until else -1
+	var info := ""
+	if named >= 0 and named < columns.size():
+		var f: FormDef = machine.forms[columns[named]]
+		info = "%d %s $%d" % [named + 1, f.name.to_upper(), f.price]
+	machine_view.set_lcd("$ %7.2f %s" % [economy.credit, tr("CREDIT")], sub, info)
 	var shares := []
-	for i in machine.boxes.size():
+	for i in columns:
 		shares.append(float(machine.stock_left(i)) / machine.boxes[i].size)
 	machine_view.set_stock(shares)
 	var next := tray.peek()
@@ -993,13 +1042,7 @@ func _refresh_ui() -> void:
 		var s: Array = next.form.layout.card.size
 		card = Vector2(s[0], s[1])
 	table_tray.set_stack(tray.size(), art, card)
-	# The machine's tray shows the ticket that came out last, lying on top.
-	var newest := tray.newest()
-	if not newest.is_empty():
-		art = pile.cached_art(newest.form)
-		var s: Array = newest.form.layout.card.size
-		card = Vector2(s[0], s[1])
-	machine_view.set_tray(tray.size(), art, card)
+	machine_view.set_trays(_machine_trays())
 	var loan := {"step": Economy.LOAN, "left": economy.loan_left(), "ok": economy.loan_available()}
 	var change := {}
 	if run != null:
@@ -1015,6 +1058,22 @@ func _refresh_ui() -> void:
 	hud.set_bill_window(at_machine and camera.cam > 0.97, economy, machine.busy(), loan, change)
 
 
+## What lies in the machine's two trays: the tickets held, split by the cabinet their
+## column stands in, each stack showing the ticket that came out last there.
+func _machine_trays() -> Array:
+	var piles := [{"count": 0}, {"count": 0}]
+	for item in tray.items:
+		var p: Dictionary = piles[machine_view.side_of(maxi(0, columns.find(machine.forms.find(item.form))))]
+		p.count += 1
+		p.form = item.form
+	for p in piles:
+		if p.has("form"):
+			var s: Array = p.form.layout.card.size
+			p.art = pile.cached_art(p.form)
+			p.card = Vector2(s[0], s[1])
+	return piles
+
+
 func _place_bill_window() -> void:
 	if not hud.bill_window_visible():
 		return
@@ -1026,18 +1085,36 @@ func _place_bill_window() -> void:
 
 # --- scene ------------------------------------------------------------------------
 
-## Shows a room and stands the machine where that room puts it. `remember`: keep it as
+## Shows a room and stands its machine where that room puts it: the columns that room
+## sells, at the stage's prices (built anew when either differs; that takes a few
+## frames, so callers that go on to use the machine await this). `remember`: keep it as
 ## the player's table (free play); the run's layers set their own without that.
 func set_room(room_id: String, remember := true) -> void:
 	rooms.set_room(room_id)
 	if remember:
 		Save.set_setting("room", room_id)
 	_menu_state()
+	columns = []
+	for f in _room_forms(room_id):
+		for i in machine.forms.size():
+			if machine.forms[i].uid() == f.uid():
+				columns.append(i)
+	if columns.is_empty():
+		columns = range(machine.forms.size())
+	machine.armed = false
+	machine.change_armed = false
+	_place_machine()
+	if not machine_view.shows(column_forms()):
+		await machine_view.build(column_forms(), pile.art)
+		_place_machine()   # its width is known now
+
+
+func _place_machine() -> void:
 	var pos := rooms.machine_pos()
 	machine_view.position = pos
 	machine_view.rotation.y = rooms.machine_yaw()
 	machine_light.position = pos + Vector3(-3.5, 5, 6)
-	camera.set_machine(machine_view, pos, rooms.machine_yaw())
+	camera.set_machine(machine_view, pos, rooms.machine_yaw(), machine_view.world_width())
 
 
 func _place_tray_and_pile() -> void:

@@ -1,0 +1,77 @@
+{
+  "id": "peckeye",
+  "name": "Peckeye",
+  "title": [
+    "PECKEYE"
+  ],
+  "code": "PE-1S",
+  "price": 1,
+  "colors": {
+    "edge": "#0e7c86",
+    "head": "#bfeaf5",
+    "ink": "#132a4f",
+    "tiles": [
+      "#2f6fd6",
+      "#d7342d",
+      "#f2c21a",
+      "#2fa89a"
+    ]
+  },
+  "tiers": [
+    {
+      "key": "sailor",
+      "label": {
+        "en": "Peckeye",
+        "zh": "水手鸡"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/sailor.png",
+      "symbol_large": "art/sailor_large.png"
+    },
+    {
+      "key": "spinach",
+      "label": {
+        "en": "Spinach",
+        "zh": "菠菜罐头"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/spinach.png",
+      "symbol_large": "art/spinach_large.png"
+    },
+    {
+      "key": "anchor",
+      "label": {
+        "en": "Anchor",
+        "zh": "船锚"
+      },
+      "prize": 100,
+      "printed_count": 10,
+      "role": "mid",
+      "symbol": "art/anchor.png",
+      "symbol_large": "art/anchor_large.png"
+    },
+    {
+      "key": "pipe",
+      "label": {
+        "en": "Corncob Pipe",
+        "zh": "烟斗"
+      },
+      "prize": 25,
+      "printed_count": 75,
+      "role": "low",
+      "symbol": "art/pipe.png",
+      "symbol_large": "art/pipe_large.png"
+    }
+  ],
+  "digit_groups": [
+    4,
+    4,
+    3
+  ],
+  "win_display": "whole",
+  "layout": "layouts/peckeye.json"
+}

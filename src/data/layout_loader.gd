@@ -281,6 +281,8 @@ class _V:
 			"rect":
 				rect(l, "rect", p + ".rect")
 				color(l.get("fill"), p + ".fill", part)
+				if l.has("radius") and num(l, "radius", p + ".radius") < 0:
+					err(p + ".radius", "must not be negative")
 			"circle":
 				vec2(l, "center", p + ".center")
 				num(l, "radius", p + ".radius")
@@ -370,4 +372,12 @@ class _V:
 				vec2(l, "step", p + ".step")
 				if num(l, "columns", p + ".columns") < 1:
 					err(p + ".columns", "must be at least 1")
+				if l.has("tiers"):
+					var picked = l.tiers
+					var good: bool = picked is Array and not picked.is_empty()
+					if good:
+						for index in picked:
+							good = good and (index is float or index is int) and int(index) >= 0 and int(index) < form.tiers.size()
+					if not good:
+						err(p + ".tiers", "must list tier indexes (the form has %d tiers)" % form.tiers.size())
 				layers(l.get("layers"), p + ".layers", "tier", clip)

@@ -11,6 +11,7 @@ extends RefCounted
 
 const WORDS := ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE"]
 const CIRCLE_SEGMENTS := 96
+const ROUND_STEPS := 8        ## segments per rounded corner of a rect
 
 
 ## Printed front. `serial` is empty for box art (tray stack, discard pile).
@@ -126,6 +127,8 @@ static func _layer(l: Dictionary, ctx: Dictionary, xf: Transform2D) -> Array:
 	match l.type:
 		"rect":
 			var r: Array = l.rect
+			if float(l.get("radius", 0.0)) > 0.0:
+				return _shape(_round_rect(Rect2(r[0], r[1], r[2], r[3]), float(l.radius)), _color(l.fill, ctx), ctx, xf)
 			return _shape(PackedVector2Array([Vector2(r[0], r[1]), Vector2(r[0] + r[2], r[1]),
 				Vector2(r[0] + r[2], r[1] + r[3]), Vector2(r[0], r[1] + r[3])]), _color(l.fill, ctx), ctx, xf)
 		"circle":
@@ -191,13 +194,16 @@ static func _layer(l: Dictionary, ctx: Dictionary, xf: Transform2D) -> Array:
 		"each_tier":
 			var out := []
 			var cols := int(l.columns)
-			for i in ctx.form.tiers.size():
+			# "tiers" picks which tiers get a cell, in that order; without it, all of them.
+			var picked: Array = l.get("tiers", range(ctx.form.tiers.size()))
+			for n in picked.size():
+				var i := int(picked[n])
 				var sub := ctx.duplicate()
 				sub.tier = i
 				sub.vars = ctx.vars.duplicate()
 				sub.vars.count = str(ctx.form.tiers[i].printed_count)
 				sub.vars.tier_prize = str(ctx.form.tiers[i].prize)
-				var cell := Vector2(l.origin[0] + (i % cols) * l.step[0], l.origin[1] + (i / cols) * l.step[1])
+				var cell := Vector2(l.origin[0] + (n % cols) * l.step[0], l.origin[1] + (n / cols) * l.step[1])
 				out.append_array(_layers(l.layers, sub, xf * Transform2D(0, cell)))
 			return out
 	return []
@@ -218,6 +224,19 @@ static func _ellipse(c: Vector2, r: Vector2, rot: float) -> PackedVector2Array:
 	for i in CIRCLE_SEGMENTS:
 		var a := TAU * i / CIRCLE_SEGMENTS
 		pts.append(c + Vector2(cos(a) * r.x, sin(a) * r.y).rotated(rot))
+	return pts
+
+
+## A rectangle with rounded corners (the radius is held to half the shorter side).
+static func _round_rect(r: Rect2, radius: float) -> PackedVector2Array:
+	var rad := minf(radius, minf(r.size.x, r.size.y) / 2.0)
+	var pts := PackedVector2Array()
+	var corners := [r.position + Vector2(r.size.x - rad, rad), r.end - Vector2(rad, rad),
+		r.position + Vector2(rad, r.size.y - rad), r.position + Vector2(rad, rad)]
+	for c in 4:
+		for i in ROUND_STEPS + 1:
+			var a := -PI / 2.0 + (c + float(i) / ROUND_STEPS) * PI / 2.0
+			pts.append(corners[c] + Vector2(cos(a), sin(a)) * rad)
 	return pts
 
 

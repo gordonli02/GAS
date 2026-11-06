@@ -3,7 +3,7 @@ extends Node3D
 ## The open wooden tray on the table holding the tickets still to open.
 
 const WOOD := Color("#8d6b42")
-const JW := 2.12
+const JW := 2.6    ## inside width: the widest card a layout may have (LayoutLoader.CARD_MAX)
 const TH := 2.0
 
 var _stack := MeshInstance3D.new()
@@ -48,6 +48,8 @@ func set_stack(count: int, art: Texture2D, card: Vector2) -> void:
 	_stack.visible = count > 0
 	var h := clampf(count / 500.0 * 0.9, 0.02, 0.9)
 	_stack.scale = Vector3(card.x / 1.4, h, card.y / 2.0)
+	# A card longer than the tray is deep lies along it.
+	_stack.rotation.y = PI / 2.0 if card.y > TH + 0.01 else 0.0
 	_stack.position.y = 0.04 + h / 2.0
 	if art:
 		_top_mat.albedo_texture = art

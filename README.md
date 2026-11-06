@@ -43,6 +43,20 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
   godot --headless --path . --export-release "Windows Demo" builds/demo/LastSale.exe
   ```
   `docs/acceptance.md` holds the checklist results and how to measure frame times elsewhere.
+- `tools/preview_machine.tscn` renders the machine with 8, 6 and 4 columns (`--columns=8,6`, `--room=bar`;
+  up to four columns stand in one cabinet, more in two; a room that names its forms caps the count):
+  `godot --path . --resolution 1920x1080 res://tools/preview_machine.tscn -- <output dir>`
+- `tools/preview_tickets.tscn` holds a ticket of each form at the table and saves three pictures of it
+  (dealt, turned over, open; `--forms=plate,kabawk` for some of them):
+  `godot --path . --resolution 1920x1080 res://tools/preview_tickets.tscn -- <output dir>`
+- `tools/import_symbol_art.py` puts the tier symbols into `packs/core/art/` from their source
+  pictures in `docs/art_redo/` (painted outside the code; needs Python with Pillow): replace a
+  source picture, run it again. `tools/make_ticket_art.py` draws what is still drawn in code (the
+  Nugget Rush nuggets and One Flock's flag; needs the Godot path in `GODOT`);
+  `tools/make_new_forms.py` writes the five M8.6 forms and their layouts; `tools/make_core_layouts.py`
+  the built-in layouts and Hot Plate's square one. A card's shape is layout data: Hot Plate is square,
+  One Flock 21:9, Ka-Bawk! 21:9 on end. `tools/render_ticket_art.gd` renders every form's front and insides.
+  `tools/art_proposals.py` drew earlier style proposals in `docs/m8.6/` (not used by the game).
 - `tools/make_icon.gd` renders the game icon (`assets/icon/icon.png`, the window and .exe icon) from the
   Big Catch front: `godot --path . -s res://tools/make_icon.gd`, then export again.
 - `tools/drive_table.tscn` plays one ticket of each form with synthetic input and saves screenshots:
@@ -79,5 +93,7 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 - `docs/roadmap.md`: what comes after the demo (G's decisions, in Chinese)
 - `locale/ui.csv`: player text, English and Chinese (keys are the English text)
 - `docs/decisions.md`: where the code deliberately differs from MIGRATION.md or the web build
-- `packs/core/`: built-in ticket forms, in the same format Workshop packs will use (see `packs/README.md`)
+- `packs/core/`: the eight built-in ticket forms, in the same format Workshop packs will use (see `packs/README.md`)
+- `src/machine/`: the machine (one or two cabinets of columns and a console). `Game.FORM_UIDS` lists every
+  form sold; a room may name fewer for its machine (`RoomSet.ROOMS[id].forms`)
 - `assets/`: engine-side fonts, machine sounds and room textures

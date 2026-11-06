@@ -20,6 +20,8 @@ const STANDARD := {
 			"change_fee": 25,              ## a new box in one column
 			"last_sale": 50,               ## prize for buying the last ticket of a box
 			"box": {"size_min": 900, "size_step": 10, "size_steps": 21},
+			## "forms": ["core:catch", ...] would name what this layer's machine sells, column
+			## by column; without it the machine sells every form the game was started with.
 		},
 		{
 			"days": 6, "debt": 5000,

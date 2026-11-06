@@ -24,12 +24,13 @@ func test_windows_geometry_and_neighbours() -> void:
 	var pack := core_pack()
 	if pack == null:
 		return
+	# Hot Plate is a square card (G, after M8.6): 1.7 a side on a canvas of 510.
 	var fr := FlapLayout.build(pack.form("plate").layout)
 	eq(fr.size(), 5, "five windows")
 	for i in 5:
-		_near(fr[i].w, 1.4 - 2 * TM, "window %d width" % i)
-		_near(fr[i].h, 107.2 * 2.0 / 600.0, "window %d height" % i)
-		_near(fr[i].xf.origin.x, -0.7 + TM, "window %d hinged left" % i)
+		_near(fr[i].w, 1.7 - 2 * TM, "window %d width" % i)
+		_near(fr[i].h, 89.2 * 1.7 / 510.0, "window %d height" % i)
+		_near(fr[i].xf.origin.x, -0.85 + TM, "window %d hinged left" % i)
 		eq(fr[i].below, i + 1 if i < 4 else -1, "window %d neighbour below" % i)
 		eq(fr[i].above, i - 1 if i > 0 else -1, "window %d neighbour above" % i)
 	check(fr[0].xf.origin.y > fr[4].xf.origin.y, "window 1 is the top one")
@@ -85,6 +86,29 @@ func test_jar_geometry() -> void:
 	# Flap +x points down the card: the free edge is the bottom.
 	var free_edge: Vector2 = fr[0].xf * Vector2(fr[0].w, 0)
 	_near(free_edge.y, -1.325 / 2 + TM, "free edge at the bottom")
+
+
+## The long 21:9 cards (G, after M8.6). One Flock lies: one flap hinged along the top.
+## Ka-Bawk! stands: one flap hinged on the left, as on Big Catch.
+func test_long_card_geometry() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var layout: Dictionary = pack.form("flock").layout
+	var fr := FlapLayout.build(layout)
+	eq(fr.size(), 1, "flock: one flap")
+	eq(fr[0].hinge, "top", "flock: hinged at the top")
+	check(bool(layout.flaps[0].get("side_pull", false)), "flock: a sideways swipe opens it")
+	_near(fr[0].w, 328.0 / 360.0 * 1.11, "flock: peels across the card's height")
+	_near(fr[0].h, 808.0 / 840.0 * 2.59, "flock: hinge runs across the card's width")
+	var free_edge: Vector2 = fr[0].xf * Vector2(fr[0].w, 0)
+	check(free_edge.y < 0 and fr[0].xf.origin.y > 0, "flock: free edge at the bottom")
+	fr = FlapLayout.build(pack.form("kabawk").layout)
+	eq(fr.size(), 1, "kabawk: one flap")
+	eq(fr[0].hinge, "left", "kabawk: hinged on the left")
+	_near(fr[0].w, 328.0 / 360.0 * 1.11, "kabawk: peels across the card's width")
+	_near(fr[0].h, 808.0 / 840.0 * 2.59, "kabawk: hinge runs down the card's height")
+	check(fr[0].xf.origin.x < 0, "kabawk: hinge on the left edge")
 
 
 func _band_rig() -> Dictionary:

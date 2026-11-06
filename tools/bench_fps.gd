@@ -34,7 +34,7 @@ func _run() -> void:
 		# 100 tickets coming out of the machine.
 		game.economy.insert(100)
 		await _wait(Economy.BILL_TIME + 0.2)
-		game.press_machine(3)
+		game.press_play_all()
 		game.press_machine(0)
 		await _wait(0.4)
 		await _measure(room + ": dispensing")

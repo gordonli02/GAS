@@ -1,0 +1,78 @@
+{
+  "id": "flock",
+  "name": "One Flock",
+  "title": [
+    "ONE",
+    "FLOCK"
+  ],
+  "code": "OF-1S",
+  "price": 1,
+  "colors": {
+    "edge": "#14245e",
+    "head": "#fff8e6",
+    "ink": "#14245e",
+    "tiles": [
+      "#c8102e",
+      "#1f3a93",
+      "#8fc7f2",
+      "#ffd23a"
+    ]
+  },
+  "tiers": [
+    {
+      "key": "uncle",
+      "label": {
+        "en": "Uncle Cluck",
+        "zh": "山姆鸡"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/uncle.png",
+      "symbol_large": "art/uncle_large.png"
+    },
+    {
+      "key": "liberty",
+      "label": {
+        "en": "Lady Liberty",
+        "zh": "自由母鸡"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/liberty.png",
+      "symbol_large": "art/liberty_large.png"
+    },
+    {
+      "key": "bell",
+      "label": {
+        "en": "Liberty Bell",
+        "zh": "自由钟"
+      },
+      "prize": 100,
+      "printed_count": 10,
+      "role": "mid",
+      "symbol": "art/bell.png",
+      "symbol_large": "art/bell_large.png"
+    },
+    {
+      "key": "rocket",
+      "label": {
+        "en": "Rocket",
+        "zh": "烟花"
+      },
+      "prize": 25,
+      "printed_count": 75,
+      "role": "low",
+      "symbol": "art/rocket.png",
+      "symbol_large": "art/rocket_large.png"
+    }
+  ],
+  "digit_groups": [
+    4,
+    4,
+    3
+  ],
+  "win_display": "each_group",
+  "layout": "layouts/flock.json"
+}

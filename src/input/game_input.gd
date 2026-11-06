@@ -43,8 +43,9 @@ func _unhandled_input(e: InputEvent) -> void:
 				game.toggle_view()
 			KEY_N:
 				game.toggle_change()
-			KEY_1, KEY_2, KEY_3:
-				if game.at_machine and game.camera.cam > 0.9:
+			KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
+				# One key per column, as numbered on the plates under the buttons.
+				if game.at_machine and game.camera.cam > 0.9 and e.keycode - KEY_1 < game.columns.size():
 					game.press_machine(e.keycode - KEY_1)
 			_:
 				return
@@ -60,7 +61,7 @@ func _press(pos: Vector2) -> void:
 		if hit.has_meta("column"):
 			game.press_machine(hit.get_meta("column"))
 		elif hit.has_meta("play_all"):
-			game.press_machine(3)
+			game.press_play_all()
 		elif not hit.has_meta("machine"):
 			game.toggle_view()
 		return
@@ -97,6 +98,7 @@ var _nothing := Node.new()
 
 func _update_cursor(pos: Vector2) -> void:
 	var shape := Input.CURSOR_ARROW
+	game.hover_column = -1
 	if _dragging:
 		shape = Input.CURSOR_DRAG
 	elif game.at_machine:
@@ -104,6 +106,8 @@ func _update_cursor(pos: Vector2) -> void:
 			var hit := _pick(pos)
 			if hit.has_meta("column") or hit.has_meta("play_all") or not hit.has_meta("machine"):
 				shape = Input.CURSOR_POINTING_HAND
+			# The LCD names the column the pointer is on: its button, or anywhere up the column.
+			game.hover_column = int(hit.get_meta("column", hit.get_meta("column_info", -1)))
 	elif game.camera.cam < 0.1:
 		if game.flow.can_grab(pos):
 			shape = Input.CURSOR_CAN_DROP

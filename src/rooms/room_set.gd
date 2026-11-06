@@ -22,14 +22,16 @@ const ORDER := ["diner", "bar", "bingo"]
 const ROOMS := {
 	"diner": {"name": "Diner", "bg": 0x24293a, "fog": [0x24293a, 34, 80], "hemi": [0xfff0dc, 0x70504a, .46],
 		"key": [0xfff0cc, .5, Vector3(2, 13, 5)], "p1": [0xffb35c, .22, Vector3(-5, 6, 1)], "p2": [0xff4a6a, .2, Vector3(-6, 4, -11)],
-		"machine": [Vector3(10.8, -3.25, -13), -.35], "gains": [.91, .62, .84],
+		"machine": [Vector3(13.6, -3.25, -13.4), -.22], "gains": [.91, .62, .84],
 		"table_dim": .81},   # G: table view 5% darker on screen (M5 review); 0.81 on the lights gives that
 	"bar": {"name": "Bar", "bg": 0x0e0a10, "fog": [0x0e0a10, 26, 62], "hemi": [0xa07a78, 0x281612, .42],
 		"key": [0xffc27a, .8, Vector3(-2, 12, 4)], "p1": [0xd82bd0, .6, Vector3(9, 3, -10)], "p2": [0xff5a2a, .28, Vector3(-5, 4, -12)],
-		"machine": [Vector3(11, -3.25, -12.8), -.45], "gains": [1.34, .64, 1.12]},
+		"machine": [Vector3(14.2, -3.25, -13.2), -.22], "gains": [1.34, .64, 1.12]},
 	"bingo": {"name": "Bingo Hall", "bg": 0x3d463f, "fog": [0x3d463f, 30, 62], "hemi": [0xe8f7e6, 0x756b58, .56],
 		"key": [0xf1fff1, .36, Vector3(0, 14, 3)], "p1": [0xcff4d7, .14, Vector3(-6, 8, -3)], "p2": [0xffe08a, .12, Vector3(5, 6, -8)],
-		"machine": [Vector3(11.3, -3.25, -13), -.4], "gains": [.47, 1.17, 1.5]},
+		"machine": [Vector3(11.4, -3.25, -13.2), -.32], "gains": [.47, 1.17, 1.5],
+		# A plainer venue has a smaller machine (G, M8.6): four columns, these four forms.
+		"forms": ["core:catch", "core:plate", "core:spur", "core:order"]},
 }
 const KEY_RANGE := 40.0        ## web: 70 with linear falloff; matched at the table and the back wall
 const POINT_RANGE := 34.0
@@ -95,6 +97,11 @@ func machine_pos() -> Vector3:
 
 func machine_yaw() -> float:
 	return ROOMS[id].machine[1]
+
+
+## What the machine of a room sells, a column each (form ids); empty: every form.
+static func machine_forms(room_id: String) -> Array:
+	return ROOMS.get(room_id, {}).get("forms", [])
 
 
 func set_room(room_id: String) -> void:

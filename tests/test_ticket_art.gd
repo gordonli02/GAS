@@ -89,7 +89,7 @@ func test_inside_winner_one_window() -> void:
 	# The other four windows still print their digit groups.
 	var digits := 0
 	for c in cmds:
-		if c.k == "text" and c.text.length() == 1 and c.text.is_valid_int() and c.size > 60:
+		if c.k == "text" and c.text.length() == 1 and c.text.is_valid_int() and c.size == float(f.layout.interior.digits.digit.size):
 			digits += 1
 	var expected := 0
 	for gi in t.groups.size():
@@ -182,7 +182,7 @@ func test_covers_number_their_flaps() -> void:
 	var f := pack.form("plate")
 	for i in 5:
 		check(_texts(TicketArt.cover(f, i).cmds).has(str(i + 1)), "tab %d numbered" % (i + 1))
-	eq(TicketArt.cover(f, 0).canvas, Vector2(400, 111), "template canvas")
+	eq(TicketArt.cover(f, 0).canvas, Vector2(480, 90), "template canvas")
 
 
 func test_tear_slice_audio() -> void:
@@ -200,3 +200,54 @@ func test_tear_slice_audio() -> void:
 	eq(s.data.decode_s16(0), 10000, "full level at the start")
 	eq(s.data.decode_s16((499 - 200) * 2), 10000, "full level up to the end mark")
 	check(s.data.decode_s16((514 - 200) * 2) < 1000, "faded out after 15 ms")
+
+
+## each_tier with "tiers" draws those tiers only, in that order, each in the next cell.
+func test_each_tier_can_pick_tiers() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var f := pack.form("catch").scaled(1)
+	var layout: Dictionary = f.layout.duplicate(true)
+	layout.front = [{"type": "each_tier", "tiers": [3, 0], "origin": [100, 0], "columns": 2, "step": [50, 0], "layers": [
+		{"type": "text", "text": "${tier_prize}", "pos": [0, 20], "font": "slab", "size": 10, "fill": "tile"},
+		{"type": "rect", "rect": [0, 0, 40, 20], "fill": "tile", "radius": 5}]}]
+	var g := FormDef.new()
+	for k in ["pack_id", "id", "name", "title", "code", "colors", "digit_groups", "win_display", "tear_clips", "source_dir", "tiers", "price"]:
+		g.set(k, f.get(k))
+	g.layout = layout
+	var cmds := TicketArt.front(g, "")
+	var texts := cmds.filter(func(c): return c.k == "text")
+	eq(texts.map(func(c): return c.text), ["$25", "$500"], "the picked tiers, in the order given")
+	eq(texts.map(func(c): return c.pos.x), [100.0, 150.0], "each in the next cell")
+	eq(texts[0].color, f.colors.tiles[3], "with its own tile colour")
+	var polys := cmds.filter(func(c): return c.k == "poly")
+	eq(polys.size(), 2, "one rect each")
+	var box := Rect2(polys[0].pts[0], Vector2.ZERO)
+	for p in polys[0].pts:
+		box = box.expand(p)
+	check(box.is_equal_approx(Rect2(100, 0, 40, 20)), "a rounded rect keeps its bounds")
+	check(polys[0].pts.size() > 4 and not Array(polys[0].pts).has(Vector2(100, 0)), "and loses its corners")
+
+
+## The M8.6 forms print what the form says: prizes follow the stake, every tier is shown.
+func test_new_fronts_follow_the_form() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	for id in ["order", "kabawk", "flock", "nugget", "peckeye"]:
+		var f := pack.form(id)
+		var texts := _texts(TicketArt.front(f, "Q123456"))
+		check(texts.has("SERIAL NO. Q123456"), id + ": serial printed")
+		check(texts.has("$1"), id + ": price printed")
+		var joined := " ".join(texts)
+		check(joined.contains("$500") and joined.contains("$100") and joined.contains("$25"), id + ": every prize printed")
+		var five := " ".join(_texts(TicketArt.front(f.scaled(5), "")))
+		check(five.contains("$2500") and five.contains("$125") and five.contains("$5") and not five.contains("$100"),
+			id + ": price and prizes at five times the stake")
+		var shown := {}
+		for c in TicketArt.front(f, ""):
+			if c.k == "tex":
+				shown[c.path] = true
+		for t in f.tiers:
+			check(shown.has(t.symbol) or shown.has(t.symbol_large), "%s: %s is on the front" % [id, t.key])

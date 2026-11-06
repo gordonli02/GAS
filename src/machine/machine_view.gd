@@ -1,7 +1,12 @@
 class_name MachineView
 extends Node3D
-## The pull-tab machine on the floor, rebuilt from the web build's buildMachine().
-## Local units as in the web build; the node is scaled 0.95.
+## The pull-tab machine on the floor (M8.6), after the machines in bars and bingo halls.
+## Up to four columns: one gold cabinet with the black console on its right. More: two
+## cabinets with the console between them, half the columns on each side.
+## Each column shows its ticket's front over the stack of tickets left, with a lit button
+## and a name and price plate under it; the console holds the sign, the LCD, PLAY ALL and
+## the bill slot.
+## Local units as in the web build's machine; the node is scaled 0.95.
 ## Shows state only: MachineLogic and Economy decide what happens.
 
 signal ready_to_use
@@ -14,7 +19,7 @@ const LCD_BG := Color("#b8e23e")
 const LCD_INK := Color("#26330c")
 const RED := Color("#d4242b")
 const STICKER := Color("#f5f0e4")
-const ROUND_RADIUS := 0.45  ## PLAY ALL's outer ring: as tall as the 0.9-high LCD beside it
+const ROUND_RADIUS := 0.45  ## PLAY ALL's outer ring
 ## Lamp looks for the red buttons, brightest first. G picks one; 0 is the earlier, brighter
 ## version and 3 the most muted; 1 and 2 lie evenly between.
 const LAMP_BRIGHT := {"on": 0.78, "dim": 0.40, "hot": Color("#ff9c86"), "mid": Color("#e0221a"),
@@ -39,17 +44,50 @@ const FLY_COUNT := 14
 const FLY_SIZE := Vector2(0.95, 1.3)   ## a flying ticket of the usual card (1.4 x 2.0), as the web build drew it
 const FONT_LCD := preload("res://assets/fonts/vt323-latin-400-normal.woff2")
 
+# --- the cabinet, in machine units ------------------------------------------------
+const PITCH := 1.2             ## one column
+const SINGLE_MAX := 4          ## up to this many columns stand in one cabinet, the console on its right
+const FRAME_W := 0.25          ## gold left and right of a cabinet's window
+const CONSOLE_W := 2.8
+const BODY_BASE := -5.0        ## the floor
+const BODY_H := 13.0
+const BODY_D := 3.2
+const FACE_Z := 1.6
+const WINDOW_Y := Vector2(2.15, 7.65)   ## the glass, bottom and top
+const SHOW_H := 1.31           ## the ticket shown at the top of a column (0.92 wide for the usual card)
+const SHOW_W := 0.92           ## and the widest it may be (a square card is fitted to this)
+const SHOW_Y := 6.9
+const STACK_W := 0.84
+const STACK_BASE := 2.3
+const STACK_MAX := 3.75        ## a full box
+const BUTTON_Y := 1.5
+const PLATE_Y := 0.82          ## the name and price plate
+const PLATE_SIZE := Vector2(1.08, 0.5)
+const TRAY_Y := -0.71          ## where tickets land
+const TRAY_DEPTH := 2.0        ## the longest card that lies in a tray front to back
+const LCD_AT := Vector2(0, 5.62)
+const LCD_SIZE := Vector2(2.36, 0.96)
+const LCD_PX := Vector2(368, 150)
+const PLAY_ALL_Y := 4.42
+const SLOT_BASE := 1.86        ## the bill acceptor's lower edge
+
 var painter: TicketPainter
 var forms: Array[FormDef] = []
-var buttons: Array[Node3D] = []   ## three column caps, then the PLAY ALL dome
+var buttons: Array[Node3D] = []   ## one cap per column, then the PLAY ALL dome
 var big_button: Node3D
 var body_collider: StaticBody3D
+var built := false                ## false while the machine is being (re)built
+var width := 0.0                  ## the whole machine, machine units
 
-var _press := PackedFloat32Array([0, 0, 0, 0])
+var _press := PackedFloat32Array()
 var _button_z := PackedFloat32Array()
+var _column_x := PackedFloat32Array()
+var _left := 0                              ## columns in the left cabinet
+var _cabinets: Array = []                   ## [{x, w}] left, right
+var _console_x := 0.0
 var _stock: Array[MeshInstance3D] = []
-var _tray_pile: MeshInstance3D
-var _stack_mat := StandardMaterial3D.new()
+var _tray_piles: Array[MeshInstance3D] = []
+var _stack_mats: Array[StandardMaterial3D] = []
 var _fly: Array[MeshInstance3D] = []
 var _fly_mats: Array[StandardMaterial3D] = []   ## each flying ticket shows its own form
 var _fly_state: Array = []
@@ -60,173 +98,385 @@ var _big_mat: StandardMaterial3D
 var _faces: Array = []                      ## [material, round] for each lit button face
 var _sides: Array[StandardMaterial3D] = []  ## the red plastic sides of the caps
 var _halos: Array[StandardMaterial3D] = []
-var _lcd_top := Label.new()
-var _lcd_sub := Label.new()
+var _lcd_top: Label
+var _lcd_sub: Label
+var _lcd_info: Label
+var _built_key := ""
+var _build_no := 0                ## a build that another one overtook gives up
 var _time := 0.0
 
 
-## Builds the machine for these forms (one column each, up to three).
-func build(machine_forms: Array) -> void:
+## What a build shows of these forms: a stage's stake changes the print and the price.
+static func build_key(machine_forms: Array) -> String:
+	var keys := PackedStringArray()
+	for f: FormDef in machine_forms:
+		keys.append(f.art_key())
+	return "|".join(keys)
+
+
+## True when the machine already stands as these forms need it.
+func shows(machine_forms: Array) -> bool:
+	return built and _built_key == build_key(machine_forms)
+
+
+## Builds the machine for these forms, one column each. `art_for` paints a form's front
+## (awaited). Building again takes the old machine down first.
+func build(machine_forms: Array, art_for: Callable) -> void:
+	built = false
+	_build_no += 1
+	var build_no := _build_no
+	_clear()
 	for f in machine_forms:
 		forms.append(f)
 	scale = Vector3.ONE * SCALE
+	var n := forms.size()
+	_left = n if n <= SINGLE_MAX else (n + 1) / 2
+	var widths := [_left * PITCH + 0.1 + FRAME_W * 2.0, (n - _left) * PITCH + 0.1 + FRAME_W * 2.0]
+	if n - _left == 0:
+		widths[1] = 0.0
+	width = widths[0] + CONSOLE_W + widths[1]
+	_cabinets = [{"x": -width / 2.0 + widths[0] / 2.0, "w": widths[0], "n": _left, "first": 0},
+		{"x": width / 2.0 - widths[1] / 2.0, "w": widths[1], "n": n - _left, "first": _left}]
+	_console_x = -width / 2.0 + widths[0] + CONSOLE_W / 2.0
 	var gold := _lit(GOLD, 24)
 	var dark := _lit(DARK, 20)
-	var chrome := _lit(CHROME, 70, 0.6)
-	_box(Vector3(6.2, 13, 3.2), gold, Vector3(0, -5, 0))
-	_box(Vector3(6.4, 0.5, 3.4), dark, Vector3(0, 8, 0))
-	_panel(Vector2(5.4, 0.7), await _paint(Vector2(540, 70), [
-		_rect(0, 0, 540, 70, RED), _text("PULL-TABS", Vector2(270, 54), "slab", 50, Color("#fff4d9"))]), Vector3(0, 7.55, 1.62))
-	_box(Vector3(5.4, 3.3, 0.08), _lit(Color("#130c15"), 6), Vector3(0, 3.9, 1.6))
-	var rail_cmds := [_rect(0, 0, 64, 256, Color("#d9d6cf"))]
-	for i in 11:
-		rail_cmds.append(_rect(0, i * 25, 26 if i % 5 == 0 else 14, 2, Color("#2a2428")))
-	for i in range(1, 5):
-		rail_cmds.append(_text(str(1000 - i * 200), Vector2(44, i * 50 + 6), "cond_bold", 15, Color("#2a2428")))
-	var rail := await _paint(Vector2(64, 256), rail_cmds)
-	for i in forms.size():
-		var x := -1.75 + i * 1.75
-		_panel(Vector2(0.28, 3), rail, Vector3(x + 0.7, 5.5, 1.66))
-		var edge_cmds := []
-		for y in range(0, 64, 2):
-			edge_cmds.append(_rect(0, y, 32, 2, Color("#efe7d6") if y % 4 else forms[i].colors.edge))
-		var edges := await _paint(Vector2(32, 64), edge_cmds)
-		var stock := MeshInstance3D.new()
-		var sb := BoxMesh.new()
-		sb.size = Vector3(1.25, 1, 0.5)
-		stock.mesh = sb
-		var sm := _flat_tex(edges)
-		sm.uv1_scale = Vector3(1, 4, 1)
-		stock.material_override = sm
-		stock.position = Vector3(x - 0.12, 4.5, 1.86)
-		add_child(stock)
-		_stock.append(stock)
-	var led := _flat(Color("#ff3bea"))
-	for spec in [[5.5, 0.1, 0.0, 7.15], [5.5, 0.1, 0.0, 3.85], [0.1, 3.3, -2.72, 5.5], [0.1, 3.3, 2.72, 5.5]]:
-		_box(Vector3(spec[0], spec[1], 0.1), led, Vector3(spec[2], spec[3] - spec[1] / 2.0, 1.72), false)
-	var strip_cmds := [_rect(0, 0, 540, 36, STICKER)]
-	strip_cmds.append({"k": "stroke", "pts": PackedVector2Array([Vector2(4, 4), Vector2(536, 4), Vector2(536, 32), Vector2(4, 32)]),
-		"closed": true, "width": 3.0, "color": RED, "join": "miter", "dash": null})
-	for i in forms.size():
-		strip_cmds.append(_text(forms[i].name.to_upper(), Vector2(90 + i * 180, 26), "cond_bold", 20, forms[i].colors.edge))
-	_panel(Vector2(5.4, 0.36), await _paint(Vector2(540, 36), strip_cmds), Vector3(0, 2.93, 1.62))
-	for i in forms.size():
-		buttons.append(_square_button(Vector3(-1.8 + i * 1.8, 3.47, 1.64), {"column": i}))
-	_box(Vector3(5.4, 2.42, 0.08), dark, Vector3(0, 0.34, 1.6))
-	_panel(Vector2(3.1, 0.9), _lcd_texture(), Vector3(-0.95, 2.1, 1.66))
-	_panel(Vector2(3.1, 0.84), await _paint(Vector2(320, 92), [
-		_rect(0, 0, 320, 92, STICKER),
-		{"k": "stroke", "pts": PackedVector2Array([Vector2(6, 6), Vector2(314, 6), Vector2(314, 86), Vector2(6, 86)]),
-			"closed": true, "width": 5.0, "color": RED, "join": "miter", "dash": null},
-		_text("PLAY ALL", Vector2(160, 44), "cond_bold", 30, RED),
-		_text("MAX. 100 TICKETS", Vector2(160, 76), "cond_bold", 26, RED)]), Vector3(-0.95, 1.03, 1.66))
-	big_button = _round_button(Vector3(1.6, 2.1, 1.64))
-	buttons.append(big_button)
-	_box(Vector3(1.7, 0.98, 0.16), _lit(Color("#0b0b0f"), 50), Vector3(1.6, 0.42, 1.68))
-	_box(Vector3(1.25, 0.12, 0.34), chrome, Vector3(1.6, 0.78, 1.84))
-	_box(Vector3(1, 0.06, 0.05), _flat(Color("#5dff7a")), Vector3(1.6, 0.98, 1.78), false)
-	_box(Vector3(0.5, 0.08, 0.04), _flat(Color("#ffb13b")), Vector3(1.6, 0.56, 1.78), false)
-	_bill = _card(Vector2(0.62, 1.3), _bill_mat, true)
-	_bill.visible = false
-	await paint_bills(Economy.BILLS)
-	_box(Vector3(4.1, 0.9, 0.06), _flat(Color("#b8751f")), Vector3(0, -0.52, 1.61), false)
-	_box(Vector3(4.5, 0.24, 1.7), chrome, Vector3(0, -0.72, 2.35))
-	_box(Vector3(4.5, 0.34, 0.12), chrome, Vector3(0, -0.7, 3.2))
-	_tray_pile = _card(Vector2(1.4, 2.0), _stack_mat, false, 1.0)
-	_tray_pile.visible = false
+	_box(Vector3(width, BODY_H, BODY_D), gold, Vector3(0, BODY_BASE, 0))
+	_box(Vector3(width + 0.2, 0.5, BODY_D + 0.2), dark, Vector3(0, BODY_BASE + BODY_H, 0))
+	# Every picture is painted in the same frame, so a new machine stands within a few
+	# frames (a new layer of the run builds one, at its stake).
+	var jobs := _console_jobs()
+	jobs["rail"] = _rail_job()
+	for i in n:
+		jobs["edge%d" % i] = _edge_job(forms[i])
+		jobs["plate%d" % i] = _plate_job(i, forms[i])
+	var tex := {}
+	for k in jobs:
+		_paint_into(tex, k, jobs[k][0], jobs[k][1])
+	for i in n:
+		_front_into(tex, "front%d" % i, forms[i], art_for)
+	while tex.size() < jobs.size() + n:
+		await get_tree().process_frame
+	if build_no != _build_no:
+		return   # the room changed again meanwhile: that build stands
+	# Columns first: buttons[i] must be column i, with PLAY ALL after the last.
+	for cab in _cabinets:
+		if cab.n > 0:
+			_build_cabinet(cab, tex)
+	_build_console(dark, tex)
 	for i in FLY_COUNT:
 		var mat := StandardMaterial3D.new()
 		var f := _card(FLY_SIZE, mat, false)
 		f.visible = false
 		_fly.append(f)
 		_fly_mats.append(mat)
-		_fly_state.append({"life": 0.0, "x": 0.0, "spin": 0.0})
+		_fly_state.append({"life": 0.0, "x": 0.0, "from": 0.0, "spin": 0.0})
 	body_collider = StaticBody3D.new()
 	var shape := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
-	bs.size = Vector3(6.2, 13, 3.2)
+	bs.size = Vector3(width, BODY_H, BODY_D)
 	shape.shape = bs
-	shape.position = Vector3(0, 1.5, 0)
+	shape.position = Vector3(0, BODY_BASE + BODY_H / 2.0, 0)
 	body_collider.add_child(shape)
 	body_collider.set_meta("machine", true)
 	add_child(body_collider)
+	_built_key = build_key(forms)
+	built = true
 	ready_to_use.emit()
 
 
-## LCD lines: credit on top, status below.
-func set_lcd(top: String, sub: String) -> void:
+func _clear() -> void:
+	for c in get_children():
+		remove_child(c)
+		c.queue_free()
+	forms.clear()
+	buttons.clear()
+	_press = PackedFloat32Array()
+	_button_z = PackedFloat32Array()
+	_column_x = PackedFloat32Array()
+	_stock.clear()
+	_tray_piles.clear()
+	_stack_mats.clear()
+	_fly.clear()
+	_fly_mats.clear()
+	_fly_state.clear()
+	_faces.clear()
+	_sides.clear()
+	_halos.clear()
+	_bill = null
+	_big_mat = null
+	big_button = null
+	body_collider = null
+
+
+## One cabinet: the lit window with a column per form, the buttons and plates under
+## it, and the tray its tickets fall into.
+func _build_cabinet(cab: Dictionary, tex: Dictionary) -> void:
+	var cx: float = cab.x
+	var ww: float = cab.n * PITCH + 0.1
+	var wy := (WINDOW_Y.x + WINDOW_Y.y) / 2.0
+	var wh := WINDOW_Y.y - WINDOW_Y.x
+	_box(Vector3(ww, wh, 0.08), _lit(Color("#130c15"), 6), Vector3(cx, WINDOW_Y.x, FACE_Z))
+	var led := _flat(Color("#ff3bea"))
+	for spec in [[ww + 0.1, 0.1, 0.0, WINDOW_Y.y], [ww + 0.1, 0.1, 0.0, WINDOW_Y.x - 0.1],
+			[0.1, wh + 0.2, -ww / 2.0 - 0.05, WINDOW_Y.x - 0.1], [0.1, wh + 0.2, ww / 2.0 + 0.05, WINDOW_Y.x - 0.1]]:
+		_box(Vector3(spec[0], spec[1], 0.1), led, Vector3(cx + spec[2], spec[3], FACE_Z + 0.12), false)
+	for j in int(cab.n):
+		var i: int = int(cab.first) + j
+		var form := forms[i]
+		var x: float = cx - cab.n * PITCH / 2.0 + (j + 0.5) * PITCH
+		_column_x.append(x)
+		# The ticket this column sells, behind the glass. A wide ticket stands on its side.
+		var card: Array = form.layout.card.size
+		var tall: float = minf(SHOW_H, SHOW_W * card[1] / card[0])
+		var shown := _panel(Vector2(tall * card[0] / card[1], tall), tex["front%d" % i], Vector3(x - 0.1, SHOW_Y, FACE_Z + 0.1))
+		if card[0] > card[1]:
+			var long: float = minf(SHOW_H, SHOW_W * card[0] / card[1])
+			shown.mesh.size = Vector2(long, long * card[1] / card[0])
+			shown.rotation.z = -PI / 2.0
+		# The stack of tickets left, with a rule beside it.
+		_panel(Vector2(0.2, STACK_MAX), tex.rail, Vector3(x + 0.44, STACK_BASE + STACK_MAX / 2.0, FACE_Z + 0.06))
+		var stock := MeshInstance3D.new()
+		var sb := BoxMesh.new()
+		sb.size = Vector3(STACK_W, 1, 0.3)
+		stock.mesh = sb
+		var sm := _flat_tex(tex["edge%d" % i])
+		sm.uv1_scale = Vector3(1, 5, 1)
+		stock.material_override = sm
+		stock.position = Vector3(x - 0.1, STACK_BASE + STACK_MAX / 2.0, FACE_Z + 0.2)
+		stock.scale.y = STACK_MAX
+		add_child(stock)
+		_stock.append(stock)
+		_square_button(Vector3(x, BUTTON_Y, FACE_Z + 0.04), {"column": i})
+		_panel(PLATE_SIZE, tex["plate%d" % i], Vector3(x, PLATE_Y, FACE_Z + 0.02))
+		# The whole column answers the pointer (the LCD names it); only the button sells.
+		var info := StaticBody3D.new()
+		var shape := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(PITCH, WINDOW_Y.y - PLATE_Y + PLATE_SIZE.y / 2.0, 0.2)
+		shape.shape = bs
+		info.add_child(shape)
+		info.position = Vector3(x, (WINDOW_Y.y + PLATE_Y - PLATE_SIZE.y / 2.0) / 2.0, FACE_Z + 0.02)
+		info.set_meta("machine", true)
+		info.set_meta("column_info", i)
+		add_child(info)
+	# The tray: a lit recess, a chrome shelf and its lip.
+	var tw: float = cab.w - 0.7
+	_box(Vector3(tw - 0.3, 0.95, 0.06), _flat(Color("#17141b")), Vector3(cx, TRAY_Y, FACE_Z + 0.01), false)
+	_box(Vector3(tw - 0.5, 0.09, 0.05), _flat(Color("#ffe9b0")), Vector3(cx, TRAY_Y + 0.8, FACE_Z + 0.03), false)
+	var chrome := _lit(CHROME, 70, 0.6)
+	_box(Vector3(tw, 0.24, 1.7), chrome, Vector3(cx, TRAY_Y - 0.24, 2.35))
+	_box(Vector3(tw, 0.34, 0.12), chrome, Vector3(cx, TRAY_Y - 0.22, 3.2))
+	var mat := StandardMaterial3D.new()
+	var pile := _card(Vector2(1.4, 2.0), mat, false, 1.0)
+	pile.visible = false
+	_stack_mats.append(mat)
+	_tray_piles.append(pile)
+
+
+## The console between the cabinets: sign, LCD, PLAY ALL, a notice and the bill slot.
+func _build_console(dark: StandardMaterial3D, tex: Dictionary) -> void:
+	var cx := _console_x
+	_box(Vector3(CONSOLE_W, WINDOW_Y.y + 0.25 - TRAY_Y + 0.6, 0.1), dark, Vector3(cx, TRAY_Y - 0.6, FACE_Z + 0.02))
+	_panel(Vector2(2.36, 1.3), tex.sign, Vector3(cx, 7.0, FACE_Z + 0.08))
+	_box(Vector3(LCD_SIZE.x + 0.16, LCD_SIZE.y + 0.16, 0.06), _lit(BEZEL, 40), Vector3(cx + LCD_AT.x, LCD_AT.y - LCD_SIZE.y / 2.0 - 0.08, FACE_Z + 0.08))
+	_panel(LCD_SIZE, _lcd_texture(), Vector3(cx + LCD_AT.x, LCD_AT.y, FACE_Z + 0.12))
+	_panel(Vector2(1.22, 0.84), tex.play_all, Vector3(cx - 0.56, PLAY_ALL_Y, FACE_Z + 0.08))
+	big_button = _round_button(Vector3(cx + 0.72, PLAY_ALL_Y, FACE_Z + 0.06))
+	_panel(Vector2(2.36, 0.56), tex.notice, Vector3(cx, 3.42, FACE_Z + 0.08))
+	# The bill acceptor.
+	var chrome := _lit(CHROME, 70, 0.6)
+	_box(Vector3(1.7, 0.98, 0.16), _lit(Color("#0b0b0f"), 50), Vector3(cx, SLOT_BASE, FACE_Z + 0.08))
+	_box(Vector3(1.25, 0.12, 0.34), chrome, Vector3(cx, SLOT_BASE + 0.36, FACE_Z + 0.24))
+	_box(Vector3(1, 0.06, 0.05), _flat(Color("#5dff7a")), Vector3(cx, SLOT_BASE + 0.56, FACE_Z + 0.18), false)
+	_box(Vector3(0.5, 0.08, 0.04), _flat(Color("#ffb13b")), Vector3(cx, SLOT_BASE + 0.14, FACE_Z + 0.18), false)
+	_panel(Vector2(1.7, 0.36), tex.insert, Vector3(cx, SLOT_BASE - 0.3, FACE_Z + 0.08))
+	_bill = _card(Vector2(0.62, 1.3), _bill_mat, true)
+	_bill.visible = false
+
+
+## Paint jobs, each [canvas size, commands].
+func _console_jobs() -> Dictionary:
+	return {
+		"sign": [Vector2(472, 260), [
+			_rect(0, 0, 472, 260, RED),
+			_frame(10, 10, 452, 240, 5.0, Color("#fff4d9")),
+			_text("PULL", Vector2(236, 122), "slab", 112, Color("#fff4d9")),
+			_text("TABS", Vector2(236, 228), "slab", 112, Color("#fff4d9"))]],
+		"play_all": [Vector2(244, 168), [
+			_rect(0, 0, 244, 168, STICKER),
+			_frame(7, 7, 230, 154, 6.0, RED),
+			_text("PLAY ALL", Vector2(122, 76), "cond_bold", 50, RED),
+			_text("MAX. 100", Vector2(122, 116), "cond_bold", 30, RED),
+			_text("TICKETS", Vector2(122, 148), "cond_bold", 30, RED)]],
+		"notice": [Vector2(472, 112), [
+			_rect(0, 0, 472, 112, STICKER),
+			_text("WINNING TICKETS ARE PAID", Vector2(236, 46), "cond_bold", 32, DARK),
+			_text("IN EGG MONEY. NO CHANGE GIVEN.", Vector2(236, 88), "cond_bold", 32, DARK)]],
+		"insert": [Vector2(340, 72), [
+			_rect(0, 0, 340, 72, Color("#ffd23a")),
+			_text("INSERT BILLS HERE", Vector2(170, 50), "cond_bold", 38, DARK)]],
+	}
+
+
+## The rule beside a stack: a tick every 100 tickets, a number every 200.
+func _rail_job() -> Array:
+	var cmds := [_rect(0, 0, 40, 256, Color("#d9d6cf"))]
+	for i in 11:
+		cmds.append(_rect(0, i * 25, 18 if i % 5 == 0 else 10, 2, Color("#2a2428")))
+	for i in range(1, 5):
+		cmds.append(_text(str(1000 - i * 200), Vector2(27, i * 50 + 6), "cond_bold", 15, Color("#2a2428")))
+	return [Vector2(40, 256), cmds]
+
+
+## The edge of a stack of tickets: paper and the form's colour, turn about.
+func _edge_job(form: FormDef) -> Array:
+	var cmds := []
+	for y in range(0, 64, 2):
+		cmds.append(_rect(0, y, 32, 2, Color("#efe7d6") if y % 4 else form.colors.edge))
+	return [Vector2(32, 64), cmds]
+
+
+## The plate under a column's button: the key that presses it, the form's name and the price.
+func _plate_job(i: int, form: FormDef) -> Array:
+	var ink: Color = form.colors.edge
+	if ink.get_luminance() > 0.45:
+		ink = form.colors.ink   # a pale edge colour would not read on the plate
+	var name_cmd := _text(form.name.to_upper(), Vector2(108, 38), "cond_bold", 27, ink)
+	name_cmd.max_width = 196.0
+	var price := _text("$%d" % form.price, Vector2(126, 87), "slab", 38, RED)
+	price.max_width = 150.0
+	return [Vector2(216, 100), [
+		_rect(0, 0, 216, 100, STICKER),
+		_frame(3, 3, 210, 94, 4.0, RED),
+		name_cmd,
+		_rect(10, 54, 34, 36, DARK),
+		_text(str(i + 1), Vector2(27, 83), "lcd", 34, LCD_BG),
+		price]]
+
+
+func _paint_into(out: Dictionary, key, size: Vector2, cmds: Array) -> void:
+	out[key] = await painter.paint(size, cmds)
+
+
+func _front_into(out: Dictionary, key: String, form: FormDef, art_for: Callable) -> void:
+	out[key] = await art_for.call(form)
+
+
+## LCD lines: credit on top, status below, then the column the pointer is on.
+func set_lcd(top: String, sub: String, info := "") -> void:
+	if not built:
+		return
 	_lcd_top.text = top
 	_lcd_sub.text = sub
+	_lcd_info.text = info
 
 
 func press_button(i: int) -> void:
-	_press[i] = 1.0
+	if built and i >= 0 and i < _press.size():
+		_press[i] = 1.0
+
+
+## Which cabinet column `i` is in: 0 left, 1 right.
+func side_of(column: int) -> int:
+	return 0 if column < _left else 1
 
 
 ## Column stock heights: share of each box still in it (0..1).
 func set_stock(shares: Array) -> void:
+	if not built:
+		return
 	for i in mini(shares.size(), _stock.size()):
-		var h := maxf(0.03, float(shares[i]) * 2.9)
+		var h := maxf(0.03, float(shares[i]) * STACK_MAX)
 		_stock[i].scale.y = h
-		_stock[i].position.y = 4.0 + h / 2.0
+		_stock[i].position.y = STACK_BASE + h / 2.0
 
 
-## The stack in the output tray: how many tickets are held, and the art and card size
-## of the one on top (the ticket sold last).
-func set_tray(count: int, art: Texture2D, card: Vector2) -> void:
-	_tray_pile.visible = count > 0
-	var th := clampf(count / 500.0 * 1.3, 0.02, 1.3)
-	_tray_pile.scale = Vector3(card.x / 1.4, th, card.y / 2.0)
-	_tray_pile.position = Vector3(0, -0.48 + th / 2.0, 2.3)
-	if art:
-		_stack_mat.albedo_texture = art
+## The stacks in the two output trays (left cabinet, right cabinet). Each entry:
+## {count, art, card}: how many tickets from that cabinet are held, and the art and
+## card size of the one on top (the ticket sold last there).
+func set_trays(piles: Array) -> void:
+	if not built:
+		return
+	for k in mini(piles.size(), _tray_piles.size()):
+		var p: Dictionary = piles[k]
+		var pile := _tray_piles[k]
+		var count: int = p.get("count", 0)
+		pile.visible = count > 0
+		var th := clampf(count / 500.0 * 1.3, 0.02, 1.3)
+		var card: Vector2 = p.get("card", Vector2(1.4, 2.0))
+		pile.scale = Vector3(card.x / 1.4, th, card.y / 2.0)
+		# A card longer than the shelf is deep lies along it.
+		pile.rotation.y = PI / 2.0 if card.y > TRAY_DEPTH else 0.0
+		pile.position = Vector3(_tray_x(k), TRAY_Y + th / 2.0, 2.3)
+		if p.get("art") != null:
+			_stack_mats[k].albedo_texture = p.art
 
 
-## A ticket shoots out into the tray, showing the front of the form that was bought
-## (`art`, with `card` its size in table units).
-func launch_card(art: Texture2D = null, card := Vector2(1.4, 2.0)) -> void:
+## Where the tickets of a cabinet pile up (the only cabinet's tray when there is one).
+func _tray_x(side: int) -> float:
+	return _cabinets[side if _cabinets[side].n > 0 else 0].x
+
+
+## A ticket shoots out of column `column` into its cabinet's tray, showing the front of
+## the form that was bought (`art`, with `card` its size in table units).
+func launch_card(art: Texture2D = null, card := Vector2(1.4, 2.0), column := 0) -> void:
+	if not built:
+		return
 	for i in _fly.size():
 		if not _fly[i].visible:
 			_fly[i].visible = true
 			_fly_mats[i].albedo_texture = art
 			_fly[i].scale = Vector3(card.x / 1.4, 1.0, card.y / 2.0)
-			_fly_state[i] = {"life": 0.0, "x": (randf() - 0.5) * 1.1, "spin": (randf() - 0.5) * 3.0}
-			_fly[i].position = Vector3(0, 0.15, 1.7)
+			var from: float = _column_x[clampi(column, 0, _column_x.size() - 1)]
+			_fly_state[i] = {"life": 0.0, "from": from, "x": _tray_x(side_of(column)) + (randf() - 0.5) * 1.1,
+				"spin": (randf() - 0.5) * 3.0}
+			_fly[i].position = Vector3(from, 0.15, 1.7)
 			return
 
 
 ## Paints the bills the slot takes (a stage's stake changes their values).
 func paint_bills(values: Array) -> void:
+	var fresh := {}
+	var count := 0
 	for v in values:
 		if _bill_tex.has(v):
 			continue
 		_bill_tex[v] = null
+		count += 1
 		var label := "$%d" % v
-		_bill_tex[v] = await _paint(Vector2(136, 64), [
+		_paint_into(fresh, v, Vector2(136, 64), [
 			_rect(0, 0, 136, 64, Color("#8fbf8a")),
-			{"k": "stroke", "pts": PackedVector2Array([Vector2(5, 5), Vector2(131, 5), Vector2(131, 59), Vector2(5, 59)]),
-				"closed": true, "width": 3.0, "color": Color("#27553a"), "join": "miter", "dash": null},
+			_frame(5, 5, 126, 54, 3.0, Color("#27553a")),
 			_text(label, Vector2(68, 44), "slab", 34 if label.length() <= 4 else 27, Color("#17392a"))])
+	while fresh.size() < count:
+		await get_tree().process_frame
+	for v in fresh:
+		_bill_tex[v] = fresh[v]
 
 
 ## The bill sliding into the slot; t is the feed progress 0..1, value 0 hides it.
 func show_bill(value: int, t: float) -> void:
+	if not built:
+		return
 	_bill.visible = value > 0
 	if value == 0:
 		return
 	_bill_mat.albedo_texture = _bill_tex.get(value)
+	var y := SLOT_BASE + 0.48
 	if t < Economy.BILL_SOUND_AT:
 		var k := _ease(t / Economy.BILL_SOUND_AT)
-		_bill.position = Vector3(1.6, lerpf(-0.3, 0.9, k), lerpf(4.4, 2.45, k))
+		_bill.position = Vector3(_console_x, lerpf(y - 1.2, y, k), lerpf(4.4, 2.45, k))
 		_bill.scale.z = 1.0
 	else:
 		var k := (t - Economy.BILL_SOUND_AT) / (1.0 - Economy.BILL_SOUND_AT)
 		_bill.scale.z = maxf(0.01, 1.0 - k)
-		_bill.position = Vector3(1.6, 0.9, 1.8 + 0.65 * (1.0 - k))
+		_bill.position = Vector3(_console_x, y, 1.8 + 0.65 * (1.0 - k))
 
 
 ## PLAY ALL blinks (it blinks while dispensing too, as in the web build).
 func set_blink(on: bool) -> void:
+	if not built:
+		return
 	var l := lamp()
 	var v: float = l.on if on else l.dim
 	_big_mat.albedo_color = Color(v, v, v, 1.0)  # keep alpha 1: the round face is alpha-scissored
@@ -252,6 +502,8 @@ func apply_lamp() -> void:
 
 func _process(dt: float) -> void:
 	_time += dt
+	if not built:
+		return
 	for i in buttons.size():
 		_press[i] *= exp(-dt * 11.0)
 		buttons[i].position.z = _button_z[i] - _press[i] * 0.07
@@ -264,7 +516,7 @@ func _process(dt: float) -> void:
 			_fly[i].visible = false
 			continue
 		var l: float = s.life
-		_fly[i].position = Vector3(s.x * l, 0.15 + sin(l * PI) * 0.25 - l * 0.5, 1.7 + l * 0.8)
+		_fly[i].position = Vector3(lerpf(s.from, s.x, l), 0.15 + sin(l * PI) * 0.25 - l * 0.75, 1.7 + l * 0.8)
 		_fly[i].rotation = Vector3(l * 0.7, s.spin * l, 0)
 
 
@@ -272,11 +524,15 @@ func _process(dt: float) -> void:
 func anchor(name: String) -> Vector3:
 	match name:
 		"slot":
-			return to_global(Vector3(1.6, 0.95, 1.75))
+			return to_global(Vector3(_console_x, SLOT_BASE + 0.5, FACE_Z + 0.15))
 		"side":
-			return to_global(Vector3(3.1, 0.95, 1.6))
-	return to_global(Vector3(1.6, 2.75, 1.75))
+			return to_global(Vector3(width / 2.0, SLOT_BASE + 0.5, FACE_Z))
+	return to_global(Vector3(_console_x, SLOT_BASE + 1.4, FACE_Z + 0.15))
 
+
+## The machine's width in world units, for the camera.
+func world_width() -> float:
+	return width * SCALE
 
 # --- lit push buttons -----------------------------------------------------------
 
@@ -301,7 +557,7 @@ func _square_button(at: Vector3, meta: Dictionary) -> Node3D:
 	cap.add_child(body)
 	cap.add_child(_lamp_face(Vector2(SQUARE_CAP, SQUARE_CAP), false, 0.0505))
 	_collider(cap, Vector3(0.68, 0.68, 0.2), meta)
-	_button_z.append(cap.position.z)
+	_register(cap)
 	return cap
 
 
@@ -327,8 +583,14 @@ func _round_button(at: Vector3) -> Node3D:
 	_big_mat = face.material_override
 	cap.add_child(face)
 	_collider(cap, Vector3(r * 2.0, r * 2.0, 0.3), {"play_all": true})
-	_button_z.append(cap.position.z)
+	_register(cap)
 	return cap
+
+
+func _register(cap: Node3D) -> void:
+	buttons.append(cap)
+	_press.append(0.0)
+	_button_z.append(cap.position.z)
 
 
 func _lamp_face(size: Vector2, round: bool, z: float) -> MeshInstance3D:
@@ -561,34 +823,44 @@ func _collider(owner_mesh: Node3D, size: Vector3, meta: Dictionary) -> void:
 
 
 ## The machine LCD is a live 2D view, so its text updates without repainting.
+## Three lines: the credit, the status, and the column under the pointer.
 func _lcd_texture() -> Texture2D:
 	var vp := SubViewport.new()
-	vp.size = Vector2i(320, 92)
+	vp.size = Vector2i(LCD_PX)
 	vp.disable_3d = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	var bg := ColorRect.new()
 	bg.color = LCD_BG
-	bg.size = Vector2(320, 92)
+	bg.size = LCD_PX
 	vp.add_child(bg)
-	for spec in [[_lcd_top, 36, 8.0], [_lcd_sub, 32, 46.0]]:
+	var rule := ColorRect.new()
+	rule.color = Color(LCD_INK, 0.35)
+	rule.position = Vector2(12, 99)
+	rule.size = Vector2(LCD_PX.x - 24, 2)
+	vp.add_child(rule)
+	_lcd_top = Label.new()
+	_lcd_sub = Label.new()
+	_lcd_info = Label.new()
+	for spec in [[_lcd_top, 38, 6.0], [_lcd_sub, 32, 52.0], [_lcd_info, 32, 104.0]]:
 		var l: Label = spec[0]
 		l.add_theme_font_override("font", FONT_LCD)
 		l.add_theme_font_size_override("font_size", spec[1])
 		l.add_theme_color_override("font_color", LCD_INK)
-		l.position = Vector2(12, spec[2])
-		l.size = Vector2(296, 40)
+		l.position = Vector2(14, spec[2])
+		l.size = Vector2(LCD_PX.x - 28, 40)
 		l.clip_text = true
 		vp.add_child(l)
 	add_child(vp)
 	return vp.get_texture()
 
 
-func _paint(size: Vector2, cmds: Array) -> Texture2D:
-	return await painter.paint(size, cmds)
-
-
 static func _rect(x: float, y: float, w: float, h: float, c: Color) -> Dictionary:
 	return {"k": "poly", "pts": PackedVector2Array([Vector2(x, y), Vector2(x + w, y), Vector2(x + w, y + h), Vector2(x, y + h)]), "color": c}
+
+
+static func _frame(x: float, y: float, w: float, h: float, width: float, c: Color) -> Dictionary:
+	return {"k": "stroke", "pts": PackedVector2Array([Vector2(x, y), Vector2(x + w, y), Vector2(x + w, y + h), Vector2(x, y + h)]),
+		"closed": true, "width": width, "color": c, "join": "miter", "dash": null}
 
 
 static func _text(t: String, pos: Vector2, font: String, size: float, c: Color, align := "center") -> Dictionary:
@@ -598,8 +870,3 @@ static func _text(t: String, pos: Vector2, font: String, size: float, c: Color, 
 
 static func _ease(t: float) -> float:
 	return 2.0 * t * t if t < 0.5 else 1.0 - pow(-2.0 * t + 2.0, 2.0) / 2.0
-
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_PREDELETE:
-		Orphans.free_members(self, ["_lcd_top", "_lcd_sub"])

@@ -1,0 +1,717 @@
+{
+ "format": 1,
+ "card": {
+  "size": [
+   1.7,
+   1.7
+  ],
+  "canvas": [
+   510,
+   510
+  ]
+ },
+ "front": [
+  {
+   "type": "rect",
+   "rect": [
+    0,
+    0,
+    510,
+    510
+   ],
+   "fill": "edge"
+  },
+  {
+   "type": "rect",
+   "rect": [
+    20,
+    20,
+    470,
+    96
+   ],
+   "fill": "head"
+  },
+  {
+   "type": "rect",
+   "rect": [
+    20,
+    20,
+    20,
+    10
+   ],
+   "fill": "tile.0",
+   "repeat": {
+    "count": 11,
+    "step": [
+     45,
+     0
+    ]
+   }
+  },
+  {
+   "type": "text",
+   "text": "{title}",
+   "pos": [
+    255,
+    97
+   ],
+   "font": "slab",
+   "size": 60,
+   "align": "center",
+   "max_width": 440,
+   "stroke": "#ffffff",
+   "stroke_width": 11
+  },
+  {
+   "type": "text",
+   "text": "{title}",
+   "pos": [
+    259,
+    101
+   ],
+   "font": "slab",
+   "size": 60,
+   "fill": "tile.1",
+   "align": "center",
+   "max_width": 440
+  },
+  {
+   "type": "text",
+   "text": "{title}",
+   "pos": [
+    255,
+    97
+   ],
+   "font": "slab",
+   "size": 60,
+   "fill": "ink",
+   "align": "center",
+   "max_width": 440
+  },
+  {
+   "type": "each_tier",
+   "origin": [
+    20,
+    122
+   ],
+   "columns": 2,
+   "step": [
+    237,
+    142
+   ],
+   "layers": [
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      233,
+      138
+     ],
+     "fill": "tile"
+    },
+    {
+     "type": "group",
+     "clip": [
+      0,
+      0,
+      128,
+      138
+     ],
+     "layers": [
+      {
+       "type": "ellipse",
+       "center": [
+        18,
+        18
+       ],
+       "radii": [
+        22,
+        15
+       ],
+       "rotation": 0,
+       "fill": "#ffffff2e"
+      },
+      {
+       "type": "ellipse",
+       "center": [
+        64,
+        18
+       ],
+       "radii": [
+        22,
+        15
+       ],
+       "rotation": 1,
+       "fill": "#ffffff2e"
+      },
+      {
+       "type": "ellipse",
+       "center": [
+        110,
+        68
+       ],
+       "radii": [
+        22,
+        15
+       ],
+       "rotation": 2,
+       "fill": "#ffffff2e"
+      },
+      {
+       "type": "ellipse",
+       "center": [
+        18,
+        68
+       ],
+       "radii": [
+        22,
+        15
+       ],
+       "rotation": 3,
+       "fill": "#ffffff2e"
+      },
+      {
+       "type": "ellipse",
+       "center": [
+        64,
+        118
+       ],
+       "radii": [
+        22,
+        15
+       ],
+       "rotation": 4,
+       "fill": "#ffffff2e"
+      },
+      {
+       "type": "ellipse",
+       "center": [
+        110,
+        118
+       ],
+       "radii": [
+        22,
+        15
+       ],
+       "rotation": 5,
+       "fill": "#ffffff2e"
+      }
+     ]
+    },
+    {
+     "type": "symbol",
+     "center": [
+      64,
+      69
+     ],
+     "size": 122
+    },
+    {
+     "type": "rect",
+     "rect": [
+      128,
+      0,
+      105,
+      138
+     ],
+     "fill": "#ffe600"
+    },
+    {
+     "type": "text",
+     "text": "{count} WIN",
+     "pos": [
+      180.5,
+      50
+     ],
+     "font": "cond_bold",
+     "size": 18,
+     "fill": "#111111",
+     "align": "center",
+     "max_width": 92
+    },
+    {
+     "type": "text",
+     "text": "${tier_prize}",
+     "pos": [
+      180.5,
+      100
+     ],
+     "font": "slab",
+     "size": 40,
+     "fill": "#111111",
+     "align": "center",
+     "max_width": 96
+    }
+   ]
+  },
+  {
+   "type": "rect",
+   "rect": [
+    20,
+    408,
+    470,
+    82
+   ],
+   "fill": "#ffe600"
+  },
+  {
+   "type": "text",
+   "text": "${price}",
+   "pos": [
+    32,
+    476
+   ],
+   "font": "slab",
+   "size": 54,
+   "fill": "#111111",
+   "align": "left"
+  },
+  {
+   "type": "text",
+   "text": "INSTANT WINNERS SHOWN ABOVE.",
+   "pos": [
+    476,
+    426
+   ],
+   "font": "cond_bold",
+   "size": 14,
+   "fill": "#111111",
+   "align": "right",
+   "max_width": 320
+  },
+  {
+   "type": "text",
+   "text": "PAYABLE IN EGG MONEY.",
+   "pos": [
+    476,
+    442
+   ],
+   "font": "cond_bold",
+   "size": 14,
+   "fill": "#111111",
+   "align": "right",
+   "max_width": 320
+  },
+  {
+   "type": "text",
+   "text": "©Ben Kraptu apt.   FORM {code}",
+   "pos": [
+    476,
+    458
+   ],
+   "font": "cond",
+   "size": 14,
+   "fill": "#111111",
+   "align": "right",
+   "max_width": 320
+  },
+  {
+   "type": "text",
+   "text": "SERIAL NO. {serial}",
+   "pos": [
+    476,
+    481
+   ],
+   "font": "lcd",
+   "size": 24,
+   "fill": "#111111",
+   "align": "right",
+   "max_width": 320
+  }
+ ],
+ "interior": {
+  "base": [
+   {
+    "type": "rect",
+    "rect": [
+     0,
+     0,
+     510,
+     510
+    ],
+    "fill": "#ece7da"
+   },
+   {
+    "type": "rect",
+    "rect": [
+     16,
+     16,
+     478,
+     478
+    ],
+    "fill": "#f4f0e5"
+   },
+   {
+    "type": "rect",
+    "rect": [
+     16,
+     105.2,
+     478,
+     8
+    ],
+    "fill": "#ece7da",
+    "repeat": {
+     "count": 4,
+     "step": [
+      0,
+      97.2
+     ]
+    }
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      16,
+      16
+     ],
+     [
+      494,
+      16
+     ]
+    ],
+    "stroke": "#8f8b82",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ],
+    "repeat": {
+     "count": 5,
+     "step": [
+      0,
+      97.2
+     ]
+    }
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      494,
+      16
+     ],
+     [
+      494,
+      105.2
+     ]
+    ],
+    "stroke": "#8f8b82",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ],
+    "repeat": {
+     "count": 5,
+     "step": [
+      0,
+      97.2
+     ]
+    }
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      16,
+      105.2
+     ],
+     [
+      494,
+      105.2
+     ]
+    ],
+    "stroke": "#8f8b82",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ],
+    "repeat": {
+     "count": 5,
+     "step": [
+      0,
+      97.2
+     ]
+    }
+   }
+  ],
+  "slots": [
+   {
+    "rect": [
+     16,
+     16.0,
+     478,
+     89.2
+    ],
+    "anchor": [
+     255,
+     79.6
+    ]
+   },
+   {
+    "rect": [
+     16,
+     113.2,
+     478,
+     89.2
+    ],
+    "anchor": [
+     255,
+     176.8
+    ]
+   },
+   {
+    "rect": [
+     16,
+     210.4,
+     478,
+     89.2
+    ],
+    "anchor": [
+     255,
+     274.0
+    ]
+   },
+   {
+    "rect": [
+     16,
+     307.6,
+     478,
+     89.2
+    ],
+    "anchor": [
+     255,
+     371.2
+    ]
+   },
+   {
+    "rect": [
+     16,
+     404.8,
+     478,
+     89.2
+    ],
+    "anchor": [
+     255,
+     468.4
+    ]
+   }
+  ],
+  "digits": {
+   "direction": "row",
+   "pitch": 58,
+   "color": "#3b3a39",
+   "digit": {
+    "font": "slab",
+    "size": 54,
+    "offset": [
+     0,
+     -3.3
+    ]
+   },
+   "caption": {
+    "font": "cond_bold",
+    "size": 11,
+    "offset": [
+     0,
+     8
+    ],
+    "max_width": 50
+   },
+   "mark": {
+    "font": "cond_bold",
+    "size": 11,
+    "offset": [
+     20,
+     -42
+    ]
+   }
+  },
+  "win_slot": [
+   {
+    "type": "rect",
+    "rect": [
+     12,
+     5,
+     454,
+     79.2
+    ],
+    "fill": "win_tile"
+   },
+   {
+    "type": "symbol",
+    "tier": "win",
+    "center": [
+     100,
+     44.6
+    ],
+    "size": 78
+   },
+   {
+    "type": "rect",
+    "rect": [
+     200,
+     5,
+     266,
+     79.2
+    ],
+    "fill": "#ffe600"
+   },
+   {
+    "type": "text",
+    "text": "${prize}",
+    "pos": [
+     333,
+     62
+    ],
+    "font": "slab",
+    "size": 48,
+    "fill": "#111111",
+    "align": "center",
+    "max_width": 240
+   }
+  ]
+ },
+ "cover_templates": {
+  "tab": {
+   "canvas": [
+    480,
+    90
+   ],
+   "layers": [
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      480,
+      90
+     ],
+     "fill": "#f4f0e5"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       170,
+       30
+      ],
+      [
+       352,
+       30
+      ],
+      [
+       352,
+       13
+      ],
+      [
+       436,
+       45
+      ],
+      [
+       352,
+       77
+      ],
+      [
+       352,
+       60
+      ],
+      [
+       170,
+       60
+      ]
+     ],
+     "closed": true,
+     "stroke": "#494642",
+     "width": 4,
+     "join": "miter"
+    },
+    {
+     "type": "text",
+     "text": "PULL",
+     "pos": [
+      261,
+      54
+     ],
+     "font": "slab",
+     "size": 24,
+     "fill": "#494642",
+     "align": "center"
+    },
+    {
+     "type": "text",
+     "text": "{flap_no}",
+     "pos": [
+      88,
+      63
+     ],
+     "font": "slab",
+     "size": 50,
+     "fill": "#494642",
+     "align": "center"
+    }
+   ]
+  }
+ },
+ "flaps": [
+  {
+   "rect": [
+    16,
+    16.0,
+    478,
+    89.2
+   ],
+   "hinge": "left",
+   "cover": "tab"
+  },
+  {
+   "rect": [
+    16,
+    113.2,
+    478,
+    89.2
+   ],
+   "hinge": "left",
+   "cover": "tab"
+  },
+  {
+   "rect": [
+    16,
+    210.4,
+    478,
+    89.2
+   ],
+   "hinge": "left",
+   "cover": "tab"
+  },
+  {
+   "rect": [
+    16,
+    307.6,
+    478,
+    89.2
+   ],
+   "hinge": "left",
+   "cover": "tab"
+  },
+  {
+   "rect": [
+    16,
+    404.8,
+    478,
+    89.2
+   ],
+   "hinge": "left",
+   "cover": "tab"
+  }
+ ],
+ "pairs": "adjacent",
+ "band": null,
+ "reveal_slide": [
+  0.36,
+  0
+ ]
+}

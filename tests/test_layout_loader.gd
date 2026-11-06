@@ -83,3 +83,24 @@ func test_windows_layout_needs_win_slot() -> void:
 	l = JSON.parse_string(FileAccess.get_file_as_string("res://packs/core/layouts/windows.json"))
 	l.interior.slots[0].erase("rect")
 	check(_validate(l, plate).size() > 0, "one_group slots need a rect")
+
+
+## each_tier can be held to some tiers ("tiers"), and a rect can have round corners.
+func test_tier_filter_and_radius() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var form := pack.form("catch")
+	var l := _single()
+	l.front.append({"type": "each_tier", "tiers": [1, 0], "origin": [0, 0], "columns": 2, "step": [10, 0],
+		"layers": [{"type": "rect", "rect": [0, 0, 8, 8], "fill": "tile", "radius": 3}]})
+	eq(_validate(l, form).size(), 0, "tiers and radius are valid")
+	l.front[-1].tiers = [4]
+	check(_validate(l, form).size() > 0, "a tier the form does not have")
+	l.front[-1].tiers = []
+	check(_validate(l, form).size() > 0, "an empty tier list")
+	l.front[-1].tiers = [0]
+	l.front[-1].layers[0].radius = -1
+	check(_validate(l, form).size() > 0, "a negative radius")
+	for f in ["order", "kabawk", "flock", "nugget", "peckeye"]:
+		check(not pack.form(f).layout.is_empty(), f + " layout loaded")

@@ -1,0 +1,80 @@
+{
+  "id": "order",
+  "name": "Pecking Order",
+  "title": [
+    "PECKING",
+    "ORDER"
+  ],
+  "code": "PO-1S",
+  "price": 1,
+  "colors": {
+    "edge": "#1b7a3a",
+    "head": "#ffd84a",
+    "ink": "#0d3d1c",
+    "tiles": [
+      "#e23d2d",
+      "#f08a1d",
+      "#3aa0e8",
+      "#6cc04a"
+    ]
+  },
+  "tiers": [
+    {
+      "key": "rooster",
+      "label": {
+        "en": "Rooster",
+        "zh": "公鸡"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/rooster.png",
+      "symbol_large": "art/rooster_large.png"
+    },
+    {
+      "key": "hen",
+      "label": {
+        "en": "Hen",
+        "zh": "母鸡"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/hen.png",
+      "symbol_large": "art/hen_large.png"
+    },
+    {
+      "key": "chick",
+      "label": {
+        "en": "Chick",
+        "zh": "小鸡"
+      },
+      "prize": 100,
+      "printed_count": 10,
+      "role": "mid",
+      "symbol": "art/chick.png",
+      "symbol_large": "art/chick_large.png"
+    },
+    {
+      "key": "whole_egg",
+      "label": {
+        "en": "Egg",
+        "zh": "鸡蛋"
+      },
+      "prize": 25,
+      "printed_count": 75,
+      "role": "low",
+      "symbol": "art/whole_egg.png",
+      "symbol_large": "art/whole_egg_large.png"
+    }
+  ],
+  "digit_groups": [
+    4,
+    3,
+    4,
+    3,
+    4
+  ],
+  "win_display": "each_group",
+  "layout": "layouts/order.json"
+}

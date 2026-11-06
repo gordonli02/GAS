@@ -1,0 +1,77 @@
+{
+  "id": "kabawk",
+  "name": "Ka-Bawk!",
+  "title": [
+    "KA-BAWK!"
+  ],
+  "code": "KB-1S",
+  "price": 1,
+  "colors": {
+    "edge": "#17171d",
+    "head": "#2743c9",
+    "ink": "#17171d",
+    "tiles": [
+      "#ff5a1f",
+      "#e23d2d",
+      "#f2c21a",
+      "#3aa0e8"
+    ]
+  },
+  "tiers": [
+    {
+      "key": "bomb",
+      "label": {
+        "en": "Bomb",
+        "zh": "圆炸弹"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/bomb.png",
+      "symbol_large": "art/bomb_large.png"
+    },
+    {
+      "key": "c4",
+      "label": {
+        "en": "C-4",
+        "zh": "C4"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/c4.png",
+      "symbol_large": "art/c4_large.png"
+    },
+    {
+      "key": "grenade",
+      "label": {
+        "en": "Grenade",
+        "zh": "手榴弹"
+      },
+      "prize": 100,
+      "printed_count": 10,
+      "role": "mid",
+      "symbol": "art/grenade.png",
+      "symbol_large": "art/grenade_large.png"
+    },
+    {
+      "key": "shell",
+      "label": {
+        "en": "Shell",
+        "zh": "炮弹"
+      },
+      "prize": 25,
+      "printed_count": 75,
+      "role": "low",
+      "symbol": "art/shell.png",
+      "symbol_large": "art/shell_large.png"
+    }
+  ],
+  "digit_groups": [
+    4,
+    4,
+    3
+  ],
+  "win_display": "whole",
+  "layout": "layouts/kabawk.json"
+}

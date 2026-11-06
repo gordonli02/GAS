@@ -7,6 +7,7 @@ const BASE_POS := Vector3(0, 5.6, 10.5)
 const LOOK_AT := Vector3(0, 2.2, 0)
 const FOV := 42.0
 const SWING_TIME := 0.6
+const MACHINE_SHARE := 0.58        ## of the window's width, at most, in the machine view
 
 var base_basis := Basis.IDENTITY
 var shake := 0.0
@@ -15,6 +16,7 @@ var at_machine := false            ## where the camera is heading
 var cam := 0.0                     ## 0 at the table, 1 at the machine
 var machine: Node3D                ## turns to face the camera as it arrives
 var machine_yaw := 0.0             ## the machine's resting yaw
+var machine_width := 0.0           ## world units; the machine view fits it
 var _machine_pose := Transform3D.IDENTITY
 var _mouse_raw := Vector2.ZERO
 var _time := 0.0
@@ -30,10 +32,12 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(fit_machine_view)
 
 
-## Places the machine view for a machine standing at `pos` (world) with resting yaw.
-func set_machine(node: Node3D, pos: Vector3, yaw: float) -> void:
+## Places the machine view for a machine standing at `pos` (world) with resting yaw,
+## `width` wide (world units).
+func set_machine(node: Node3D, pos: Vector3, yaw: float, width := 0.0) -> void:
 	machine = node
 	machine_yaw = yaw
+	machine_width = width
 	_machine_pose.origin = pos
 	fit_machine_view()
 
@@ -48,7 +52,10 @@ func fit_machine_view() -> void:
 	var size := get_viewport().get_visible_rect().size
 	var vis := 2.0 * tan(deg_to_rad(FOV) / 2.0)
 	var length := base.distance_to(look)
-	var k := maxf(1.0, 7.6 / (length * vis * size.x / maxf(size.y, 1.0)))
+	# The machine takes at most MACHINE_SHARE of the window's width: the HUD plates stand
+	# left and right of it.
+	var need := maxf(7.6, machine_width / MACHINE_SHARE)
+	var k := maxf(1.0, need / (length * vis * size.x / maxf(size.y, 1.0)))
 	var pos := look.lerp(base, k)
 	_machine_pose = Transform3D(Basis.looking_at(look - pos, Vector3.UP), pos)
 

@@ -246,3 +246,102 @@ From G's own to-do list (2026-11-06); the plan is in `docs/roadmap.md`.
     `win_slot`, and the dividers are always printed.
 - **The developer panel's free ticket** puts back any untouched ticket in hand, front or back up
   (it only did so for one front up).
+
+## Milestone 8.6: the machine and five new forms
+The plan is in `docs/roadmap.md`; pictures are in `docs/m8.6/`.
+- **The machine is the eight-column kind** G photographed (`ref images/ng3-8col.png`): two gold
+  cabinets of columns with a black console between them. The roadmap asked for mockups first; the
+  machine was built in the engine instead, with the number of columns a parameter
+  (`MachineView.build` takes any list of forms; half stand left of the console, half right), and
+  `tools/preview_machine.tscn` renders it with 8, 6 and 4 columns for G to pick from. It stands at
+  8: one column per form.
+- **A column** shows, top to bottom: the front of the ticket it sells (a wide ticket stands on its
+  side, as in real machines), the stack of tickets left with its rule, a lit button, and a plate
+  with the key that presses it, the form's name and the price. Keys 1-8 press the columns (1-3
+  before). The whole column answers the pointer; only the button sells.
+- **The LCD has three lines**: credit, status, and the column under the pointer or pressed last
+  (number, name, price). It does not show how many tickets a box has left: that belongs to the
+  box-reading perks (M9).
+- **PLAY ALL is the button after the last column** (`Game.press_play_all`); it was index 3.
+- **Tickets fly out of the column that sold them** into that cabinet's tray; each of the two trays
+  holds its own stack, topped by the ticket sold last on that side.
+- **The machine is rebuilt when the stage changes** (a layer's stake changes the print on the
+  fronts and the prices on the plates; a layer may sell other forms). All its pictures are painted
+  in one frame, so this takes a few frames.
+- **A layer can name its columns**: `"forms": [form ids]` in a `RunConfig` layer; without it the
+  machine sells every form the game started with. No layer names any yet.
+- **The machine moved in every room** and turns less at rest (it is 12.7 wide, was 5.9): where
+  the web build put it, the diner's booth, the bar's counter and the bingo hall's long table
+  stood in front of it. `test_rooms` no longer compares its place with the web build; it checks
+  that the machine clears the walls and the furniture. From the table the machine fills the right
+  of the view and runs off its edge.
+- **The machine view** keeps the machine within 0.58 of the window's width
+  (`CameraRig.MACHINE_SHARE`), so the two HUD plates stand beside it.
+- **Five new forms** on G's themes, each a new look on one of the three ways a ticket opens, with
+  the same prize table and box rules (so the same odds): Pecking Order and Nugget Rush open like
+  Hot Plate, Ka-Bawk! and Peckeye like Big Catch, One Flock like Lucky Spur. Their insides, flaps
+  and band rules are the core layouts'; only the fronts (and One Flock's band) are their own,
+  after real tickets: three of a kind per prize row, a menu board, the prize list set as text.
+  Names and copy are first drafts.
+- **Their art is drawn by a script** (`tools/make_ticket_art.py`): SVG in the web build's manner
+  (flat fills, the same outline colour and weights, the same goggle eyes), turned into PNG by the
+  engine's own SVG reader (`tools/raster_svg.gd`). `tools/make_new_forms.py` writes the forms and
+  layouts.
+- **Two additions to the layout format** (packs/README.md): `each_tier` takes `tiers` (cells for
+  some tiers only, so tiers can differ in size or carry their own text), and `rect` takes `radius`.
+- **Peckeye is a parody** of the spinach-eating sailor: its own name and drawing, nothing taken
+  from the original. Worth another look before release.
+- **Exports leave out `ref images/` and `docs/`** (the editor imports any picture in the project,
+  and the presets export every resource).
+
+### After G's first look at M8.6
+- **The machine belongs to the scene** (G): a plainer venue has a smaller machine selling fewer
+  forms. A room may name its forms (`RoomSet.ROOMS[id].forms`, `RoomSet.machine_forms`); without
+  a list its machine sells every form. The bingo hall has four (Big Catch, Hot Plate, Lucky Spur,
+  Pecking Order: which four is a first guess); the diner and the bar have all eight.
+- **Up to four columns stand in one cabinet with the console on its right**
+  (`MachineView.SINGLE_MAX`), after G's picture of the four-column machine; more columns split
+  into two cabinets around the console. One cabinet has one tray.
+- **Columns are a view of the machine** (`Game.columns`: indexes into `machine.forms`). In free
+  play the machine keeps a box for every form whatever the room shows, so a box goes on where it
+  was when the player comes back to a bigger machine, and tickets already bought of a form the
+  room does not sell are opened as usual. In the run a layer's machine holds only what its
+  scene sells (`Game._run_machine`); a layer's own `forms` list picks among those.
+- **Changing rooms builds the machine anew** when its columns differ (`Game.set_room`, a few
+  frames; a build overtaken by another gives up). PLAY ALL and NEW BOX are let go.
+- **Only Lucky Spur has the paper band** (G). One Flock keeps the wide card and the three
+  columns, without a band: it flips as soon as it is dealt.
+- **Only living things have a face** (G): the bombs, nuggets, bell, rocket, spinach can, anchor
+  and pipe are drawn without eyes and mouth. Lucky Spur's star and cactus lost theirs too: they
+  are drawn again by `tools/make_ticket_art.py` as the web build drew them, less the face, so
+  those two files are no longer the web build's export (`tools/export_web_art.js` would bring
+  the faces back).
+- **The symbols are pictures now, not drawings in code** (G found the code-drawn ones too
+  plain). Seven forms have new symbols: six painted by GPT image from G's prompts (Big Catch,
+  Hot Plate, Pecking Order, Ka-Bawk!, One Flock, Peckeye; originals in `docs/art_redo/gpt/`), one
+  redrawn as SVG (Lucky Spur; `docs/art_redo/6_jsr_spur/`, rendered with headless Chrome by
+  `docs/art_redo/render.py` because it uses filters the engine's SVG reader lacks). Hot Plate
+  had an SVG redraw first (`5_adcap_plate/`); G painted it again with GPT image and that took
+  its place. G leaves the nuggets as they are. `tools/import_symbol_art.py` trims each source, gives every symbol the same margin and
+  writes the two sizes into `packs/core/art/`; Peckeye's front picture is cut from the new sailor
+  there too. `tools/make_ticket_art.py` now writes only what is still code-drawn (the nuggets,
+  One Flock's flag), so it cannot overwrite the pictures; `tools/export_web_art.js` still would
+  (first three forms). Each form has its own manner, as G chose them; the pack format is
+  unchanged. The earlier proposals (`tools/art_proposals.py`, `docs/m8.6/style_*.png`) and the
+  redraws G did not take (`docs/art_redo/1_…` to `5_…`) are not used.
+- **Three forms changed shape** (G). The shape of a card is layout data (`card.size`,
+  `card.canvas`), so nothing in the engine knows these three:
+  - Hot Plate is square, 1.7 a side (`layouts/plate.json`, written by
+    `tools/make_core_layouts.py`): the five windows, wider and lower, and a front of its own.
+    `layouts/windows.json` stays as the built-in tall five-window card ("core:windows", which
+    the pack format promises other packs); Pecking Order and Nugget Rush are built on it.
+  - The long card is 21:9, 2.59 by 1.11: its long side is as long as a layout allows
+    (`LayoutLoader.CARD_MAX`). One Flock has it lying (`strip` in `tools/make_new_forms.py`:
+    one flap hinged along the top, the digit groups side by side). Ka-Bawk! has it standing
+    (`tower`: one flap hinged on the left as on Big Catch, the groups one above the other).
+  - What had to give in the game: the machine fits the ticket it shows into a box
+    (`MachineView.SHOW_W` by `SHOW_H`), so a square card is no wider than the others; the
+    table tray is as wide inside as the longest card (`TableTray.JW`); a card longer than a
+    tray is deep lies turned in it (`TableTray.set_stack`, `MachineView.set_trays`).
+  - `tools/preview_tickets.tscn` holds a ticket of each form at the table and saves it dealt,
+    turned over and open, for looking at a shape in the game.

@@ -7,7 +7,12 @@
   "forms": [
     "forms/catch.json",
     "forms/plate.json",
-    "forms/spur.json"
+    "forms/spur.json",
+    "forms/order.json",
+    "forms/kabawk.json",
+    "forms/flock.json",
+    "forms/nugget.json",
+    "forms/peckeye.json"
   ],
   "tear_sounds": {
     "marks": "audio/tear_marks.json",

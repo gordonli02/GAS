@@ -1,7 +1,10 @@
-"""Writes packs/core/layouts/{single,windows,jar}.json.
+"""Writes packs/core/layouts/{single,windows,plate,jar}.json.
 
-The numbers are taken from the web build's canvas drawing code (reference/last-sale-source.html:
-drawFront, drawFrontWide, drawInterior, drawInteriorWide, drawFlap, drawTab, drawJarCover, band).
+The numbers of single, windows and jar are taken from the web build's canvas drawing code
+(reference/last-sale-source.html: drawFront, drawFrontWide, drawInterior, drawInteriorWide,
+drawFlap, drawTab, drawJarCover, band). Hot Plate left the web build's tall card for a square
+one (G, after M8.6): `plate` is its layout. `windows` stays the built-in tall five-window card
+("core:windows" for other packs); the M8.6 forms are built on it (tools/make_new_forms.py).
 Run: python tools/make_core_layouts.py
 """
 import json
@@ -139,6 +142,62 @@ windows = {
     "reveal_slide": [0.36, 0],
 }
 
+# Hot Plate's square card: the same five windows, wider and lower, and a front of its own with
+# each picture beside its prize.
+SQ, SQ_STEP, SQ_ROW = 510, 97.2, 89.2
+SQ_ROWS = [16 + r * SQ_STEP for r in range(5)]
+square_front = [
+    R([0, 0, SQ, SQ], "edge"), R([20, 20, 470, 96], "head"),
+    R([20, 20, 20, 10], "tile.0", repeat={"count": 11, "step": [45, 0]}),
+    *title(255, 97, 60, 11, 440, 4),
+    {"type": "each_tier", "origin": [20, 122], "columns": 2, "step": [237, 142], "layers": [
+        R([0, 0, 233, 138], "tile"),
+        {"type": "group", "clip": [0, 0, 128, 138], "layers": bubbles(18, 46, 50, 22, 15)},
+        {"type": "symbol", "center": [64, 69], "size": 122},
+        R([128, 0, 105, 138], YEL),
+        T("{count} WIN", [180.5, 50], "cond_bold", 18, max_width=92),
+        T("${tier_prize}", [180.5, 100], "slab", 40, max_width=96)]},
+    R([20, 408, 470, 82], YEL),
+    T("${price}", [32, 476], "slab", 54, align="left"),
+    T("INSTANT WINNERS SHOWN ABOVE.", [476, 426], "cond_bold", 14, align="right", max_width=320),
+    T("PAYABLE IN EGG MONEY.", [476, 442], "cond_bold", 14, align="right", max_width=320),
+    T("©Ben Kraptu apt.   FORM {code}", [476, 458], "cond", 14, align="right", max_width=320),
+    T("SERIAL NO. {serial}", [476, 481], "lcd", 24, align="right", max_width=320),
+]
+
+plate = {
+    "format": 1,
+    "card": {"size": [1.7, 1.7], "canvas": [SQ, SQ]},
+    "front": square_front,
+    "interior": {
+        "base": [
+            R([0, 0, SQ, SQ], "#ece7da"), R([16, 16, 478, 478], STOCK),
+            R([16, 16 + SQ_ROW, 478, 8], "#ece7da", repeat={"count": 4, "step": [0, SQ_STEP]}),
+            perf([16, 16], [494, 16], "#8f8b82", repeat={"count": 5, "step": [0, SQ_STEP]}),
+            perf([494, 16], [494, 16 + SQ_ROW], "#8f8b82", repeat={"count": 5, "step": [0, SQ_STEP]}),
+            perf([16, 16 + SQ_ROW], [494, 16 + SQ_ROW], "#8f8b82", repeat={"count": 5, "step": [0, SQ_STEP]})],
+        "slots": [{"rect": [16, r4(t), 478, SQ_ROW], "anchor": [255, r4(t + SQ_ROW / 2 + 19)]} for t in SQ_ROWS],
+        "digits": {"direction": "row", "pitch": 58, "color": DIG,
+                   "digit": {"font": "slab", "size": 54, "offset": [0, -3.3]},
+                   "caption": {"font": "cond_bold", "size": 11, "offset": [0, 8], "max_width": 50},
+                   "mark": {"font": "cond_bold", "size": 11, "offset": [20, -42]}},
+        "win_slot": [
+            R([12, 5, 454, 79.2], "win_tile"),
+            {"type": "symbol", "tier": "win", "center": [100, 44.6], "size": 78},
+            R([200, 5, 266, 79.2], YEL),
+            T("${prize}", [333, 62], "slab", 48, max_width=240)]},
+    "cover_templates": {"tab": {"canvas": [480, 90], "layers": [
+        R([0, 0, 480, 90], STOCK),
+        {"type": "path", "points": [[170, 30], [352, 30], [352, 13], [436, 45], [352, 77], [352, 60], [170, 60]],
+         "closed": True, "stroke": INK, "width": 4, "join": "miter"},
+        T("PULL", [261, 54], "slab", 24, fill=INK),
+        T("{flap_no}", [88, 63], "slab", 50, fill=INK)]}},
+    "flaps": [{"rect": [16, r4(t), 478, SQ_ROW], "hinge": "left", "cover": "tab"} for t in SQ_ROWS],
+    "pairs": "adjacent",
+    "band": None,
+    "reveal_slide": [0.36, 0],
+}
+
 wide_front = [
     R([0, 0, 640, 400], "edge"), R([16, 14, 608, 74], "head"),
     R([16, 14, 22, 8], "tile.0", repeat={"count": 14, "step": [44, 0]}),
@@ -205,9 +264,14 @@ jar = {
     "reveal_slide": [0, -0.5],
 }
 
-for name, d in [("single", single), ("windows", windows), ("jar", jar)]:
+def write_layout(name, d):
     path = os.path.join(ROOT, "packs", "core", "layouts", name + ".json")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(d, ensure_ascii=False, indent=1) + "\n")
-print("wrote 3 layouts")
+
+
+if __name__ == "__main__":
+    for name, d in [("single", single), ("windows", windows), ("plate", plate), ("jar", jar)]:
+        write_layout(name, d)
+    print("wrote 4 layouts")

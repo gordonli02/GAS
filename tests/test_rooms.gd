@@ -25,10 +25,12 @@ func test_room_configs_match_web() -> void:
 			var light: Array = r[k]
 			var pos: Vector3 = light[2]
 			_near(_nums(_field(line, k + ":\\[([^\\[]*)\\[([^\\]]*)\\]\\]", true)), [light[0], light[1], pos.x, pos.y, pos.z], id + " " + k)
+		# The machine no longer stands where the web build put it: the M8.6 machine is more
+		# than twice as wide, so each room moves it right and turns it less (docs/decisions.md).
+		# It still stands on the web build's floor.
 		var m: Array = r.machine
 		var mp: Vector3 = m[0]
-		_near(_nums(_field(line, "machine:\\{pos:\\[([^\\]]*)\\]")), [mp.x, mp.y, mp.z], id + " machine position")
-		_near(_nums(_field(line, "ry:([-.\\d]+)")), [m[1]], id + " machine yaw")
+		_near(_nums(_field(line, "machine:\\{pos:\\[([^\\]]*)\\]")).slice(1, 2), [mp.y], id + " machine on the floor")
 
 
 ## Triangle counts follow three.js r128; every face points outward and is wound
@@ -89,7 +91,25 @@ func test_rooms_build_with_colliders() -> void:
 			eq(live, 0, id + " colliders off while hidden")
 	check(rooms.get_node(NodePath("bingo")).visible and not rooms.get_node(NodePath("diner")).visible, "only bingo visible")
 	rooms.set_room("bar")
-	check(rooms.machine_pos().is_equal_approx(Vector3(11, -3.25, -12.8)) and is_equal_approx(rooms.machine_yaw(), -.45), "bar machine placement")
+	check(rooms.machine_pos().is_equal_approx(Vector3(14.2, -3.25, -13.2)) and is_equal_approx(rooms.machine_yaw(), -.22), "bar machine placement")
+	# A room's machine sells every form (eight columns: 12.73 wide, 3.04 deep) or the
+	# forms the room names (the bingo hall's four: one cabinet and the console, 7.79
+	# wide). It keeps clear of the side wall at x = 23, of the room's back wall and of
+	# what stands at its depth on the left (the diner's counter, the bar's counter, the
+	# bingo hall's long table), at rest and turned to face the player.
+	eq(RoomSet.machine_forms("bingo"), ["core:catch", "core:plate", "core:spur", "core:order"], "the bingo hall's machine sells four forms")
+	eq(RoomSet.machine_forms("diner"), [], "the diner's sells every form")
+	eq(RoomSet.machine_forms("nowhere"), [], "an unknown room names none")
+	for id in RoomSet.ORDER:
+		var m: Array = RoomSet.ROOMS[id].machine
+		var p: Vector3 = m[0]
+		var n := RoomSet.machine_forms(id).size()
+		var wide := 12.73 if n == 0 or n > MachineView.SINGLE_MAX else (n * MachineView.PITCH + 0.6 + MachineView.CONSOLE_W) * MachineView.SCALE
+		var reach := wide / 2.0 * cos(m[1]) + 1.52 * absf(sin(m[1]))
+		var depth := wide / 2.0 * absf(sin(m[1])) + 1.52 * cos(m[1])
+		check(p.x + reach < 22.8, id + ": the machine clears the side wall")
+		check(p.z - depth > {"diner": -17.8, "bar": -17.3, "bingo": -21.8}[id], id + ": the machine clears the back wall")
+		check(p.x - maxf(reach, wide / 2.0) > {"diner": -2.0, "bar": 6.3, "bingo": 5.6}[id], id + ": the machine clears the furniture")
 	for name in ["diner_formica", "diner_tiles", "diner_dusk", "diner_neon", "diner_juke", "bar_wood", "bar_planks", "bar_neon",
 			"phone_keys", "phone_screen", "bingo_laminate", "bingo_board", "bingo_sheet", "pig_tag"]:
 		check(RoomKit.tex(name) != null, "texture " + name)

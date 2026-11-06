@@ -1,0 +1,1075 @@
+{
+ "format": 1,
+ "card": {
+  "size": [
+   1.4,
+   2.0
+  ],
+  "canvas": [
+   420,
+   600
+  ]
+ },
+ "front": [
+  {
+   "type": "rect",
+   "rect": [
+    0,
+    0,
+    420,
+    600
+   ],
+   "fill": "edge"
+  },
+  {
+   "type": "rect",
+   "rect": [
+    14,
+    14,
+    392,
+    122
+   ],
+   "fill": "head",
+   "radius": 14
+  },
+  {
+   "type": "circle",
+   "center": [
+    30,
+    27
+   ],
+   "radius": 4.5,
+   "fill": "#ffe98a",
+   "repeat": {
+    "count": 14,
+    "step": [
+     27.7,
+     0
+    ]
+   }
+  },
+  {
+   "type": "circle",
+   "center": [
+    30,
+    123
+   ],
+   "radius": 4.5,
+   "fill": "#ffe98a",
+   "repeat": {
+    "count": 14,
+    "step": [
+     27.7,
+     0
+    ]
+   }
+  },
+  {
+   "type": "text",
+   "text": "NUGGET RUSH",
+   "pos": [
+    213,
+    92
+   ],
+   "font": "slab",
+   "size": 50,
+   "fill": "#5e0d06",
+   "align": "center",
+   "max_width": 360
+  },
+  {
+   "type": "text",
+   "text": "NUGGET RUSH",
+   "pos": [
+    210,
+    89
+   ],
+   "font": "slab",
+   "size": 50,
+   "fill": "#ffffff",
+   "align": "center",
+   "max_width": 360
+  },
+  {
+   "type": "text",
+   "text": "FRESH FROM THE FRYER",
+   "pos": [
+    210,
+    112
+   ],
+   "font": "cond_bold",
+   "size": 15,
+   "fill": "#ffe98a",
+   "align": "center"
+  },
+  {
+   "type": "rect",
+   "rect": [
+    14,
+    144,
+    392,
+    350
+   ],
+   "fill": "#fff3d1",
+   "radius": 12
+  },
+  {
+   "type": "each_tier",
+   "tiers": [
+    0
+   ],
+   "origin": [
+    22,
+    150
+   ],
+   "columns": 1,
+   "step": [
+    0,
+    0
+   ],
+   "layers": [
+    {
+     "type": "symbol",
+     "center": [
+      46,
+      42
+     ],
+     "size": 80
+    },
+    {
+     "type": "text",
+     "text": "DINO",
+     "pos": [
+      96,
+      40
+     ],
+     "font": "slab",
+     "size": 27,
+     "fill": "ink",
+     "align": "left"
+    },
+    {
+     "type": "text",
+     "text": "{count} WIN",
+     "pos": [
+      97,
+      62
+     ],
+     "font": "cond_bold",
+     "size": 15,
+     "fill": "#a3541c",
+     "align": "left"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       190,
+       38
+      ],
+      [
+       262,
+       38
+      ]
+     ],
+     "stroke": "#c9a66b",
+     "width": 3,
+     "dash": [
+      3,
+      6
+     ]
+    },
+    {
+     "type": "text",
+     "text": "${tier_prize}",
+     "pos": [
+      372,
+      56
+     ],
+     "font": "slab",
+     "size": 42,
+     "fill": "head",
+     "align": "right",
+     "max_width": 104
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       4,
+       84
+      ],
+      [
+       372,
+       84
+      ]
+     ],
+     "stroke": "#e6cf9f",
+     "width": 2
+    }
+   ]
+  },
+  {
+   "type": "each_tier",
+   "tiers": [
+    1
+   ],
+   "origin": [
+    22,
+    235
+   ],
+   "columns": 1,
+   "step": [
+    0,
+    0
+   ],
+   "layers": [
+    {
+     "type": "symbol",
+     "center": [
+      46,
+      42
+     ],
+     "size": 80
+    },
+    {
+     "type": "text",
+     "text": "STAR",
+     "pos": [
+      96,
+      40
+     ],
+     "font": "slab",
+     "size": 27,
+     "fill": "ink",
+     "align": "left"
+    },
+    {
+     "type": "text",
+     "text": "{count} WIN",
+     "pos": [
+      97,
+      62
+     ],
+     "font": "cond_bold",
+     "size": 15,
+     "fill": "#a3541c",
+     "align": "left"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       190,
+       38
+      ],
+      [
+       262,
+       38
+      ]
+     ],
+     "stroke": "#c9a66b",
+     "width": 3,
+     "dash": [
+      3,
+      6
+     ]
+    },
+    {
+     "type": "text",
+     "text": "${tier_prize}",
+     "pos": [
+      372,
+      56
+     ],
+     "font": "slab",
+     "size": 42,
+     "fill": "head",
+     "align": "right",
+     "max_width": 104
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       4,
+       84
+      ],
+      [
+       372,
+       84
+      ]
+     ],
+     "stroke": "#e6cf9f",
+     "width": 2
+    }
+   ]
+  },
+  {
+   "type": "each_tier",
+   "tiers": [
+    2
+   ],
+   "origin": [
+    22,
+    320
+   ],
+   "columns": 1,
+   "step": [
+    0,
+    0
+   ],
+   "layers": [
+    {
+     "type": "symbol",
+     "center": [
+      46,
+      42
+     ],
+     "size": 80
+    },
+    {
+     "type": "text",
+     "text": "BOOT",
+     "pos": [
+      96,
+      40
+     ],
+     "font": "slab",
+     "size": 27,
+     "fill": "ink",
+     "align": "left"
+    },
+    {
+     "type": "text",
+     "text": "{count} WIN",
+     "pos": [
+      97,
+      62
+     ],
+     "font": "cond_bold",
+     "size": 15,
+     "fill": "#a3541c",
+     "align": "left"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       190,
+       38
+      ],
+      [
+       262,
+       38
+      ]
+     ],
+     "stroke": "#c9a66b",
+     "width": 3,
+     "dash": [
+      3,
+      6
+     ]
+    },
+    {
+     "type": "text",
+     "text": "${tier_prize}",
+     "pos": [
+      372,
+      56
+     ],
+     "font": "slab",
+     "size": 42,
+     "fill": "head",
+     "align": "right",
+     "max_width": 104
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       4,
+       84
+      ],
+      [
+       372,
+       84
+      ]
+     ],
+     "stroke": "#e6cf9f",
+     "width": 2
+    }
+   ]
+  },
+  {
+   "type": "each_tier",
+   "tiers": [
+    3
+   ],
+   "origin": [
+    22,
+    405
+   ],
+   "columns": 1,
+   "step": [
+    0,
+    0
+   ],
+   "layers": [
+    {
+     "type": "symbol",
+     "center": [
+      46,
+      42
+     ],
+     "size": 80
+    },
+    {
+     "type": "text",
+     "text": "BALL",
+     "pos": [
+      96,
+      40
+     ],
+     "font": "slab",
+     "size": 27,
+     "fill": "ink",
+     "align": "left"
+    },
+    {
+     "type": "text",
+     "text": "{count} WIN",
+     "pos": [
+      97,
+      62
+     ],
+     "font": "cond_bold",
+     "size": 15,
+     "fill": "#a3541c",
+     "align": "left"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       190,
+       38
+      ],
+      [
+       262,
+       38
+      ]
+     ],
+     "stroke": "#c9a66b",
+     "width": 3,
+     "dash": [
+      3,
+      6
+     ]
+    },
+    {
+     "type": "text",
+     "text": "${tier_prize}",
+     "pos": [
+      372,
+      56
+     ],
+     "font": "slab",
+     "size": 42,
+     "fill": "head",
+     "align": "right",
+     "max_width": 104
+    }
+   ]
+  },
+  {
+   "type": "rect",
+   "rect": [
+    14,
+    502,
+    392,
+    84
+   ],
+   "fill": "head",
+   "radius": 12
+  },
+  {
+   "type": "path",
+   "points": [
+    [
+     60.0,
+     504.0
+    ],
+    [
+     66.9,
+     513.78
+    ],
+    [
+     77.36,
+     507.96
+    ],
+    [
+     79.33,
+     519.76
+    ],
+    [
+     91.27,
+     519.06
+    ],
+    [
+     87.93,
+     530.55
+    ],
+    [
+     99.0,
+     535.1
+    ],
+    [
+     91.0,
+     544.0
+    ],
+    [
+     99.0,
+     552.9
+    ],
+    [
+     87.93,
+     557.45
+    ],
+    [
+     91.27,
+     568.94
+    ],
+    [
+     79.33,
+     568.24
+    ],
+    [
+     77.36,
+     580.04
+    ],
+    [
+     66.9,
+     574.22
+    ],
+    [
+     60.0,
+     584.0
+    ],
+    [
+     53.1,
+     574.22
+    ],
+    [
+     42.64,
+     580.04
+    ],
+    [
+     40.67,
+     568.24
+    ],
+    [
+     28.73,
+     568.94
+    ],
+    [
+     32.07,
+     557.45
+    ],
+    [
+     21.0,
+     552.9
+    ],
+    [
+     29.0,
+     544.0
+    ],
+    [
+     21.0,
+     535.1
+    ],
+    [
+     32.07,
+     530.55
+    ],
+    [
+     28.73,
+     519.06
+    ],
+    [
+     40.67,
+     519.76
+    ],
+    [
+     42.64,
+     507.96
+    ],
+    [
+     53.1,
+     513.78
+    ]
+   ],
+   "closed": true,
+   "fill": "#ffd23a"
+  },
+  {
+   "type": "text",
+   "text": "${price}",
+   "pos": [
+    60,
+    560
+   ],
+   "font": "slab",
+   "size": 40,
+   "fill": "ink",
+   "align": "center",
+   "max_width": 56
+  },
+  {
+   "type": "text",
+   "text": "INSTANT WINNERS SHOWN ABOVE.",
+   "pos": [
+    394,
+    521
+   ],
+   "font": "cond_bold",
+   "size": 14,
+   "fill": "#ffffff",
+   "align": "right",
+   "max_width": 262
+  },
+  {
+   "type": "text",
+   "text": "PAYABLE IN EGG MONEY.",
+   "pos": [
+    394,
+    537
+   ],
+   "font": "cond_bold",
+   "size": 14,
+   "fill": "#ffffff",
+   "align": "right",
+   "max_width": 262
+  },
+  {
+   "type": "text",
+   "text": "©Ben Kraptu apt.   FORM {code}",
+   "pos": [
+    394,
+    553
+   ],
+   "font": "cond",
+   "size": 14,
+   "fill": "#ffffff",
+   "align": "right",
+   "max_width": 262
+  },
+  {
+   "type": "text",
+   "text": "SERIAL NO. {serial}",
+   "pos": [
+    394,
+    577
+   ],
+   "font": "lcd",
+   "size": 24,
+   "fill": "#ffffff",
+   "align": "right",
+   "max_width": 262
+  }
+ ],
+ "interior": {
+  "base": [
+   {
+    "type": "rect",
+    "rect": [
+     0,
+     0,
+     420,
+     600
+    ],
+    "fill": "#ece7da"
+   },
+   {
+    "type": "rect",
+    "rect": [
+     16,
+     16,
+     388,
+     568
+    ],
+    "fill": "#f4f0e5"
+   },
+   {
+    "type": "rect",
+    "rect": [
+     16,
+     123.2,
+     388,
+     8
+    ],
+    "fill": "#ece7da",
+    "repeat": {
+     "count": 4,
+     "step": [
+      0,
+      115.2
+     ]
+    }
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      16,
+      16
+     ],
+     [
+      404,
+      16
+     ]
+    ],
+    "stroke": "#8f8b82",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ],
+    "repeat": {
+     "count": 5,
+     "step": [
+      0,
+      115.2
+     ]
+    }
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      404,
+      16
+     ],
+     [
+      404,
+      123.2
+     ]
+    ],
+    "stroke": "#8f8b82",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ],
+    "repeat": {
+     "count": 5,
+     "step": [
+      0,
+      115.2
+     ]
+    }
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      16,
+      123.2
+     ],
+     [
+      404,
+      123.2
+     ]
+    ],
+    "stroke": "#8f8b82",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ],
+    "repeat": {
+     "count": 5,
+     "step": [
+      0,
+      115.2
+     ]
+    }
+   }
+  ],
+  "slots": [
+   {
+    "rect": [
+     16,
+     16.0,
+     388,
+     107.2
+    ],
+    "anchor": [
+     210,
+     91.6
+    ]
+   },
+   {
+    "rect": [
+     16,
+     131.2,
+     388,
+     107.2
+    ],
+    "anchor": [
+     210,
+     206.8
+    ]
+   },
+   {
+    "rect": [
+     16,
+     246.4,
+     388,
+     107.2
+    ],
+    "anchor": [
+     210,
+     322.0
+    ]
+   },
+   {
+    "rect": [
+     16,
+     361.6,
+     388,
+     107.2
+    ],
+    "anchor": [
+     210,
+     437.2
+    ]
+   },
+   {
+    "rect": [
+     16,
+     476.8,
+     388,
+     107.2
+    ],
+    "anchor": [
+     210,
+     552.4
+    ]
+   }
+  ],
+  "digits": {
+   "direction": "row",
+   "pitch": 55.44,
+   "color": "#3b3a39",
+   "digit": {
+    "font": "slab",
+    "size": 64.68,
+    "offset": [
+     0,
+     -3.96
+    ]
+   },
+   "caption": {
+    "font": "cond_bold",
+    "size": 11,
+    "offset": [
+     0,
+     8.58
+    ],
+    "max_width": 44.88
+   },
+   "mark": {
+    "font": "cond_bold",
+    "size": 11,
+    "offset": [
+     21.78,
+     -50.16
+    ]
+   }
+  },
+  "win_slot": [
+   {
+    "type": "rect",
+    "rect": [
+     12,
+     6,
+     364,
+     95.2
+    ],
+    "fill": "win_tile"
+   },
+   {
+    "type": "symbol",
+    "tier": "win",
+    "center": [
+     86,
+     53.6
+    ],
+    "size": 91.2
+   },
+   {
+    "type": "rect",
+    "rect": [
+     160,
+     6,
+     216,
+     95.2
+    ],
+    "fill": "#ffe600"
+   },
+   {
+    "type": "text",
+    "text": "${prize}",
+    "pos": [
+     268,
+     73.6
+    ],
+    "font": "slab",
+    "size": 54,
+    "fill": "#111111",
+    "align": "center",
+    "max_width": 196
+   }
+  ]
+ },
+ "cover_templates": {
+  "tab": {
+   "canvas": [
+    400,
+    111
+   ],
+   "layers": [
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      400,
+      111
+     ],
+     "fill": "#f4f0e5"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       140,
+       38
+      ],
+      [
+       296,
+       38
+      ],
+      [
+       296,
+       18
+      ],
+      [
+       366,
+       55
+      ],
+      [
+       296,
+       92
+      ],
+      [
+       296,
+       72
+      ],
+      [
+       140,
+       72
+      ]
+     ],
+     "closed": true,
+     "stroke": "#494642",
+     "width": 4,
+     "join": "miter"
+    },
+    {
+     "type": "text",
+     "text": "PULL",
+     "pos": [
+      216,
+      66
+     ],
+     "font": "slab",
+     "size": 27,
+     "fill": "#494642",
+     "align": "center"
+    },
+    {
+     "type": "text",
+     "text": "{flap_no}",
+     "pos": [
+      72,
+      76
+     ],
+     "font": "slab",
+     "size": 58,
+     "fill": "#494642",
+     "align": "center"
+    }
+   ]
+  }
+ },
+ "flaps": [
+  {
+   "rect": [
+    16,
+    16.0,
+    388,
+    107.2
+   ],
+   "hinge": "left",
+   "cover": "tab"
+  },
+  {
+   "rect": [
+    16,
+    131.2,
+    388,
+    107.2
+   ],
+   "hinge": "left",
+   "cover": "tab"
+  },
+  {
+   "rect": [
+    16,
+    246.4,
+    388,
+    107.2
+   ],
+   "hinge": "left",
+   "cover": "tab"
+  },
+  {
+   "rect": [
+    16,
+    361.6,
+    388,
+    107.2
+   ],
+   "hinge": "left",
+   "cover": "tab"
+  },
+  {
+   "rect": [
+    16,
+    476.8,
+    388,
+    107.2
+   ],
+   "hinge": "left",
+   "cover": "tab"
+  }
+ ],
+ "pairs": "adjacent",
+ "band": null,
+ "reveal_slide": [
+  0.36,
+  0
+ ]
+}

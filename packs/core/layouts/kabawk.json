@@ -1,0 +1,1198 @@
+{
+ "format": 1,
+ "card": {
+  "size": [
+   1.11,
+   2.59
+  ],
+  "canvas": [
+   360,
+   840
+  ]
+ },
+ "front": [
+  {
+   "type": "rect",
+   "rect": [
+    0,
+    0,
+    360,
+    840
+   ],
+   "fill": "edge"
+  },
+  {
+   "type": "group",
+   "clip": [
+    12,
+    12,
+    336,
+    16
+   ],
+   "layers": [
+    {
+     "type": "rect",
+     "rect": [
+      12,
+      12,
+      336,
+      16
+     ],
+     "fill": "#ffd23a"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       -8,
+       12
+      ],
+      [
+       6,
+       12
+      ],
+      [
+       22,
+       28
+      ],
+      [
+       8,
+       28
+      ]
+     ],
+     "closed": true,
+     "fill": "#17171d",
+     "repeat": {
+      "count": 14,
+      "step": [
+       28,
+       0
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "type": "rect",
+   "rect": [
+    12,
+    34,
+    336,
+    338
+   ],
+   "fill": "head"
+  },
+  {
+   "type": "group",
+   "clip": [
+    12,
+    34,
+    336,
+    338
+   ],
+   "layers": [
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       618.93,
+       206.69
+      ],
+      [
+       604.51,
+       291.73
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       573.77,
+       372.33
+      ],
+      [
+       527.9,
+       445.38
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       468.67,
+       508.07
+      ],
+      [
+       398.34,
+       558.01
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       319.61,
+       593.26
+      ],
+      [
+       235.53,
+       612.48
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       149.31,
+       614.93
+      ],
+      [
+       64.27,
+       600.51
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       -16.33,
+       569.77
+      ],
+      [
+       -89.38,
+       523.9
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       -152.07,
+       464.67
+      ],
+      [
+       -202.01,
+       394.34
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       -237.26,
+       315.61
+      ],
+      [
+       -256.48,
+       231.53
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       -258.93,
+       145.31
+      ],
+      [
+       -244.51,
+       60.27
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       -213.77,
+       -20.33
+      ],
+      [
+       -167.9,
+       -93.38
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       -108.67,
+       -156.07
+      ],
+      [
+       -38.34,
+       -206.01
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       40.39,
+       -241.26
+      ],
+      [
+       124.47,
+       -260.48
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       210.69,
+       -262.93
+      ],
+      [
+       295.73,
+       -248.51
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       376.33,
+       -217.77
+      ],
+      [
+       449.38,
+       -171.9
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       512.07,
+       -112.67
+      ],
+      [
+       562.01,
+       -42.34
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       180,
+       176
+      ],
+      [
+       597.26,
+       36.39
+      ],
+      [
+       616.48,
+       120.47
+      ]
+     ],
+     "closed": true,
+     "fill": "#3a5bf0"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       201.99,
+       15.54
+      ],
+      [
+       215.17,
+       89.15
+      ],
+      [
+       277.27,
+       47.49
+      ],
+      [
+       251.88,
+       117.84
+      ],
+      [
+       326.5,
+       112.81
+      ],
+      [
+       269.33,
+       161.03
+      ],
+      [
+       336.46,
+       193.99
+      ],
+      [
+       262.85,
+       207.17
+      ],
+      [
+       304.51,
+       269.27
+      ],
+      [
+       234.16,
+       243.88
+      ],
+      [
+       239.19,
+       318.5
+      ],
+      [
+       190.97,
+       261.33
+      ],
+      [
+       158.01,
+       328.46
+      ],
+      [
+       144.83,
+       254.85
+      ],
+      [
+       82.73,
+       296.51
+      ],
+      [
+       108.12,
+       226.16
+      ],
+      [
+       33.5,
+       231.19
+      ],
+      [
+       90.67,
+       182.97
+      ],
+      [
+       23.54,
+       150.01
+      ],
+      [
+       97.15,
+       136.83
+      ],
+      [
+       55.49,
+       74.73
+      ],
+      [
+       125.84,
+       100.12
+      ],
+      [
+       120.81,
+       25.5
+      ],
+      [
+       169.03,
+       82.67
+      ]
+     ],
+     "closed": true,
+     "fill": "#ff5a1f"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       226.11,
+       63.38
+      ],
+      [
+       220.63,
+       119.99
+      ],
+      [
+       274.24,
+       100.99
+      ],
+      [
+       241.19,
+       147.28
+      ],
+      [
+       297.12,
+       157.62
+      ],
+      [
+       245.36,
+       181.19
+      ],
+      [
+       288.62,
+       218.11
+      ],
+      [
+       232.01,
+       212.63
+      ],
+      [
+       251.01,
+       266.24
+      ],
+      [
+       204.72,
+       233.19
+      ],
+      [
+       194.38,
+       289.12
+      ],
+      [
+       170.81,
+       237.36
+      ],
+      [
+       133.89,
+       280.62
+      ],
+      [
+       139.37,
+       224.01
+      ],
+      [
+       85.76,
+       243.01
+      ],
+      [
+       118.81,
+       196.72
+      ],
+      [
+       62.88,
+       186.38
+      ],
+      [
+       114.64,
+       162.81
+      ],
+      [
+       71.38,
+       125.89
+      ],
+      [
+       127.99,
+       131.37
+      ],
+      [
+       108.99,
+       77.76
+      ],
+      [
+       155.28,
+       110.81
+      ],
+      [
+       165.62,
+       54.88
+      ],
+      [
+       189.19,
+       106.64
+      ]
+     ],
+     "closed": true,
+     "fill": "#ffd23a"
+    }
+   ]
+  },
+  {
+   "type": "symbol",
+   "center": [
+    176,
+    166
+   ],
+   "size": 204,
+   "tier": 0,
+   "variant": "large"
+  },
+  {
+   "type": "text",
+   "text": "KA-BAWK!",
+   "pos": [
+    184,
+    354
+   ],
+   "font": "slab",
+   "size": 62,
+   "fill": "#17171d",
+   "align": "center",
+   "max_width": 316
+  },
+  {
+   "type": "text",
+   "text": "KA-BAWK!",
+   "pos": [
+    180,
+    350
+   ],
+   "font": "slab",
+   "size": 62,
+   "fill": "#ffd23a",
+   "align": "center",
+   "max_width": 316,
+   "stroke": "#a3140f",
+   "stroke_width": 10
+  },
+  {
+   "type": "each_tier",
+   "origin": [
+    12,
+    378
+   ],
+   "columns": 1,
+   "step": [
+    0,
+    83
+   ],
+   "layers": [
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      336,
+      79
+     ],
+     "fill": "#26262f"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      8,
+      79
+     ],
+     "fill": "tile"
+    },
+    {
+     "type": "symbol",
+     "center": [
+      56,
+      40
+     ],
+     "size": 70
+    },
+    {
+     "type": "text",
+     "text": "${tier_prize}",
+     "pos": [
+      104,
+      56
+     ],
+     "font": "slab",
+     "size": 46,
+     "fill": "#ffd23a",
+     "align": "left",
+     "max_width": 138
+    },
+    {
+     "type": "text",
+     "text": "{count} WIN",
+     "pos": [
+      322,
+      49
+     ],
+     "font": "cond_bold",
+     "size": 19,
+     "fill": "#ffffff",
+     "align": "right",
+     "max_width": 76
+    }
+   ]
+  },
+  {
+   "type": "group",
+   "clip": [
+    12,
+    712,
+    336,
+    12
+   ],
+   "layers": [
+    {
+     "type": "rect",
+     "rect": [
+      12,
+      712,
+      336,
+      12
+     ],
+     "fill": "#ffd23a"
+    },
+    {
+     "type": "path",
+     "points": [
+      [
+       -8,
+       712
+      ],
+      [
+       6,
+       712
+      ],
+      [
+       18,
+       724
+      ],
+      [
+       4,
+       724
+      ]
+     ],
+     "closed": true,
+     "fill": "#17171d",
+     "repeat": {
+      "count": 14,
+      "step": [
+       28,
+       0
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "type": "rect",
+   "rect": [
+    12,
+    724,
+    336,
+    104
+   ],
+   "fill": "#ffd23a"
+  },
+  {
+   "type": "text",
+   "text": "${price}",
+   "pos": [
+    24,
+    812
+   ],
+   "font": "slab",
+   "size": 64,
+   "fill": "#17171d",
+   "align": "left"
+  },
+  {
+   "type": "text",
+   "text": "INSTANT WINNERS SHOWN ABOVE.",
+   "pos": [
+    338,
+    748
+   ],
+   "font": "cond_bold",
+   "size": 14,
+   "fill": "#17171d",
+   "align": "right",
+   "max_width": 226
+  },
+  {
+   "type": "text",
+   "text": "PAYABLE IN EGG MONEY.",
+   "pos": [
+    338,
+    765
+   ],
+   "font": "cond_bold",
+   "size": 14,
+   "fill": "#17171d",
+   "align": "right",
+   "max_width": 226
+  },
+  {
+   "type": "text",
+   "text": "©Ben Kraptu apt.   FORM {code}",
+   "pos": [
+    338,
+    782
+   ],
+   "font": "cond",
+   "size": 14,
+   "fill": "#17171d",
+   "align": "right",
+   "max_width": 226
+  },
+  {
+   "type": "text",
+   "text": "SERIAL NO. {serial}",
+   "pos": [
+    338,
+    808
+   ],
+   "font": "lcd",
+   "size": 22,
+   "fill": "#17171d",
+   "align": "right",
+   "max_width": 226
+  }
+ ],
+ "interior": {
+  "base": [
+   {
+    "type": "rect",
+    "rect": [
+     0,
+     0,
+     360,
+     840
+    ],
+    "fill": "#ece7da"
+   },
+   {
+    "type": "rect",
+    "rect": [
+     16,
+     16,
+     328,
+     808
+    ],
+    "fill": "#f4f0e5"
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      16,
+      16
+     ],
+     [
+      344,
+      16
+     ]
+    ],
+    "stroke": "#8f8b82",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ]
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      344,
+      16
+     ],
+     [
+      344,
+      824
+     ]
+    ],
+    "stroke": "#8f8b82",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ]
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      16,
+      824
+     ],
+     [
+      344,
+      824
+     ]
+    ],
+    "stroke": "#8f8b82",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ]
+   },
+   {
+    "type": "text",
+    "text": "PAYABLE IN EGG MONEY",
+    "pos": [
+     180,
+     815
+    ],
+    "font": "cond_bold",
+    "size": 12,
+    "fill": "#5c5850",
+    "align": "center"
+   }
+  ],
+  "slots": [
+   {
+    "anchor": [
+     180,
+     196
+    ]
+   },
+   {
+    "anchor": [
+     180,
+     440
+    ]
+   },
+   {
+    "anchor": [
+     180,
+     684
+    ]
+   }
+  ],
+  "digits": {
+   "direction": "row",
+   "pitch": 76,
+   "color": "#3b3a39",
+   "digit": {
+    "font": "slab",
+    "size": 88,
+    "offset": [
+     0,
+     -5.4
+    ]
+   },
+   "caption": {
+    "font": "cond_bold",
+    "size": 14,
+    "offset": [
+     0,
+     12
+    ],
+    "max_width": 62
+   },
+   "mark": {
+    "font": "cond_bold",
+    "size": 14,
+    "offset": [
+     30,
+     -69
+    ]
+   }
+  },
+  "winner": [
+   {
+    "type": "rect",
+    "rect": [
+     36,
+     44,
+     288,
+     632
+    ],
+    "fill": "win_tile"
+   },
+   {
+    "type": "circle",
+    "center": [
+     180,
+     344
+    ],
+    "radius": 134,
+    "fill": "#ffffff30"
+   },
+   {
+    "type": "symbol",
+    "tier": "win",
+    "variant": "large",
+    "center": [
+     180,
+     344
+    ],
+    "size": 252
+   },
+   {
+    "type": "rect",
+    "rect": [
+     36,
+     676,
+     288,
+     116
+    ],
+    "fill": "#ffe600"
+   },
+   {
+    "type": "text",
+    "text": "${prize}",
+    "pos": [
+     180,
+     764
+    ],
+    "font": "slab",
+    "size": 78,
+    "fill": "#111111",
+    "align": "center",
+    "max_width": 268
+   },
+   {
+    "type": "text",
+    "text": "VERIFY {verify}",
+    "pos": [
+     180,
+     70
+    ],
+    "font": "lcd",
+    "size": 20,
+    "fill": "#ffffff",
+    "align": "center",
+    "if": "verify"
+   }
+  ]
+ },
+ "flaps": [
+  {
+   "rect": [
+    16,
+    16,
+    328,
+    808
+   ],
+   "hinge": "left",
+   "cover": {
+    "canvas": [
+     328,
+     808
+    ],
+    "layers": [
+     {
+      "type": "rect",
+      "rect": [
+       0,
+       0,
+       328,
+       808
+      ],
+      "fill": "#f4f0e5"
+     },
+     {
+      "type": "path",
+      "points": [
+       [
+        26,
+        176
+       ],
+       [
+        206,
+        176
+       ],
+       [
+        206,
+        138
+       ],
+       [
+        304,
+        232
+       ],
+       [
+        206,
+        326
+       ],
+       [
+        206,
+        288
+       ],
+       [
+        26,
+        288
+       ]
+      ],
+      "closed": true,
+      "stroke": "#494642",
+      "width": 6,
+      "join": "miter"
+     },
+     {
+      "type": "text",
+      "text": "OPEN",
+      "pos": [
+       126,
+       226
+      ],
+      "font": "slab",
+      "size": 44,
+      "fill": "#494642",
+      "align": "center"
+     },
+     {
+      "type": "text",
+      "text": "HERE",
+      "pos": [
+       126,
+       274
+      ],
+      "font": "slab",
+      "size": 44,
+      "fill": "#494642",
+      "align": "center"
+     },
+     {
+      "type": "circle",
+      "center": [
+       164,
+       500
+      ],
+      "radius": 74,
+      "fill": "#494642"
+     },
+     {
+      "type": "circle",
+      "center": [
+       164,
+       500
+      ],
+      "radius": 60,
+      "fill": "#f4f0e5"
+     },
+     {
+      "type": "text",
+      "text": "BK",
+      "pos": [
+       164,
+       523
+      ],
+      "font": "slab",
+      "size": 64,
+      "fill": "#494642",
+      "align": "center"
+     },
+     {
+      "type": "text",
+      "text": "©Ben Kraptu apt.",
+      "pos": [
+       164,
+       650
+      ],
+      "font": "cond_bold",
+      "size": 22,
+      "fill": "#494642",
+      "align": "center"
+     },
+     {
+      "type": "text",
+      "text": "PAYABLE IN EGG MONEY",
+      "pos": [
+       164,
+       678
+      ],
+      "font": "cond",
+      "size": 15,
+      "fill": "#494642",
+      "align": "center"
+     }
+    ]
+   }
+  }
+ ],
+ "pairs": "none",
+ "band": null,
+ "reveal_slide": [
+  0.36,
+  0
+ ]
+}

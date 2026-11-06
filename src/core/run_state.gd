@@ -57,9 +57,22 @@ func new_machine(base_forms: Array, light := false) -> MachineLogic:
 	return m
 
 
+## The forms the layer's machine sells, one column each, at the layer's stake: the
+## layer's own list ("forms", form ids in column order) or, without one, all of them.
+## An id that is not installed leaves its column out.
 func stage_forms(base_forms: Array) -> Array:
+	var picked: Array = base_forms
+	var wanted = stage().get("forms")
+	if wanted is Array and not wanted.is_empty():
+		picked = []
+		for uid in wanted:
+			for f: FormDef in base_forms:
+				if f.uid() == str(uid):
+					picked.append(f)
+		if picked.is_empty():
+			picked = base_forms
 	var out := []
-	for f: FormDef in base_forms:
+	for f: FormDef in picked:
 		out.append(f.scaled(stake()))
 	return out
 

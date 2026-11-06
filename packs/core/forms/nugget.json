@@ -1,0 +1,80 @@
+{
+  "id": "nugget",
+  "name": "Nugget Rush",
+  "title": [
+    "NUGGET",
+    "RUSH"
+  ],
+  "code": "NR-1S",
+  "price": 1,
+  "colors": {
+    "edge": "#f5a800",
+    "head": "#d62718",
+    "ink": "#4a1a08",
+    "tiles": [
+      "#d62718",
+      "#2f9e44",
+      "#2f7fe0",
+      "#7a3fc9"
+    ]
+  },
+  "tiers": [
+    {
+      "key": "nug_dino",
+      "label": {
+        "en": "Dino Nugget",
+        "zh": "恐龙鸡块"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/nug_dino.png",
+      "symbol_large": "art/nug_dino_large.png"
+    },
+    {
+      "key": "nug_star",
+      "label": {
+        "en": "Star Nugget",
+        "zh": "星形鸡块"
+      },
+      "prize": 500,
+      "printed_count": 6,
+      "role": "top",
+      "symbol": "art/nug_star.png",
+      "symbol_large": "art/nug_star_large.png"
+    },
+    {
+      "key": "nug_boot",
+      "label": {
+        "en": "Boot Nugget",
+        "zh": "靴形鸡块"
+      },
+      "prize": 100,
+      "printed_count": 10,
+      "role": "mid",
+      "symbol": "art/nug_boot.png",
+      "symbol_large": "art/nug_boot_large.png"
+    },
+    {
+      "key": "nug_ball",
+      "label": {
+        "en": "Ball Nugget",
+        "zh": "圆鸡块"
+      },
+      "prize": 25,
+      "printed_count": 75,
+      "role": "low",
+      "symbol": "art/nug_ball.png",
+      "symbol_large": "art/nug_ball_large.png"
+    }
+  ],
+  "digit_groups": [
+    4,
+    3,
+    4,
+    3,
+    4
+  ],
+  "win_display": "each_group",
+  "layout": "layouts/nugget.json"
+}

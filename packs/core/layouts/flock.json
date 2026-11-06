@@ -1,0 +1,680 @@
+{
+ "format": 1,
+ "card": {
+  "size": [
+   2.59,
+   1.11
+  ],
+  "canvas": [
+   840,
+   360
+  ]
+ },
+ "front": [
+  {
+   "type": "rect",
+   "rect": [
+    0,
+    0,
+    840,
+    360
+   ],
+   "fill": "edge"
+  },
+  {
+   "type": "path",
+   "points": [
+    [
+     60.0,
+     28.0
+    ],
+    [
+     62.94,
+     35.95
+    ],
+    [
+     71.41,
+     36.29
+    ],
+    [
+     64.76,
+     41.55
+    ],
+    [
+     67.05,
+     49.71
+    ],
+    [
+     60.0,
+     45.0
+    ],
+    [
+     52.95,
+     49.71
+    ],
+    [
+     55.24,
+     41.55
+    ],
+    [
+     48.59,
+     36.29
+    ],
+    [
+     57.06,
+     35.95
+    ]
+   ],
+   "closed": true,
+   "fill": "#ffffff"
+  },
+  {
+   "type": "path",
+   "points": [
+    [
+     780.0,
+     28.0
+    ],
+    [
+     782.94,
+     35.95
+    ],
+    [
+     791.41,
+     36.29
+    ],
+    [
+     784.76,
+     41.55
+    ],
+    [
+     787.05,
+     49.71
+    ],
+    [
+     780.0,
+     45.0
+    ],
+    [
+     772.95,
+     49.71
+    ],
+    [
+     775.24,
+     41.55
+    ],
+    [
+     768.59,
+     36.29
+    ],
+    [
+     777.06,
+     35.95
+    ]
+   ],
+   "closed": true,
+   "fill": "#ffffff"
+  },
+  {
+   "type": "text",
+   "text": "ONE NATION, ONE FLOCK",
+   "pos": [
+    423,
+    59
+   ],
+   "font": "slab",
+   "size": 44,
+   "fill": "#c8102e",
+   "align": "center",
+   "max_width": 640
+  },
+  {
+   "type": "text",
+   "text": "ONE NATION, ONE FLOCK",
+   "pos": [
+    420,
+    56
+   ],
+   "font": "slab",
+   "size": 44,
+   "fill": "#ffffff",
+   "align": "center",
+   "max_width": 640
+  },
+  {
+   "type": "image",
+   "src": "art/flock_flag.png",
+   "rect": [
+    14,
+    72,
+    356,
+    196
+   ]
+  },
+  {
+   "type": "rect",
+   "rect": [
+    380,
+    72,
+    446,
+    196
+   ],
+   "fill": "head",
+   "radius": 8
+  },
+  {
+   "type": "rect",
+   "rect": [
+    392,
+    80,
+    422,
+    32
+   ],
+   "fill": "#c8102e",
+   "radius": 6
+  },
+  {
+   "type": "text",
+   "text": "INSTANT WINNERS",
+   "pos": [
+    603,
+    104
+   ],
+   "font": "slab",
+   "size": 22,
+   "fill": "#ffffff",
+   "align": "center",
+   "max_width": 380
+  },
+  {
+   "type": "each_tier",
+   "origin": [
+    390,
+    118
+   ],
+   "columns": 2,
+   "step": [
+    216,
+    74
+   ],
+   "layers": [
+    {
+     "type": "symbol",
+     "center": [
+      36,
+      36
+     ],
+     "size": 66
+    },
+    {
+     "type": "text",
+     "text": "{count} WIN",
+     "pos": [
+      76,
+      30
+     ],
+     "font": "cond_bold",
+     "size": 18,
+     "fill": "#c8102e",
+     "align": "left",
+     "max_width": 130
+    },
+    {
+     "type": "text",
+     "text": "${tier_prize}",
+     "pos": [
+      76,
+      60
+     ],
+     "font": "slab",
+     "size": 32,
+     "fill": "ink",
+     "align": "left",
+     "max_width": 130
+    }
+   ]
+  },
+  {
+   "type": "rect",
+   "rect": [
+    14,
+    278,
+    812,
+    68
+   ],
+   "fill": "head"
+  },
+  {
+   "type": "rect",
+   "rect": [
+    14,
+    278,
+    812,
+    5
+   ],
+   "fill": "#c8102e"
+  },
+  {
+   "type": "rect",
+   "rect": [
+    14,
+    341,
+    812,
+    5
+   ],
+   "fill": "#c8102e"
+  },
+  {
+   "type": "text",
+   "text": "${price}",
+   "pos": [
+    28,
+    334
+   ],
+   "font": "slab",
+   "size": 50,
+   "fill": "ink",
+   "align": "left"
+  },
+  {
+   "type": "text",
+   "text": "E PLURIBUS CLUCKUM",
+   "pos": [
+    108,
+    314
+   ],
+   "font": "cond_bold",
+   "size": 17,
+   "fill": "#c8102e",
+   "align": "left"
+  },
+  {
+   "type": "text",
+   "text": "OUT OF MANY, ONE FLOCK",
+   "pos": [
+    108,
+    332
+   ],
+   "font": "cond",
+   "size": 14,
+   "fill": "ink",
+   "align": "left"
+  },
+  {
+   "type": "text",
+   "text": "INSTANT WINNERS SHOWN ABOVE.",
+   "pos": [
+    812,
+    296
+   ],
+   "font": "cond_bold",
+   "size": 12,
+   "fill": "ink",
+   "align": "right",
+   "max_width": 320
+  },
+  {
+   "type": "text",
+   "text": "PAYABLE IN EGG MONEY.",
+   "pos": [
+    812,
+    309
+   ],
+   "font": "cond_bold",
+   "size": 12,
+   "fill": "ink",
+   "align": "right",
+   "max_width": 320
+  },
+  {
+   "type": "text",
+   "text": "©Ben Kraptu apt.   FORM {code}",
+   "pos": [
+    812,
+    322
+   ],
+   "font": "cond",
+   "size": 12,
+   "fill": "ink",
+   "align": "right",
+   "max_width": 320
+  },
+  {
+   "type": "text",
+   "text": "SERIAL NO. {serial}",
+   "pos": [
+    812,
+    337
+   ],
+   "font": "lcd",
+   "size": 18,
+   "fill": "ink",
+   "align": "right",
+   "max_width": 320
+  }
+ ],
+ "interior": {
+  "base": [
+   {
+    "type": "rect",
+    "rect": [
+     0,
+     0,
+     840,
+     360
+    ],
+    "fill": "#ece7da"
+   },
+   {
+    "type": "rect",
+    "rect": [
+     12,
+     12,
+     816,
+     336
+    ],
+    "fill": "#f4f0e5"
+   },
+   {
+    "type": "path",
+    "points": [
+     [
+      286,
+      36
+     ],
+     [
+      286,
+      318
+     ]
+    ],
+    "stroke": "#b9b2a2",
+    "width": 2,
+    "dash": [
+     7,
+     6
+    ],
+    "repeat": {
+     "count": 2,
+     "step": [
+      268,
+      0
+     ]
+    }
+   },
+   {
+    "type": "text",
+    "text": "PAYABLE IN EGG MONEY",
+    "pos": [
+     420,
+     339
+    ],
+    "font": "cond_bold",
+    "size": 12,
+    "fill": "#5c5850",
+    "align": "center"
+   }
+  ],
+  "slots": [
+   {
+    "rect": [
+     22,
+     26,
+     260,
+     296
+    ],
+    "anchor": [
+     152,
+     204
+    ]
+   },
+   {
+    "rect": [
+     290,
+     26,
+     260,
+     296
+    ],
+    "anchor": [
+     420,
+     204
+    ]
+   },
+   {
+    "rect": [
+     558,
+     26,
+     260,
+     296
+    ],
+    "anchor": [
+     688,
+     204
+    ]
+   }
+  ],
+  "digits": {
+   "direction": "row",
+   "pitch": 63,
+   "color": "#3b3a39",
+   "digit": {
+    "font": "slab",
+    "size": 74,
+    "offset": [
+     0,
+     -4.5
+    ]
+   },
+   "caption": {
+    "font": "cond_bold",
+    "size": 11,
+    "offset": [
+     0,
+     10
+    ],
+    "max_width": 52
+   },
+   "mark": {
+    "font": "cond_bold",
+    "size": 11,
+    "offset": [
+     25,
+     -57
+    ]
+   }
+  },
+  "win_slot": [
+   {
+    "type": "rect",
+    "rect": [
+     0,
+     0,
+     260,
+     296
+    ],
+    "fill": "win_tile"
+   },
+   {
+    "type": "circle",
+    "center": [
+     130,
+     102
+    ],
+    "radius": 86,
+    "fill": "#ffffff30"
+   },
+   {
+    "type": "symbol",
+    "tier": "win",
+    "variant": "large",
+    "center": [
+     130,
+     102
+    ],
+    "size": 172
+   },
+   {
+    "type": "rect",
+    "rect": [
+     0,
+     200,
+     260,
+     96
+    ],
+    "fill": "#ffe600"
+   },
+   {
+    "type": "text",
+    "text": "${prize}",
+    "pos": [
+     130,
+     260
+    ],
+    "font": "slab",
+    "size": 60,
+    "fill": "#111111",
+    "align": "center",
+    "max_width": 240
+   },
+   {
+    "type": "text",
+    "text": "VERIFY {verify}",
+    "pos": [
+     130,
+     287
+    ],
+    "font": "lcd",
+    "size": 18,
+    "fill": "#111111",
+    "align": "center",
+    "if": "verify"
+   }
+  ]
+ },
+ "flaps": [
+  {
+   "rect": [
+    16,
+    16,
+    808,
+    328
+   ],
+   "hinge": "top",
+   "side_pull": true,
+   "cover": {
+    "canvas": [
+     808,
+     328
+    ],
+    "layers": [
+     {
+      "type": "rect",
+      "rect": [
+       0,
+       0,
+       808,
+       328
+      ],
+      "fill": "#f4f0e5"
+     },
+     {
+      "type": "circle",
+      "center": [
+       404,
+       76
+      ],
+      "radius": 56,
+      "fill": "#494642"
+     },
+     {
+      "type": "circle",
+      "center": [
+       404,
+       76
+      ],
+      "radius": 45,
+      "fill": "#f4f0e5"
+     },
+     {
+      "type": "text",
+      "text": "BK",
+      "pos": [
+       404,
+       94
+      ],
+      "font": "slab",
+      "size": 47,
+      "fill": "#494642",
+      "align": "center"
+     },
+     {
+      "type": "path",
+      "points": [
+       [
+        358,
+        306
+       ],
+       [
+        358,
+        232
+       ],
+       [
+        316,
+        232
+       ],
+       [
+        404,
+        166
+       ],
+       [
+        492,
+        232
+       ],
+       [
+        450,
+        232
+       ],
+       [
+        450,
+        306
+       ]
+      ],
+      "closed": true,
+      "stroke": "#494642",
+      "width": 6,
+      "join": "miter"
+     },
+     {
+      "type": "text",
+      "text": "OPEN",
+      "pos": [
+       204,
+       270
+      ],
+      "font": "slab",
+      "size": 54,
+      "fill": "#494642",
+      "align": "center"
+     },
+     {
+      "type": "text",
+      "text": "UP",
+      "pos": [
+       604,
+       270
+      ],
+      "font": "slab",
+      "size": 54,
+      "fill": "#494642",
+      "align": "center"
+     }
+    ]
+   }
+  }
+ ],
+ "pairs": "none",
+ "band": null,
+ "reveal_slide": [
+  0,
+  -0.5
+ ]
+}

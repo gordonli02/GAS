@@ -4,3 +4,4 @@ export/
 builds/
 .DS_Store
 Thumbs.db
+tools/art_build/

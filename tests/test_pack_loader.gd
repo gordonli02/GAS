@@ -9,7 +9,24 @@ func test_core_pack_loads() -> void:
 	if pack == null:
 		return
 	eq(pack.id, "core", "pack id")
-	eq(pack.forms.map(func(f): return f.id), ["catch", "plate", "spur"], "form ids")
+	eq(pack.forms.map(func(f): return f.id), ["catch", "plate", "spur", "order", "kabawk", "flock", "nugget", "peckeye"], "form ids")
+	# Card shapes (G, after M8.6): Hot Plate is square, One Flock is 21:9, Ka-Bawk! 21:9 on end.
+	for shape in [["plate", 1.0], ["kabawk", 9.0 / 21.0], ["flock", 21.0 / 9.0], ["catch", 0.7], ["spur", 1.6]]:
+		var card: Dictionary = pack.form(shape[0]).layout.card
+		check(absf(card.size[0] / card.size[1] - shape[1]) < 0.005, "%s: card is %.2f to 1" % [shape[0], shape[1]])
+		check(absf(card.canvas[0] / card.canvas[1] - shape[1]) < 0.005, "%s: so is its canvas" % shape[0])
+	# M8.6: five new looks on the three ways a ticket opens.
+	for pair in [["order", "plate"], ["nugget", "plate"], ["kabawk", "catch"], ["peckeye", "catch"], ["flock", "spur"]]:
+		var f := pack.form(pair[0])
+		var like := pack.form(pair[1])
+		eq(f.win_display, like.win_display, pair[0] + " wins as " + pair[1])
+		eq(Array(f.digit_groups), Array(like.digit_groups), pair[0] + " digit groups")
+		eq(f.layout.flaps.size(), like.layout.flaps.size(), pair[0] + " flaps")
+		# Only Lucky Spur has the paper band (G, M8.6): One Flock opens like it, without one.
+		check(f.layout.band == null, pair[0] + " has no band")
+		eq(f.tiers.map(func(t): return [int(t.prize), t.role]), like.tiers.map(func(t): return [int(t.prize), t.role]), pair[0] + " prize table")
+		for t in f.tiers:
+			check(FileAccess.file_exists(t.symbol) and FileAccess.file_exists(t.symbol_large), "%s: %s has its two pictures" % [pair[0], t.key])
 	var plate := pack.form("plate")
 	eq(plate.name, "Hot Plate", "plate name")
 	eq(Array(plate.digit_groups), [4, 3, 4, 3, 4], "plate digit groups")

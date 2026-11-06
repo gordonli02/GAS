@@ -70,7 +70,7 @@ func _run() -> void:
 			if plate_art != null and game.machine_view._fly_mats[i].albedo_texture == plate_art:
 				right += 1
 	_expect(flying > 0 and right == flying, "Hot Plate tickets fly out as Hot Plate (%d of %d)" % [right, flying])
-	_expect(game.machine_view._stack_mat.albedo_texture == plate_art, "the machine's tray shows the ticket sold last on top")
+	_expect(game.machine_view._stack_mats[0].albedo_texture == plate_art, "the machine's tray shows the ticket sold last on top")
 	await _wait(1.6)
 	_expect(e.credit == 0 and e.spent == 5, "PLAY ALL bought what the credit allowed")
 	_expect(not game.at_machine, "credit gone: back to the table 0.7 s after dispensing")
@@ -192,6 +192,11 @@ func _run() -> void:
 		await _dev_click(game.dev._rooms[id])
 		await _wait(0.4)
 		_expect(game.rooms.id == id and game.machine_view.position.is_equal_approx(game.rooms.machine_pos()), "dev panel: %s, machine at its spot" % id)
+		# G, M8.6: a plainer venue has a smaller machine. The bingo hall's has four columns
+		# in one cabinet; every form keeps its box all the same.
+		var want := 4 if id == "bingo" else 8
+		_expect(game.machine_view.built and game.columns.size() == want and game.machine_view.buttons.size() == want + 1
+			and game.machine.boxes.size() == 8, "%s: a machine of %d columns" % [id, want])
 		await _shot("09_room_" + id)
 		_table_props_clear(id)
 	# Clicks respect room props: from the table, a point where a prop covers the machine
@@ -630,7 +635,7 @@ func _open_by_space() -> void:
 
 
 func _machine_point() -> Vector2:
-	return game.camera.unproject_position(game.machine_view.to_global(Vector3(0, 5.5, 1.7)))
+	return game.camera.unproject_position(game.machine_view.to_global(Vector3(0, 7.0, 1.75)))
 
 
 func _button_center(b: Control) -> Vector2:

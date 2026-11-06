@@ -76,5 +76,5 @@
     4
   ],
   "win_display": "each_group",
-  "layout": "layouts/windows.json"
+  "layout": "layouts/plate.json"
 }
