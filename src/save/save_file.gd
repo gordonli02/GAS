@@ -14,7 +14,8 @@ extends RefCounted
 
 const VERSION := 2    ## 2: the run (story mode) beside the free-play session
 
-## Defaults for every setting. Unknown keys in a file are dropped; missing ones filled.
+## Defaults for every setting. Unknown keys in a file are dropped; missing ones filled,
+## so a new setting needs no new version.
 const SETTINGS := {
 	"room": "diner",
 	"mode": "free",          ## "free" play or the "run" (story mode): what the game opens in
@@ -23,6 +24,8 @@ const SETTINGS := {
 	"fullscreen": false,
 	"language": "",          ## "" follows the system, else "en" / "zh"
 	"back_first": false,     ## tickets come to the hand back side up, ready to open (no flip)
+	"one_click": false,      ## a click opens the whole ticket (band, flip and every flap)
+	"auto_wins": false,      ## a winner, once revealed, goes to the winners' pile by itself
 	"sounds": {},            ## developer: sound id -> {file, name, volume}
 	"lamp": 0,               ## developer: red button brightness step
 }

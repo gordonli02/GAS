@@ -107,7 +107,7 @@ func _press(pos: Vector2) -> void:
 		return
 	if flow.state == TicketFlow.State.IDLE and game.tray.is_empty():
 		return   # an empty table: clicking it does nothing
-	if flow.state != TicketFlow.State.BACK:
+	if flow.state != TicketFlow.State.BACK or flow.one_click:
 		_dragging = flow.press(pos)
 
 

@@ -14,6 +14,7 @@ enum State { IDLE, DEAL, FRONT, FLIP, BACK, REVEALED, TOSS, AWAY }
 const DEAL_TIME := 0.42
 const FLIP_TIME := 0.24
 const TOSS_TIME := 0.34
+const WIN_SHOW_TIME := 1.2   ## a winner going to its pile by itself is shown this long first
 const PAPER := Color("#f4f0e5")
 const CONFETTI := [Color("#ffe14d"), Color("#ff4a3d"), Color("#62d2ff")]
 
@@ -26,6 +27,16 @@ var win_pile: DiscardPile    ## where winning tickets are tossed; null: everythi
 ## Setting: tickets come to the hand back side up, so there is no flip. A banded ticket
 ## still has its band to break first, which then works from the back.
 var back_first := false
+## Setting: one click (or Space) opens the whole ticket: the band breaks, the card turns
+## over if it is front up, and every flap still closed tears open by itself, the way
+## Space opens one. The reveal that follows is the usual one.
+var one_click := false
+## Setting: a winner, once revealed, goes to the winners' pile by itself after
+## WIN_SHOW_TIME, as a click would send it.
+var auto_wins := false
+## Asked before a winner goes to its pile by itself: false holds it in hand (a card or
+## the menu is over the table); it goes once this says yes.
+var may_auto_collect: Callable = func() -> bool: return true
 ## Returns the next ticket as {form: FormDef, ticket: Dictionary}, or {} when the tray is empty.
 var next_ticket: Callable
 ## Asked after a toss lands: deal the next ticket straight away?
@@ -48,6 +59,9 @@ var _band_start = null       ## card point where a band drag started, or null
 var _band_mode := ""         ## "slide" / "split" once the band drag's direction is read
 var _time := 0.0
 var _busy := false
+var _open_all := false       ## one click: every flap opens once the card is back side up
+var _quiet: Array = []       ## flaps opened together with another: their rips are not played
+var _shown := 0.0            ## seconds the ticket in hand has lain revealed
 
 
 func has_ticket() -> bool:
@@ -80,12 +94,16 @@ func has_band() -> bool:
 ## Puts the ticket in hand away untouched (it goes back to the tray).
 func cancel() -> void:
 	release()
+	_open_all = false
 	view.visible = false
 	state = State.IDLE
 
 
 ## Space / Enter.
 func primary() -> void:
+	if one_click and (state == State.FRONT or state == State.BACK):
+		open_all()
+		return
 	match state:
 		State.IDLE:
 			deal()
@@ -112,6 +130,9 @@ func primary() -> void:
 
 ## Pointer pressed. Returns true if it grabbed paper.
 func press(screen: Vector2) -> bool:
+	if one_click and (state == State.FRONT or state == State.BACK):
+		open_all()
+		return false
 	match state:
 		State.BACK:
 			if view.band_on:
@@ -153,6 +174,37 @@ func _press_band(screen: Vector2) -> bool:
 	_band_start = view.card_point(from, dir)
 	_band_mode = ""
 	return true
+
+
+## One click (the setting): the band breaks, a card front up turns over, and every flap
+## still closed starts tearing open by itself (Space's way, all at once). The reveal,
+## and with it the prize, comes the usual way once they have settled.
+func open_all() -> void:
+	if state != State.FRONT and state != State.BACK:
+		return
+	release()
+	if view.band_on:
+		_snap_band()
+	if state == State.FRONT:
+		_open_all = true
+		flip()
+	else:
+		_tear_all()
+
+
+## Every flap still closed tears open by itself; only the first one's rip is heard.
+func _tear_all() -> void:
+	_open_all = false
+	var voiced := false
+	for i in view.sims.size():
+		var s := view.sims[i]
+		if s.open or s.auto:
+			continue
+		if voiced:
+			_quiet.append(i)
+		if s.start_auto(randf() < 0.5) and not voiced:
+			_on_break(i)
+		voiced = true
 
 
 ## Space on a banded ticket: the band breaks one of its ways, picked at random.
@@ -232,6 +284,8 @@ func deal() -> void:
 	view.visible = true
 	_anim = 0.0
 	_deal_back = back_first
+	_open_all = false
+	_quiet.clear()
 	state = State.DEAL
 	Sfx.play("deal")
 	dealt.emit(ticket, form)
@@ -279,6 +333,10 @@ func _process(dt: float) -> void:
 	pulse *= exp(-dt * 5.5)
 	if state == State.BACK:
 		_step_paper(dt)
+	elif state == State.REVEALED:
+		_shown += dt
+		if auto_wins and ticket.prize > 0 and _shown >= WIN_SHOW_TIME and may_auto_collect.call():
+			collect()
 	if state == State.IDLE:
 		return
 	var open := view.max_open()
@@ -312,6 +370,8 @@ func _process(dt: float) -> void:
 			view.global_transform = Transform3D((facing * Basis(Vector3.UP, PI * (1.0 - t))).scaled(sc), target)
 			if _anim >= 1.0:
 				state = State.BACK
+				if _open_all:
+					_tear_all()
 		State.BACK, State.REVEALED:
 			view.global_transform = Transform3D(facing.scaled(sc), target)
 		State.TOSS:
@@ -352,7 +412,7 @@ func _step_paper(dt: float) -> void:
 			var clips := _clips()
 			if s.tear_clip < 0 and not clips.is_empty():
 				s.tear_clip = randi() % clips.size()
-			if s.tear_clip >= 0:
+			if s.tear_clip >= 0 and not _quiet.has(ev.flap):
 				Sfx.play_tear_slice(clips[s.tear_clip], ev.from, ev.to, FlapSim.STEPS)
 			_fleck_burst(ev.flap, 2)
 			camera.shake = maxf(camera.shake, 0.05)
@@ -363,6 +423,7 @@ func _step_paper(dt: float) -> void:
 func _reveal() -> void:
 	state = State.REVEALED
 	_drag.clear()
+	_shown = 0.0
 	if ticket.prize > 0:
 		pulse = 1.0
 		camera.shake = 1.0 if ticket.prize >= 100 else 0.35

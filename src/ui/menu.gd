@@ -1,8 +1,9 @@
 class_name Menu
 extends CanvasLayer
 ## Player menu (Esc or the MENU key): mode (free play or the story's run), table,
-## volume, sound, full screen, tickets back side up, language, resume and quit. Same plate and LCD look as the HUD; layout after the web build's
-## menu. Shows state only; the game applies the choices.
+## volume, sound, full screen, tickets back side up, one-click open, winners to the table
+## by themselves, language, resume and quit. Same plate and LCD look as the HUD; layout
+## after the web build's menu. Shows state only; the game applies the choices.
 
 signal mode_picked(id: String)   ## "free" / "run"
 signal new_run_pressed           ## give the run up and start another (pressed twice)
@@ -11,6 +12,8 @@ signal volume_changed(linear: float)
 signal mute_toggled
 signal fullscreen_toggled
 signal back_first_toggled        ## tickets come to the hand back side up
+signal one_click_toggled         ## a click opens the whole ticket
+signal auto_wins_toggled         ## winners go to their pile by themselves
 signal language_picked(code: String)
 signal quit_pressed
 
@@ -26,6 +29,8 @@ var _volume := HSlider.new()
 var _sound: Button
 var _full: Button
 var _back: Button
+var _one_click: Button
+var _auto_wins: Button
 var _resume: Button
 var _quit: Button
 var _shade := ColorRect.new()
@@ -96,6 +101,12 @@ func _ready() -> void:
 	_back = _toggle_key("TICKETS BACK SIDE UP")
 	_back.pressed.connect(func(): back_first_toggled.emit())
 	_row(col).add_child(_back)
+	_one_click = _toggle_key("ONE-CLICK OPEN")
+	_one_click.pressed.connect(func(): one_click_toggled.emit())
+	_row(col).add_child(_one_click)
+	_auto_wins = _toggle_key("WINNERS TO THE TABLE")
+	_auto_wins.pressed.connect(func(): auto_wins_toggled.emit())
+	_row(col).add_child(_auto_wins)
 
 	col.add_child(_caption("LANGUAGE"))
 	var langs := _row(col)
@@ -155,6 +166,8 @@ func show_state(settings: Dictionary, room: String, language: String, mode := "f
 	_sound.text = "MUTED" if muted else "SOUND"
 	_full.set_pressed_no_signal(bool(settings.get("fullscreen", false)))
 	_back.set_pressed_no_signal(bool(settings.get("back_first", false)))
+	_one_click.set_pressed_no_signal(bool(settings.get("one_click", false)))
+	_auto_wins.set_pressed_no_signal(bool(settings.get("auto_wins", false)))
 
 
 ## Developer and test access to the keys.
@@ -163,6 +176,8 @@ func key(id: String) -> Button:
 		"sound": return _sound
 		"fullscreen": return _full
 		"back_first": return _back
+		"one_click": return _one_click
+		"auto_wins": return _auto_wins
 		"resume": return _resume
 		"quit": return _quit
 		"volume": return null

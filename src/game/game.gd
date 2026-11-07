@@ -158,6 +158,9 @@ func _ready() -> void:
 	flow.pile = pile
 	flow.win_pile = win_pile
 	flow.back_first = use_save and bool(Save.setting("back_first"))
+	flow.one_click = use_save and bool(Save.setting("one_click"))
+	flow.auto_wins = use_save and bool(Save.setting("auto_wins"))
+	flow.may_auto_collect = _may_auto_collect
 	flow.next_ticket = _take_ticket
 	flow.deal_after_toss = _deal_after_toss
 	flow.dealt.connect(_on_dealt)
@@ -185,6 +188,8 @@ func _ready() -> void:
 	menu.mute_toggled.connect(toggle_mute)
 	menu.fullscreen_toggled.connect(toggle_fullscreen)
 	menu.back_first_toggled.connect(toggle_back_first)
+	menu.one_click_toggled.connect(toggle_one_click)
+	menu.auto_wins_toggled.connect(toggle_auto_wins)
 	menu.language_picked.connect(set_language)
 	menu.quit_pressed.connect(quit_game)
 	await _enter_mode(str(Save.setting("mode")) if use_save else "free", true)
@@ -1494,6 +1499,20 @@ func toggle_back_first() -> void:
 	_menu_state()
 
 
+## Setting: one click opens the whole ticket (TicketFlow.open_all). Takes hold at once.
+func toggle_one_click() -> void:
+	Save.set_setting("one_click", not bool(Save.setting("one_click")))
+	flow.one_click = bool(Save.setting("one_click"))
+	_menu_state()
+
+
+## Setting: a winner goes to the winners' pile by itself once revealed. Takes hold at once.
+func toggle_auto_wins() -> void:
+	Save.set_setting("auto_wins", not bool(Save.setting("auto_wins")))
+	flow.auto_wins = bool(Save.setting("auto_wins"))
+	_menu_state()
+
+
 func set_language(code: String) -> void:
 	Save.set_setting("language", code)
 	Lang.set_language(code)
@@ -1790,6 +1809,11 @@ func _take_ticket() -> Dictionary:
 		return {}
 	current = tray.take()
 	return current
+
+
+## A revealed winner may go to its pile by itself only while nothing is over the table.
+func _may_auto_collect() -> bool:
+	return not (menu.visible or run_card.visible or phone.visible)
 
 
 func _deal_after_toss() -> bool:

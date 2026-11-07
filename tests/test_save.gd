@@ -39,6 +39,32 @@ func test_round_trip_and_overwrite() -> void:
 	eq(int(data.version), SaveFile.VERSION, "version number written")
 
 
+## M9.7: one-click open and winners to the table are off until the player turns them on,
+## and kept once on; a file from before them reads with both off.
+func test_hand_settings_round_trip() -> void:
+	var p := _path("h.json")
+	eq(SaveFile.SETTINGS.one_click, false, "one-click open: off by default")
+	eq(SaveFile.SETTINGS.auto_wins, false, "winners to the table: off by default")
+	var s := SaveFile.SETTINGS.duplicate(true)
+	s.one_click = true
+	s.auto_wins = true
+	check(SaveFile.write(p, s, {}), "write")
+	var r := SaveFile.read(p)
+	eq(r.settings.one_click, true, "one-click open kept")
+	eq(r.settings.auto_wins, true, "winners to the table kept")
+	s.auto_wins = false
+	SaveFile.write(p, s, {})
+	r = SaveFile.read(p)
+	eq([r.settings.one_click, r.settings.auto_wins], [true, false], "each on its own")
+	SaveFile.write_text(p, JSON.stringify({"version": 2, "settings": {"back_first": true}, "session": {}, "run": {}}))
+	r = SaveFile.read(p)
+	eq(r.note, "", "an older file reads without complaint")
+	eq([r.settings.back_first, r.settings.one_click, r.settings.auto_wins], [true, false, false], "the new settings filled in off")
+	SaveFile.write_text(p, JSON.stringify({"version": 2, "settings": {"one_click": "yes", "auto_wins": 1}, "session": {}, "run": {}}))
+	r = SaveFile.read(p)
+	eq([r.settings.one_click, r.settings.auto_wins], [false, false], "not a bool: off")
+
+
 func test_run_slot_and_version_1() -> void:
 	var p := _path("r.json")
 	var run := {"state": {"seed": "R-1", "layer": 1}, "session": {"economy": {"cash": 7}}}

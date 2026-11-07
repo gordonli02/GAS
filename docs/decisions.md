@@ -896,3 +896,36 @@ break-even, so its retune may not be needed. The pictures in `docs/m9.6/` still 
 the old smallest prizes. Box size was not touched: a smaller box cannot hold the
 $1,000 top at $1 a ticket (roadmap M9.7 has the two ways out). G's list after this
 game is `docs/roadmap.md` M9.7.
+
+## M9.7, item 6: one-click open and winners to the table
+Two settings on the menu, under TICKETS BACK SIDE UP and wired the same way (SaveFile
+`SETTINGS`, `Save.setting`, a menu signal, `Game.toggle_*` pushing the value into
+`flow`). Both are off by default, kept in the save (a file from before them reads with
+both off; no new save version, since missing settings are filled from the defaults), and
+work in free play and the run; the preview tools (`use_save` off) keep both off.
+- **ONE-CLICK OPEN** (一键开票; setting `one_click`): one click on the table, or Space,
+  opens the whole ticket (`TicketFlow.open_all`): the band breaks (Lucky Spur, one of its
+  ways at random, as Space breaks it), a ticket front up turns over (the usual flip), and
+  then every flap still closed tears open by itself the way Space opens one flap, all at
+  once. Only the first flap's rip is heard, so a five-column ticket does not play five
+  rips on top of each other; the paper flecks still fly from every flap. No new reveal:
+  the flaps settle, `_reveal` runs and `revealed` pays through `Game._on_revealed` exactly
+  as by hand (run hooks, ALL IN's window, the win sound and confetti). A ticket dealt back
+  side up skips the flip; one already partly torn opens the rest. While it is on, a click
+  anywhere on the table opens a ticket lying back up (before, a click off the paper did
+  nothing there). It takes hold at once. Tickets cannot be dragged open while it is on.
+- **WINNERS TO THE TABLE** (奖票自动放桌上; setting `auto_wins`): a winner (a printed prize,
+  the same test that picks the winners' pile on a click), once revealed, lies in hand for
+  `TicketFlow.WIN_SHOW_TIME` (1.2 s, new: there was no delay of this kind to reuse) so the
+  prize is seen, then goes to the winners' pile by `collect()`, exactly as a click sends it,
+  and the next ticket is dealt. It waits while the menu, the phone or a run card (ALL IN's,
+  say) is over the table, and goes as soon as it is closed. A click before the time is up
+  still sends it at once. Losers are unchanged: they stay in hand until clicked, as winners
+  did before (a click sends any opened ticket to its pile; nothing is dragged), since the
+  setting names winners. Letting losers go too would be one condition in `TicketFlow._process`.
+- **Tests**: `tests/test_one_click.gd` runs `TicketFlow` on a real `TicketView` of each of
+  the eight core forms (flaps and band from the layout, nothing painted), front up and back
+  up, winner and loser: one click opens it with no more input and reveals once, paying and
+  counting what opening by hand with Space pays; with the setting off a click does what it
+  did. A winner goes to the winners' pile after the pause, a loser stays, and a card over the
+  table holds the winner. `tests/test_save.gd` round-trips both settings.
