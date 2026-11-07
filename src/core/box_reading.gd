@@ -17,7 +17,8 @@ extends RefCounted
 const ROUGH := 50
 ## Prize money left per dollar of tickets left: at or over HOT the box feels hot, under
 ## COLD it feels cold. A box pays back about 0.99 on average (BoxModel), between 0.25 and
-## 2.6 by its type.
+## 2.6 by its type; in the run that times the payout (RunConfig "payout", about 0.73),
+## so most boxes there feel cold and a hot one is really hot.
 const HOT := 1.25
 const COLD := 0.8
 const TOP_LEVEL := 5
@@ -58,10 +59,11 @@ static func feel(heat: float) -> String:
 	return "HOT" if heat >= HOT else "COLD" if heat < COLD else "FAIR"
 
 
-## A translation key: how the box was made (its type): FAT BOX, EVEN BOX or LEAN BOX.
+## A translation key: how the box was made (its type by its net after the run's payout,
+## TicketBox.net_type, so the word is true of the money): FAT BOX, EVEN BOX or LEAN BOX.
 static func nature(box: TicketBox, model: BoxModel = null) -> String:
 	var m := model if model != null else BoxModel.standard()
-	var t := m.type_by_id(box.type_id)
+	var t := m.type_by_id(box.net_type())
 	if float(t.get("max", 0.0)) < 0.0:
 		return "LEAN BOX"
 	if float(t.get("min", 0.0)) > 0.0:

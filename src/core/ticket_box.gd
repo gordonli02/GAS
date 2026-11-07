@@ -21,6 +21,12 @@ var form: FormDef
 var seed := ""
 var model: BoxModel = null   ## the odds it was built under (BoxGenerator.build sets it); its sizes are kept in a save when they differ from the machine's
 var type_id := ""
+## The type whose net share range holds what the box was made to pay back after the
+## model's payout (BoxModel.payout, the run's): what the player is told (READ THE BOX,
+## the dev panel) and what the luck perks call a losing box. The drawn type_id when the
+## payout is 1 (free play). Empty on a box not from the generator: net_type() then
+## gives type_id.
+var net_type_id := ""
 var size := 0
 var counts: Array = []       ## real count per tier, same order as form.tiers
 ## Dictionary per ticket: no, tier, prize, win_group, serial, groups, marks, verify.
@@ -375,6 +381,11 @@ func prize_total() -> int:
 
 func net() -> int:
 	return prize_total() - gross()
+
+
+## The type the box is told by (net_type_id, or type_id when it has none).
+func net_type() -> String:
+	return net_type_id if net_type_id != "" else type_id
 
 
 ## Same numbers as the web build's developer panel.

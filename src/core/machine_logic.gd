@@ -99,10 +99,13 @@ func _pick(f: FormDef, seed_text: String, after_clear: bool) -> TicketBox:
 	return box
 
 
-## A box of a type that pays back less than it takes (a big, medium or small loss).
+## A box of a type that pays back less than it takes (a big, medium or small loss), by
+## its net after the run's payout (TicketBox.net_type): in the run a box drawn "break
+## even" pays back about the payout, so it loses, and LUCKY STREAK, FORTUNE and
+## ASSEMBLY LINE treat it so (their cards say "losing box", "does not lose").
 func losing(box: TicketBox) -> bool:
 	var m := model if model != null else BoxModel.standard()
-	return float(m.type_by_id(box.type_id).get("max", 0.0)) < 0.0
+	return float(m.type_by_id(box.net_type()).get("max", 0.0)) < 0.0
 
 
 ## The cheapest ticket at the bet: with less credit than this the machine sells nothing.

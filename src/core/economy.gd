@@ -12,6 +12,12 @@ extends RefCounted
 ## short, up to the cash in hand plus `tab_limit` (what the house would lend), and it
 ## is settled when the day ends (RunState.settle_tab). What is on the tab is spent
 ## already, so the invariant reads cash + credit + bill - tab on the left.
+## Coins (G, 2026-11-07): the slot takes bills, and with the cash under the smallest one
+## it takes coins: as many whole tickets at the machine's cheapest price as the credit
+## and the cash make together (coins_for); what cannot buy a ticket stays in the pocket.
+## They feed as a bill does (`bill` holds their value, `coins` says they are coins).
+## Both modes. The tab does not change the rule: it sells against the cash in hand
+## anyway, and coins fed while it is open only move that cash into the credit.
 
 const START_CASH := 200
 const LOAN := 200
@@ -38,6 +44,7 @@ var tab_on := false  ## the house account is open (HOUSE ACCOUNT, on a day of pl
 var tab_limit := 0   ## how far the tab may go past the cash in hand (the house line left)
 var bill := 0        ## value of the bill being fed, 0 when none
 var bill_t := 0.0    ## 0..1 progress of the bill
+var coins := false   ## what is being fed is coins, not a bill
 var _bill_heard := false
 
 
@@ -70,6 +77,37 @@ func insert(value: int) -> bool:
 	cash -= value
 	bill = value
 	bill_t = 0.0
+	coins = false
+	_bill_heard = false
+	return true
+
+
+## The smallest bill the slot takes.
+func smallest_bill() -> int:
+	return int(bills.min()) if not bills.is_empty() else 0
+
+
+## What the slot takes in coins now, for tickets at `price` (the machine's cheapest):
+## nothing while a feed is under way or the cash holds a bill; else the whole tickets
+## the credit and the cash make together, less the credit (so the credit holds whole
+## tickets after), what is left under one ticket kept in the pocket. 0 when the cash and
+## the credit together do not make one more ticket.
+func coins_for(price: int) -> int:
+	if price <= 0 or bill > 0 or cash <= 0 or cash >= smallest_bill():
+		return 0
+	return maxi(0, (credit + cash) / price * price - credit)
+
+
+## Starts feeding the coins for tickets at `price` (coins_for), as a bill feeds: the
+## cash leaves now, the credit arrives later. False, changing nothing, when there are none.
+func insert_coins(price: int) -> bool:
+	var value := coins_for(price)
+	if value <= 0:
+		return false
+	cash -= value
+	bill = value
+	bill_t = 0.0
+	coins = true
 	_bill_heard = false
 	return true
 
@@ -88,6 +126,7 @@ func step_bill(dt: float) -> Dictionary:
 		credit += bill
 		ev.credited = bill
 		bill = 0
+		coins = false
 	return ev
 
 
@@ -207,3 +246,4 @@ func from_dict(d: Dictionary) -> void:
 	tab_on = bool(d.get("tab_on", false))
 	bill = 0
 	bill_t = 0.0
+	coins = false

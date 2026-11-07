@@ -35,6 +35,9 @@ extends RefCounted
 ##            tickets of a column, then changes the box, again and again. Its return
 ##            counted with the fees (summary's `return_fees`) must stay at 1 or under
 ## A bot that cannot work (NO WAY BACK bought) plays instead.
+## "Can pay for a ticket" is the slot's rule (_can_buy): bills, and coins under the
+## smallest bill (Economy.coins_for, G 2026-11-07), so every bot that goes to the machine
+## buys at least one ticket there; the result's `idle_days` counts the days one did not.
 
 const BOTS := ["work", "blind", "borrow", "gamble", "perks", "skip", "build",
 	"clearing", "jackpot", "small", "batch", "money", "churn"]
@@ -133,6 +136,7 @@ static func play(bot: String, base_forms: Array, seed_text: String, config: RunC
 	var m := run.new_machine(base_forms, true)
 	var line: Dictionary = LINES.get(bot, {})
 	var guard := 0
+	var idle := 0   # days the bot went to the machine (it chose to) and bought nothing
 	while run.playing() and guard < 1000:
 		guard += 1
 		var layer := run.layer
@@ -151,9 +155,10 @@ static func play(bot: String, base_forms: Array, seed_text: String, config: RunC
 		if wants_play and e.cash + e.credit < price and bot == "borrow":
 			while run.can_borrow():
 				run.borrow(e)
-		if wants_play and (_can_buy(e, price) if not line.is_empty() else e.cash + e.credit >= price):
+		if wants_play and _can_buy(e, price):
 			run.play(e)
-			_play_day(run, e, m, rng, bot, line)
+			if _play_day(run, e, m, rng, bot, line) == 0 and run.playing() and run.layer == layer:
+				idle += 1
 		elif not run.work(e) and run.play(e):
 			_play_day(run, e, m, rng, bot, line)
 		if run.playing() and run.layer == layer:
@@ -162,18 +167,17 @@ static func play(bot: String, base_forms: Array, seed_text: String, config: RunC
 			m = run.new_machine(base_forms, true)
 		assert(e.balanced(), "the ledger must balance")
 	return {"status": run.status, "layer": run.layer, "days": int(run.stats.days), "tickets": int(run.stats.tickets),
-		"cash": e.cash, "spent": e.spent, "won": e.won, "balanced": e.balanced(), "stats": run.stats.duplicate()}
+		"cash": e.cash, "spent": e.spent, "won": e.won, "balanced": e.balanced(), "stats": run.stats.duplicate(),
+		"idle_days": idle}
 
 
-## Whether the bill slot can turn this cash into a ticket at `price`: it takes bills
-## only (the smallest is five tickets' worth at the layer's stake), so coins under one
-## are stuck in the pocket until a day's wage lifts them. A player with such coins works
-## the day. The line bots do (the plain bots, blind, borrow, perks and skip, keep their
-## old rule: they "play" the rest of the layer with the coins stuck and buy nothing, and
-## the bands of docs/roadmap.md's table were set against that; fixing them lifts blind
-## to 14%, skip to 12%, borrow to 13%, perks to 35%).
+## Whether the slot can turn this money into a ticket at `price` (the machine's
+## cheapest): the credit or the tab already does, or the cash with the credit makes one,
+## fed as bills and, under the smallest bill, as coins (Economy.coins_for, G 2026-11-07;
+## before that the coins under a bill were stuck, and the bots "played" days at the
+## machine buying nothing). Every bot asks this.
 static func _can_buy(e: Economy, price: int) -> bool:
-	return e.credit >= price or (e.cash + e.credit >= price and e.cash >= int(e.bills[0]))
+	return e.can_buy(price) or e.cash + e.credit >= price
 
 
 ## The column a bot plays today: one of its line's forms when the machine sells one,
@@ -190,10 +194,16 @@ static func _column(m: MachineLogic, rng: RandomNumberGenerator, forms: Array) -
 
 ## Buys and opens tickets from one column, a batch at a time, until the layer can be
 ## paid (and pays it), the money runs out, or the day's cap is reached. The churn bot
-## changes the box after every CHURN tickets when it can pay the fee.
+## changes the box after every CHURN tickets when it can pay the fee. A column the money
+## cannot buy a ticket of gives way to the cheapest. Returns the tickets bought.
 static func _play_day(run: RunState, e: Economy, m: MachineLogic, rng: RandomNumberGenerator, bot: String,
-		line: Dictionary) -> void:
+		line: Dictionary) -> int:
 	var col := _column(m, rng, line.get("forms", []))
+	if not _can_buy(e, m.price(col)):
+		for i in m.forms.size():
+			if m.price(i) == m.min_price():
+				col = i
+				break
 	var borrows := bot == "borrow"
 	var churn := bot == "churn"
 	var per := CHURN if churn else BATCH
@@ -202,9 +212,9 @@ static func _play_day(run: RunState, e: Economy, m: MachineLogic, rng: RandomNum
 	while bought < DAY_CAP:
 		if run.can_pay(e):
 			run.pay(e, m)
-			return
+			return bought
 		var price := m.price(col)
-		_feed(e, price * per)
+		_feed(e, price * per, m.min_price())
 		if e.credit < price:
 			if borrows and run.can_borrow():
 				run.borrow(e)
@@ -226,12 +236,13 @@ static func _play_day(run: RunState, e: Economy, m: MachineLogic, rng: RandomNum
 		run.count_sales(sales, last, m.forms[col].uid())
 		bought += sales
 		if run.layer != layer:
-			return
+			return bought
 		if churn and m.boxes[col].cursor < m.boxes[col].size:
 			if e.cash < run.change_fee():
 				e.cash_out()
 			run.change_box(e, m, col)
 	e.cash_out()
+	return bought
 
 
 ## Opens tickets bought: in batches of QUICK HANDS' size when the run has it (asked
@@ -330,8 +341,9 @@ static func _rolls(run: RunState, e: Economy, m: MachineLogic) -> bool:
 	return e.cash - run.perk_price("bet") >= HIGH_ROLLER_CASH * price
 
 
-## Moves cash into credit through the bill slot until `want` is there or no bill fits.
-static func _feed(e: Economy, want: int) -> void:
+## Moves cash into credit through the bill slot until `want` is there or no bill fits;
+## then, under the smallest bill, the coins for whole tickets at `price` (the cheapest).
+static func _feed(e: Economy, want: int, price: int) -> void:
 	var guard := 0
 	while e.credit < want and guard < 500:
 		guard += 1
@@ -343,6 +355,9 @@ static func _feed(e: Economy, want: int) -> void:
 				fed = true
 				break
 		if not fed:
+			# Under the smallest bill: the coins, whole tickets at the cheapest price.
+			if e.insert_coins(price):
+				e.step_bill(Economy.BILL_TIME)
 			return
 
 

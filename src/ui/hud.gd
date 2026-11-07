@@ -1,12 +1,15 @@
 class_name Hud
 extends CanvasLayer
 ## Player HUD in the "refined LCD" style: a metal plate top left with the cash LCD
-## and a one-line count, and the bill plate beside the machine's bill slot.
+## and a one-line count, and the bill plate beside the machine's bill slot (its keys
+## the bills, and COINS: with the cash under the smallest bill the slot takes the whole
+## tickets of coins, Economy.coins_for).
 ## The full ledger lives on the notepad on the table. Shows state only; the game
 ## wires the buttons. Player text is translation keys (auto-translated by the
 ## controls) or goes through tr(); it follows a language change straight away.
 
 signal bill_pressed(value: int)
+signal coins_pressed       ## the COINS key on the bill plate
 signal cash_out_pressed
 signal phone_pressed       ## the phone (LOAN, and in the run the shop and contacts)
 signal menu_pressed
@@ -24,6 +27,7 @@ var _opened := LcdStyle.label("0", 20, LcdStyle.BRIGHT_TEXT)
 var _net := LcdStyle.label("$0", 20, LcdStyle.BRIGHT_TEXT)
 var _bills: Array[Button] = []
 var _bill_values: Array = Economy.BILLS
+var _coins: Button         ## the sixth key of the pad: COINS, with what it feeds
 var _run_line := LcdStyle.label("", 20, LcdStyle.BRIGHT_TEXT)
 var _leave: Button
 var _new_box: Button
@@ -124,6 +128,12 @@ func _ready() -> void:
 		b.pressed.connect(func(): bill_pressed.emit(_bill_values[i]))
 		pad.add_child(b)
 		_bills.append(b)
+	# The pad's free sixth place: the coins (a chrome key, set apart from the bills).
+	_coins = LcdStyle.chrome("COINS", 20)
+	_coins.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	_coins.custom_minimum_size = Vector2(74, 74)
+	_coins.pressed.connect(func(): coins_pressed.emit())
+	pad.add_child(_coins)
 	var center := CenterContainer.new()
 	center.add_child(pad)
 	wv.add_child(center)
@@ -206,8 +216,10 @@ func set_ledger(held: int, e: Economy) -> void:
 
 
 ## Bill plate: shown beside the slot; keys dark while a bill feeds or cash is short.
-## change: {} in free play, else {fee, armed, ok} for NEW BOX.
-func set_bill_window(show: bool, e: Economy, machine_busy: bool, change := {}) -> void:
+## change: {} in free play, else {fee, armed, ok} for NEW BOX. `price`: the machine's
+## cheapest ticket, for the COINS key (lit, with what it feeds, when the cash is under
+## the smallest bill and makes a ticket with the credit; dark otherwise).
+func set_bill_window(show: bool, e: Economy, machine_busy: bool, change := {}, price := 0) -> void:
 	_window.visible = show
 	if not show:
 		return
@@ -218,6 +230,11 @@ func set_bill_window(show: bool, e: Economy, machine_busy: bool, change := {}) -
 			LcdStyle.set_sizes(_bills[i], 30 if _bills[i].text.length() <= 4 else 24)
 	for i in _bills.size():
 		_bills[i].disabled = e.bill > 0 or e.cash < int(_bill_values[i])
+	var coins := e.coins_for(price)
+	var coin_text := tr("COINS") + ("\n" + _money(coins) if coins > 0 else "")
+	if _coins.text != coin_text:
+		_coins.text = coin_text
+	_coins.disabled = coins <= 0
 	_cash_out.disabled = e.credit <= 0 or machine_busy
 	_new_box.visible = not change.is_empty()
 	if not change.is_empty():
@@ -262,6 +279,11 @@ func place_bill_window(side_x: float, slot_y: float, window_y: float, screen: Ve
 	var y := clampf(window_y - h / 2.0, 16.0, screen.y - h - 16.0)
 	_window.position = Vector2(x, y)
 	_arrow.position = Vector2(-2, clampf(slot_y - y, 24.0, h - 24.0))
+
+
+## Tools: the COINS key.
+func coins_key() -> Button:
+	return _coins
 
 
 func bill_window_visible() -> bool:

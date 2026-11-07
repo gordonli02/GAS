@@ -18,6 +18,12 @@ extends RefCounted
 const STANDARD := {
 	"start_cash": 200,
 	"loan_interest": 15,     ## percent a day, compounding each morning on what is owed (G: above SAVINGS' first level)
+	## Every run box's prize total times this (BoxModel.payout). G, 2026-11-07: a dollar of
+	## tickets bought blind, whole boxes bought out, the last sale included, pays back about
+	## 0.78 in the run (1.216 before: the last sale was a quarter of a small box). Free play
+	## keeps the web build's boxes. Measured with tools/sim_runs (4000 boxes a form, two seeds):
+	## no perks 0.783 and 0.780 averaged, each form within 0.77 to 0.80.
+	"payout": 0.735,
 	"layers": [
 		{
 			"days": 5,
@@ -25,7 +31,7 @@ const STANDARD := {
 			"wage": 150,                   ## pay for a shift, the same every day of the layer
 			"loan": 200, "loan_step": 100,        ## house line for the layer, and how much one press borrows
 			"change_fee": 25,              ## a new box in one column
-			"last_sale": 50,               ## prize for buying the last ticket of a box
+			"last_sale": 10,               ## prize for buying the last ticket of a box (about 5% of a box's tickets)
 			"box": {"size_min": 180, "size_step": 2, "size_steps": 21},
 			## "forms": ["core:catch", ...] would name what this layer's machine sells, column
 			## by column; without it the machine sells every form the game was started with.
@@ -36,7 +42,7 @@ const STANDARD := {
 			"wage": 700,
 			"loan": 1000, "loan_step": 500,
 			"change_fee": 125,
-			"last_sale": 250,
+			"last_sale": 75,
 			"box": {"size_min": 270, "size_step": 3, "size_steps": 21},
 		},
 		{
@@ -45,7 +51,7 @@ const STANDARD := {
 			"wage": 2500,
 			"loan": 4000, "loan_step": 2000,
 			"change_fee": 500,
-			"last_sale": 1000,
+			"last_sale": 500,
 			"box": {"size_min": 450, "size_step": 5, "size_steps": 21},
 		},
 	],
@@ -56,6 +62,7 @@ const SAVINGS := "savings"
 
 var start_cash := 200
 var loan_interest := 15
+var payout := 1.0            ## the boxes' prize totals times this (BoxModel.payout)
 var layers: Array = []
 var catalog: Catalog = null
 
@@ -70,6 +77,7 @@ static func from_dict(d: Dictionary, cat: Catalog = null) -> RunConfig:
 	var c := RunConfig.new()
 	c.start_cash = int(d.get("start_cash", 200))
 	c.loan_interest = int(d.get("loan_interest", 15))
+	c.payout = float(d.get("payout", 1.0))
 	c.layers = d.get("layers", []).duplicate(true)
 	c.catalog = cat if cat != null else Catalog.standard()
 	var line := c.work_line()
@@ -87,12 +95,13 @@ func layer(i: int) -> Dictionary:
 
 
 ## The box model of layer `i`: the standard odds at the layer's box sizes, with the
-## forms' own shapes and chance-rounded prizes (G, M9.6 and M9.7: the run only; free
-## play keeps the web build's boxes).
+## forms' own shapes, chance-rounded prizes and the run's payout (G, M9.6 and M9.7: the
+## run only; free play keeps the web build's boxes).
 func box_model(i: int) -> BoxModel:
 	var m := BoxModel.standard()
 	m.shapes = true
 	m.chance_round = true
+	m.payout = payout
 	var b: Dictionary = layer(i).get("box", {})
 	m.size_min = int(b.get("size_min", m.size_min))
 	m.size_step = int(b.get("size_step", m.size_step))
@@ -181,6 +190,8 @@ func problems() -> PackedStringArray:
 		out.append("the work line should buy SAVINGS on the first day (G); it buys on day %d" % int(line[0].day))
 	if loan_interest < 1:
 		out.append("no loan interest")
+	if payout <= 0.0:
+		out.append("payout not above 0")
 	return out
 
 

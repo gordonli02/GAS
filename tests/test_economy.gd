@@ -49,6 +49,82 @@ func test_start_and_bills() -> void:
 	check(not poor.can_insert(50), "not more than the cash")
 
 
+## G, 2026-11-07: with the cash under the smallest bill the slot takes coins, the whole
+## tickets the credit and the cash make at the cheapest price; what cannot buy a ticket
+## stays in the pocket. They feed as a bill does.
+func test_coins_under_the_smallest_bill() -> void:
+	var e := Economy.new()
+	e.cash = 4
+	e.start_cash = 4
+	eq(e.smallest_bill(), 5, "free play's smallest bill")
+	check(not e.can_insert(5), "$4 is no bill")
+	eq(e.coins_for(1), 4, "four $1 tickets of coins")
+	check(e.insert_coins(1), "the coins go in")
+	eq(e.cash, 0, "the cash leaves at the click")
+	eq(e.bill, 4, "fed as a bill is")
+	check(e.coins, "as coins")
+	eq(e.coins_for(1), 0, "one feed at a time")
+	check(not e.insert(5), "and no bill meanwhile")
+	var heard := false
+	var t := 0.0
+	while e.bill > 0 and t < 3.0:
+		t += DT
+		heard = e.step_bill(DT).get("sound", false) or heard
+		check(e.balanced(), "balanced while feeding (%.2f s)" % t)
+	check(heard, "with the slot's sound")
+	check(absf(t - Economy.BILL_TIME) < 0.05, "in a bill's time (%.2f s)" % t)
+	eq(e.credit, 4, "credited")
+	check(not e.coins, "the feed is over")
+	# A bill in the pocket: bills first, the coins after.
+	var b := Economy.new()
+	b.cash = 7
+	eq(b.coins_for(1), 0, "$7 holds a bill: no coins")
+	b.insert(5)
+	b.step_bill(Economy.BILL_TIME)
+	eq(b.coins_for(1), 2, "then the $2 left")
+	# The run's second layer: bills from $25, tickets $5.
+	var r := Economy.new()
+	r.bills = RunConfig.bills(5)
+	r.cash = 24
+	r.start_cash = 24
+	eq(r.smallest_bill(), 25, "the smallest bill at stake 5")
+	eq(r.coins_for(5), 20, "$24: four tickets of coins")
+	check(r.insert_coins(5), "fed")
+	r.step_bill(Economy.BILL_TIME)
+	eq(r.credit, 20, "four tickets of credit")
+	eq(r.cash, 4, "$4 stays in the pocket")
+	eq(r.coins_for(5), 0, "under one ticket: nothing")
+	check(not r.insert_coins(5), "nothing fed")
+	eq(r.cash, 4, "nothing taken")
+	check(r.balanced(), "balanced")
+	# The credit counts: $3 of credit and $4 of coins make a ticket and more.
+	var c := Economy.new()
+	c.bills = RunConfig.bills(5)
+	c.credit = 3
+	c.cash = 4
+	eq(c.coins_for(5), 2, "$2 of coins tops $3 of credit up to one ticket")
+	c.credit = 5
+	c.cash = 2
+	eq(c.coins_for(5), 0, "a whole ticket of credit and $2: nothing")
+	c.cash = 0
+	eq(c.coins_for(5), 0, "no cash, no coins")
+	# HIGH ROLLER's bet raises the cheapest price the machine asks: whole tickets of it.
+	var h := Economy.new()
+	h.cash = 4
+	eq(h.coins_for(3), 3, "at $3 a ticket: $3 of coins, $1 kept")
+	# The machine sells from the coins' credit.
+	var pack := core_pack()
+	if pack == null:
+		return
+	var m := MachineLogic.new(pack.forms, "CO-0001")
+	var k := Economy.new()
+	k.cash = 3
+	eq(m.press(0, k), "insert_bill", "no credit: the machine asks for money")
+	check(k.insert_coins(m.min_price()), "coins")
+	k.step_bill(Economy.BILL_TIME)
+	eq(m.press(0, k), "", "now it sells")
+
+
 func test_prizes_cash_out_and_net() -> void:
 	var e := Economy.new()
 	e.credit = 10

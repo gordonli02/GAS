@@ -162,7 +162,12 @@ static func _roll(form: FormDef, model: BoxModel, r: SeededRng, box: TicketBox) 
 	var low_prize: int = form.tiers[low_id].prize
 
 	var share: float = 1.0 + type["min"] + (type["max"] - type["min"]) * r.next_float()
-	var total := int(_js_round(gross * share / low_prize)) * low_prize
+	# The run's payout scales the total (no draw of its own; at 1.0 the web build's
+	# numbers exactly). The box is told by its net after the payout.
+	var total := int(_js_round(gross * share * model.payout / low_prize)) * low_prize
+	box.net_type_id = type.id
+	if model.payout != 1.0:
+		box.net_type_id = str(model.type_for_net(share * model.payout - 1.0).get("id", type.id))
 	# The form's shape (the run only) moves money between the tiers; the total stays.
 	var top_min := model.top_share_min
 	var top_span := model.top_share_span

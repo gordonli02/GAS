@@ -282,10 +282,12 @@ func _shaped_900() -> BoxModel:
 	return m
 
 
-## The run's model of a layer without chance rounding: the same size, type and total.
+## The run's model of a layer without chance rounding: the same size, type and total
+## (the payout kept).
 func _without_chance(m: BoxModel) -> BoxModel:
 	var o := BoxModel.standard()
 	o.shapes = m.shapes
+	o.payout = m.payout
 	o.size_min = m.size_min
 	o.size_step = m.size_step
 	o.size_steps = m.size_steps
@@ -432,3 +434,121 @@ func test_chance_rounding_never_overfills_a_box() -> void:
 		for form in pack.forms:
 			var box := BoxGenerator.build(form.shaped(), "OF-full", RunConfig.standard().box_model(layer))
 			eq(box.tickets.size(), box.size, "%s layer %d: full build" % [form.id, layer + 1])
+
+
+## G, 2026-11-07: the run's payout (RunConfig "payout") scales every run box's prize
+## total; free play's model keeps 1.0, which changes nothing (the golden boxes of the web
+## build are tested in test_generator_golden).
+func test_payout_one_changes_nothing() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	eq(BoxModel.standard().payout, 1.0, "free play's model pays the web build's boxes")
+	var cfg := RunConfig.standard()
+	check(cfg.payout > 0.0 and cfg.payout < 1.0, "the run pays back less than its types (%.3f)" % cfg.payout)
+	for layer in 3:
+		eq(cfg.box_model(layer).payout, cfg.payout, "layer %d: the run's model carries the payout" % (layer + 1))
+		eq(cfg.box_model(layer).with_sizes([180, 2, 21]).payout, cfg.payout, "layer %d: and so does a SEALed box's" % (layer + 1))
+	eq(RunConfig.from_dict({"layers": RunConfig.STANDARD.layers}).payout, 1.0, "a config without one pays 1.0")
+	for form in pack.forms:
+		for n in 10:
+			var seed := "PO-%d" % n
+			var a := BoxGenerator.build(form, seed)
+			var m := BoxModel.standard()
+			m.payout = 1.0
+			var b := BoxGenerator.build(form, seed, m)
+			eq(var_to_str(b.tickets), var_to_str(a.tickets), "%s %s: payout 1.0, the same tickets" % [form.id, seed])
+			eq(b.counts, a.counts, "%s %s: the same counts" % [form.id, seed])
+			eq(a.net_type(), a.type_id, "%s %s: told by its own type" % [form.id, seed])
+		# A run model at 1.0 deals the run's boxes of before.
+		var run1 := cfg.box_model(0)
+		run1.payout = 1.0
+		var f: FormDef = form.shaped()
+		var c := BoxGenerator.build(f, "PO-run", run1, true)
+		eq(c.net_type(), c.type_id, "%s: a run box at 1.0 is told by its type" % form.id)
+
+
+## The payout scales the prize total and nothing else: the same seed gives the same
+## size and type. Without chance rounding the total is exact: the box at 1.0 times the
+## payout, to the rounding of the smallest prize. With it (the run), the expected prize
+## money scales: over every form's boxes the money paid against the same boxes at 1.0
+## is the payout, loosely (the tops a box holds by chance move it).
+func test_payout_scales_the_run_boxes() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var cfg := RunConfig.standard()
+	var n := 1000 if full else 300
+	for layer in 3:
+		var on := cfg.box_model(layer)
+		var one := cfg.box_model(layer)
+		one.payout = 1.0
+		var won := 0.0
+		var base := 0.0
+		for form in pack.forms:
+			var f: FormDef = form.shaped()
+			var low := int(f.tiers[f.tier_indices("low")[0]].prize)
+			for i in n:
+				var seed := "PS-%d" % i
+				var a := BoxGenerator.build(f, seed, on, true)
+				var b := BoxGenerator.build(f, seed, one, true)
+				if a.size != b.size or a.type_id != b.type_id:
+					check(false, "%s %s layer %d: the payout changed the size or type" % [form.id, seed, layer + 1])
+				won += a.prize_total()
+				base += b.prize_total()
+				if i < 40:
+					var x := BoxGenerator.build(f, seed, _without_chance(on), true)
+					var y := BoxGenerator.build(f, seed, _without_chance(one), true)
+					if absf(x.prize_total() - cfg.payout * y.prize_total()) > low:
+						check(false, "%s %s layer %d: without chance the total is $%d, against $%d x %.3f" % [form.id, seed, layer + 1, x.prize_total(), y.prize_total(), cfg.payout])
+		var ratio := won / base
+		note("layer %d: run boxes pay %.4f of the same boxes at payout 1.0 (payout %.3f)" % [layer + 1, ratio, cfg.payout])
+		check(absf(ratio - cfg.payout) < 0.04, "layer %d: the prize money scales by the payout (%.4f against %.3f)" % [layer + 1, ratio, cfg.payout])
+
+
+## The type a box is told by (TicketBox.net_type): the range that holds its net after the
+## payout, so READ THE BOX and the luck perks do not lie in the run. Free play: its type.
+func test_run_boxes_are_told_by_their_net() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var std := BoxModel.standard()
+	eq(str(std.type_for_net(0.0).id), "break_even", "0 is break even")
+	eq(str(std.type_for_net(-0.07).id), "break_even", "a gap: the nearest range")
+	eq(str(std.type_for_net(-0.11).id), "small_loss", "a gap: the nearest range, the other way")
+	eq(str(std.type_for_net(-0.9).id), "big_loss", "under every range: the biggest loss")
+	eq(str(std.type_for_net(3.0).id), "big_win", "over every range: the biggest win")
+	var cfg := RunConfig.standard()
+	var told := {}
+	for layer in 3:
+		var on := cfg.box_model(layer)
+		var exact := _without_chance(on)
+		for form in pack.forms:
+			var f: FormDef = form.shaped()
+			for i in 60:
+				var seed := "NT-%d" % i
+				var box := BoxGenerator.build(f, seed, exact, true)
+				var net := float(box.net()) / box.gross()
+				var tol := float(f.tiers[f.tier_indices("low")[0]].prize) / box.gross()
+				var id := box.net_type()
+				if not [str(on.type_for_net(net).id), str(on.type_for_net(net - tol).id), str(on.type_for_net(net + tol).id)].has(id):
+					check(false, "%s %s layer %d: net %.3f told as %s" % [form.id, seed, layer + 1, net, id])
+				eq(BoxGenerator.build(f, seed, on, true).net_type(), id, "%s %s: chance rounding tells the same" % [form.id, seed])
+				var key := "%s>%s" % [box.type_id, id]
+				told[key] = told.get(key, 0) + 1
+				# While the payout keeps a break-even box under the even range, it is told so.
+				if box.type_id == "break_even" and cfg.payout * 1.06 < 0.94:
+					check(float(on.type_by_id(id)["max"]) < 0.0, "%s %s layer %d: a box drawn break even loses %.0f%% in the run, told %s" % [form.id, seed, layer + 1, -100 * net, id])
+					eq(BoxReading.nature(box, on), "LEAN BOX", "and reads LEAN BOX")
+					check(MachineLogic.new([f], seed, on, true).losing(box), "and is a losing box to the luck perks")
+	var keys := told.keys()
+	keys.sort()
+	var parts := PackedStringArray()
+	for k in keys:
+		parts.append("%s %d" % [k, told[k]])
+	note("drawn type > told type, run boxes: " + ", ".join(parts))
+	# Free play: a box is told by the type it was drawn.
+	for form in pack.forms:
+		for i in 30:
+			var box := BoxGenerator.build(form, "NF-%d" % i, null, true)
+			eq(box.net_type(), box.type_id, "%s NF-%d: free play tells its type" % [form.id, i])

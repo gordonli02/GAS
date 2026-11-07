@@ -31,6 +31,23 @@ func _work_through(idle_days: Array, before := Callable(), saves := true) -> Arr
 	return [r, e]
 
 
+## G, 2026-11-07: the last-sale prize is about 5% of a box's ticket money in every
+## layer ($10 / $75 / $500 on boxes of 200 / 300 / 500 tickets at stakes 1 / 5 / 20).
+func test_last_sale_is_about_five_percent_of_a_box() -> void:
+	var c := RunConfig.standard()
+	var want := [10, 75, 500]
+	for i in 3:
+		var l: Dictionary = c.layer(i)
+		eq(int(l.last_sale), want[i], "layer %d: last sale" % (i + 1))
+		var m := c.box_model(i)
+		var mean_box := (m.size_min + (m.size_steps - 1) * m.size_step / 2.0) * int(l.stake)
+		var share := float(l.last_sale) / mean_box
+		check(share > 0.04 and share < 0.06, "layer %d: %.1f%% of a box's tickets" % [i + 1, 100 * share])
+		var r := RunState.start(c, "LS-1", ["diner", "bar", "bingo"])
+		r.layer = i
+		eq(r.last_sale_prize(), want[i], "layer %d: the run pays it" % (i + 1))
+
+
 func test_config_holds_together() -> void:
 	var c := RunConfig.standard()
 	eq(c.problems(), PackedStringArray(), "standard numbers")
@@ -254,7 +271,7 @@ func test_stage_machine() -> void:
 	var m := r.new_machine(pack.forms)
 	var tray := TicketTray.new()
 	eq(m.forms[0].price, 1, "first layer at the pack's price")
-	eq(m.last_sale, 50, "last sale prize")
+	eq(m.last_sale, 10, "last sale prize")
 	# A new box for the fee.
 	var seed_before: String = m.boxes[1].seed
 	check(r.change_box(e, m, 1), "change box")
@@ -280,8 +297,8 @@ func test_stage_machine() -> void:
 		last.append_array(m.step(DT, t, e, tray).last_sale)
 	eq(tray.size(), 2, "two tickets")
 	eq(last, [0], "one last sale, on the last ticket")
-	eq(e.won, 50, "paid as a prize")
-	eq(e.cash, 95 + 50, "straight to cash")
+	eq(e.won, 10, "paid as a prize")
+	eq(e.cash, 95 + 10, "straight to cash")
 	check(e.balanced(), "balanced")
 	# Second layer: everything at five times the stake, the same boxes otherwise.
 	e.bonus(r.due())

@@ -48,6 +48,14 @@ var shapes := false
 ## the mid's right after the mid share. With it off (free play, the web build) the draws
 ## and every number are exactly the web build's.
 var chance_round := false
+## The run's payout (G, 2026-11-07): every box's prize total is what its type sets times
+## this, so a dollar of tickets bought blind, whole boxes bought out, pays back about
+## this much (plus the last-sale prize). Set by RunConfig.box_model from the run
+## config's "payout"; the draws are the same, so a seed gives the same type and size.
+## The type's label would then lie (a "Break even" box loses), so the box is also told
+## by its net after the payout (TicketBox.net_type_id, type_for_net). At 1.0 (free play,
+## the web build) every draw and number is the web build's.
+var payout := 1.0
 
 
 static func standard() -> BoxModel:
@@ -71,6 +79,7 @@ func with_sizes(key: Array) -> BoxModel:
 	m.stack_share = stack_share
 	m.shapes = shapes
 	m.chance_round = chance_round
+	m.payout = payout
 	m.size_min = int(key[0])
 	m.size_step = int(key[1])
 	m.size_steps = int(key[2])
@@ -82,3 +91,21 @@ func type_by_id(id: String) -> Dictionary:
 		if t.id == id:
 			return t
 	return {}
+
+
+## The type whose net share range holds `net` (prize money over ticket money, less 1):
+## the first that holds it, else the nearest (the ranges leave gaps: -0.12 to -0.06,
+## 0.06 to 0.12; past either end, the end's type). What a box with the payout is told.
+func type_for_net(net: float) -> Dictionary:
+	var best: Dictionary = {}
+	var gap := INF
+	for t in types:
+		var lo := float(t["min"])
+		var hi := float(t["max"])
+		if net >= lo and net <= hi:
+			return t
+		var d := lo - net if net < lo else net - hi
+		if d < gap:
+			gap = d
+			best = t
+	return best

@@ -7,7 +7,7 @@ const CSV := "res://locale/ui.csv"
 const EXTRA_KEYS := ["DINER", "BAR", "BINGO", "MUTED", "SOUND", "HELD", "OPENED", "NET", "STORY", "SURE?",
 	"LOAN", "SHOP", "CONTACTS", "SHELF", "TODAY", "ITEMS", "HOT", "FAIR", "COLD",
 	"JACKPOT FORM", "ALL OR NOTHING", "SMALL PRIZES FORM", "MIDDLE PRIZES FORM", "BY GROUP",
-	"TOP IN", "NO TOP", "FAT BOX", "EVEN BOX", "LEAN BOX", "NEXT ONE LOSES"]
+	"TOP IN", "NO TOP", "FAT BOX", "EVEN BOX", "LEAN BOX", "NEXT ONE LOSES", "INSERT COINS"]
 const PATTERNS := [
 	"\\btr\\(\"([^\"]+)\"",
 	"\\bset_status\\(\"([^\"]+)\"",

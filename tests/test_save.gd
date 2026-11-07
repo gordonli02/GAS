@@ -99,10 +99,28 @@ func test_version_2_run_is_dropped() -> void:
 	eq(r.settings.room, "bar", "settings kept")
 	eq(r.settings.mode, "run", "the mode kept")
 	eq(int(r.session.economy.cash), 5, "free play kept")
-	eq(SaveFile.VERSION, 3, "version 3")
-	# A version 3 file keeps its run.
+	# A file of this version keeps its run.
 	check(SaveFile.write(p, SaveFile.SETTINGS, {}, {"state": {"seed": "R-2"}, "session": {}}), "write")
-	eq(str(SaveFile.read(p).run.state.seed), "R-2", "a version 3 run is kept")
+	eq(str(SaveFile.read(p).run.state.seed), "R-2", "a run of this version is kept")
+
+
+## G, 2026-11-07: the run's boxes pay back the run's payout (RunConfig "payout"), so a
+## version 3 run in progress (rebuilt from the seed it would hold other prizes) is
+## dropped; the settings, the mode and the free-play session stay.
+func test_version_3_run_is_dropped() -> void:
+	var p := _path("v3.json")
+	SaveFile.write_text(p, JSON.stringify({"version": 3, "settings": {"room": "bingo", "mode": "run", "one_click": true},
+		"session": {"economy": {"cash": 9}}, "run": {"state": {"seed": "R-3"}, "session": {"economy": {"cash": 4}}}}))
+	var r := SaveFile.read(p)
+	eq(r.note, "", "version 3 reads without complaint")
+	eq(r.run, {}, "the run in progress is dropped")
+	eq(r.settings.room, "bingo", "settings kept")
+	eq(r.settings.mode, "run", "the mode kept")
+	eq(r.settings.one_click, true, "a setting kept")
+	eq(int(r.session.economy.cash), 9, "free play kept")
+	eq(SaveFile.VERSION, 4, "version 4")
+	check(SaveFile.write(p, SaveFile.SETTINGS, {}, {"state": {"seed": "R-4"}, "session": {}}), "write")
+	eq(str(SaveFile.read(p).run.state.seed), "R-4", "a version 4 run is kept")
 
 
 func test_bad_files_start_fresh() -> void:

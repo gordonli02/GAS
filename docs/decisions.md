@@ -1186,3 +1186,83 @@ number is the web build's (48 boxes compared before and after).
   1e12. PACKED and CRUMBS alone add nothing (PACKED cannot break $1000 into 199 fives);
   MAGNET runs out of winners on Big Catch. Churn with fees stays under 1 (0.40-0.74).
   No perk number changed; no bot changed (G: data first).
+
+## M9.7 item 10: the run's payout, a smaller last sale, true box labels, coins
+
+G (2026-11-07): a dollar of tickets bought blind in the run (no perks, whole boxes
+bought out, the last sale included) should pay back about 0.78 on every form; it was
+1.216 after item 9. Free play and the web build's boxes do not change.
+
+- **Payout** (`BoxModel.payout`, the run config's top-level `"payout"`, read in
+  `RunConfig.box_model`; 1.0 everywhere else): a box's prize total is its type's share
+  times the payout, `round(gross * share * payout / smallest) * smallest`. No new draw,
+  so a seed gives the same type and size; chance rounding works on the scaled total. At
+  1.0 the product is the same float, so the golden boxes pass untouched. **0.735**, and
+  measured it needs no tuning: `box_return` without perks, 4000 boxes a form, two seeds,
+  every form 0.770-0.800, the mean 0.783 / 0.780 (the pooled "no perks" row of
+  `--ev-boxes=200` 0.784). Under about 2000 boxes a form the numbers wander (Big Catch
+  read 0.895 on 400): it pays on few tickets.
+- **Last sale** $10 / $75 / $500 (from $50 / $250 / $1000): about 5% of a mean box's
+  ticket money in each layer (200 x $1, 300 x $5, 500 x $20).
+- **Labels that do not lie.** With the payout a box drawn "Break even" pays about 0.73,
+  so the drawn type is no longer what the box does. Chosen: each box is also told by its
+  net after the payout, binned with the same seven ranges (`BoxModel.type_for_net`; the
+  gaps -0.12 to -0.06 and 0.06 to 0.12 go to the nearest range, past the ends to the end
+  types), kept as `TicketBox.net_type_id` and read through `net_type()`. It is computed
+  from the drawn share, before chance rounding, as the type always was ("born fat or
+  lean"). Everything a player is told reads it: READ THE BOX (FAT / EVEN / LEAN on the
+  LCD), the dev panel (with the drawn type beside it when they differ), and the perks
+  whose cards speak of losing boxes: LUCKY STREAK, FORTUNE and ASSEMBLY LINE
+  (`MachineLogic.losing`). Free play: `net_type()` is the drawn type, nothing changes.
+  Rejected: relabelling the seven types for the run (a fixed relabel is wrong inside a
+  type: a drawn big win is told mid win or small win by its share, and no box would read
+  "big win" at all), and keeping the perks on the drawn type (ASSEMBLY LINE's "does not
+  lose" would then load boxes that lose 27%). **This makes the luck perks stronger**: at
+  0.735 about 74% of the boxes are losing ones (45% before: 1,059 of 1,440), and a
+  box that is not losing is a drawn small win from the middle of its range or better. Drawn > told, 1,440 run
+  boxes: break even > small loss, small loss > mid loss, mid loss > big loss (or mid
+  loss), small win > break even or small loss, mid win > small win or break even, big
+  win > mid win (60), big win (15) or small win (3). HOT / COLD (money left per dollar
+  against 1.25 / 0.8) are left as they are: true of the money, so most run boxes now
+  feel COLD.
+- **Coins.** The slot takes bills; with the cash under the smallest bill ($5 / $25 /
+  $100) it takes coins: the whole tickets at the machine's cheapest price (the bet
+  included) that the credit and the cash make together, less the credit, so the credit
+  holds whole tickets after (`Economy.coins_for` / `insert_coins`); what cannot buy a
+  ticket stays in the pocket. They feed in a bill's time with the bill's sound (there is
+  no coin sound), no bill shows in the slot, the LCD reads COINS $n while they feed. The
+  pad's free sixth key is COINS (chrome, set apart from the green bills): dark with
+  "COINS" when there is nothing to feed, lit with "COINS / $n" when there is; the LCD
+  asks INSERT COINS instead of INSERT BILL then. HOUSE ACCOUNT does not change the rule
+  (its tab sells against the cash in hand anyway). Both modes. New strings COINS 零钱,
+  INSERT COINS 请投零钱: no new characters, the CJK subset needs no rebuild.
+- **Bots.** `RunSim._can_buy` is the slot's rule for every bot (blind, borrow, perks,
+  skip, gamble and the line bots): the credit or tab buys a ticket, or the cash with the
+  credit makes one; `_feed` feeds the coins after the bills. The line bots' "work when
+  under the smallest bill" is gone; build keeps its `reserve` (100 tickets) and its perk
+  list. A column the money cannot buy gives way to the cheapest. `play` returns
+  `idle_days`, the days a bot chose the machine and bought nothing: 0 for every bot (a
+  test).
+- **Save version 4**: run boxes rebuilt from seed and ops would hold other prizes, so a
+  run in progress is dropped; settings and the free-play session stay.
+- **ALL IN**: Big Catch and Ka-Bawk! stay as they are (G: players find out those two do
+  not suit the ALL IN line). With the payout the other six read 0.41-0.46, so their bars
+  were measured again (`--push-boxes=1000`): Hot Plate, Lucky Spur, Peckeye 60%, Pecking
+  Order, One Flock, Nugget Rush 45%; blind P 0.48, 0.45, 0.47, 0.50, 0.51, 0.53 (Big
+  Catch 0.28, Ka-Bawk! 0.19). P is flat between the window's price steps, so these are
+  the steps nearest a half; Lucky Spur has none between 0.56 and 0.47 and sits at the
+  test's floor of 0.45 on some seeds.
+- **Ideal data at 0.735** (`--ev-boxes=200`): no perks 0.784, prizes 1 0.961, prizes 3
+  1.517, scrap 2 1.015, luck 3 0.904, luck 3 + fortune 1 1.112, prizes 1 + bigfish 2
+  1.933, luck 1 + firstpull 2 1.119, luck 1 + pity 2 1.134, middle 2 0.988. Still out of
+  hand: the clearing chain (closer 2, firstpull 2, assembly 1, snowball 1, regular 2)
+  2.5e12, penny 2 + stacker 1 + scrap 2 + trashking 1 159.7, bigfish 2 + pity 2 + hunter
+  1 + read1 1 15.4, multi 2 + combo 2 + again 2 + streak 2 6.3.
+- **The bots after item 10** (300 runs, every bot on the slot's rule): build 6.0% (L1
+  21.7 / L2 44.6 / L3 62.1), perks 7.0% (21.3 / 43.8 / 75.0), small 20.0% (26.0 / 88.5 /
+  87.0), gamble 0.0% (7.3 / 18.2), borrow 0.0%, blind 0.0% (L1 6.3), skip 0.0% (L1 6.7),
+  batch 0.3%, clearing 0.3%, jackpot 0.0%, money 0.0%, churn 0.0%, work 100%. Returns:
+  build 1.127, perks 1.164, small 1.237, blind 0.765, gamble 0.802. `idle_days` 0. The
+  debts are the work line's (layer 1 $1136 against $950 of wages and the $200 start), set
+  when a blind dollar paid back about 1.0-1.2; at 0.78 a day at the machine forgoes a
+  $150 wage to lose money, and layer 1 stops nearly every gambling bot. Open for G.

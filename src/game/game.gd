@@ -179,6 +179,7 @@ func _ready() -> void:
 	input.game = self
 	add_child(input)
 	hud.bill_pressed.connect(insert_bill)
+	hud.coins_pressed.connect(insert_coins)
 	hud.cash_out_pressed.connect(cash_out)
 	hud.phone_pressed.connect(open_phone)
 	hud.menu_pressed.connect(toggle_menu)
@@ -286,7 +287,7 @@ func press_machine(i: int) -> void:
 		return
 	var r := machine.press_play_all(economy) if play_all else machine.press(columns[i], economy)
 	if r == "insert_bill":
-		say("INSERT BILL")
+		say(_insert_prompt())
 
 
 ## The red PLAY ALL button.
@@ -340,6 +341,21 @@ func insert_bill(value: int) -> void:
 	if not at_machine or not economy.insert(value):
 		return
 	hud.set_cash(economy.cash)
+
+
+## The COINS key: with the cash under the smallest bill, the slot takes the whole
+## tickets of coins at the machine's cheapest price (Economy.coins_for); they feed as a
+## bill does, with its sound, and no bill shows in the slot.
+func insert_coins() -> void:
+	if not at_machine or not economy.insert_coins(machine.min_price()):
+		return
+	hud.set_cash(economy.cash)
+
+
+## What the machine asks for when the credit is short: coins when the cash is under the
+## smallest bill and makes a ticket, else a bill.
+func _insert_prompt() -> String:
+	return "INSERT COINS" if economy.coins_for(machine.min_price()) > 0 else "INSERT BILL"
 
 
 func cash_out() -> void:
@@ -473,7 +489,7 @@ func primary() -> void:
 		elif not tray.is_empty():
 			toggle_view()
 		else:
-			say("INSERT BILL")
+			say(_insert_prompt())
 		return
 	if flow.state == TicketFlow.State.IDLE and tray.is_empty():
 		open_machine()
@@ -2015,7 +2031,7 @@ func _process(dt: float) -> void:
 	var ev := economy.step_bill(dt)
 	if ev.get("sound", false):
 		Sfx.play("bill")
-	machine_view.show_bill(economy.bill if economy.bill > 0 else 0, economy.bill_t)
+	machine_view.show_bill(economy.bill if economy.bill > 0 and not economy.coins else 0, economy.bill_t)
 	if bill > 0 and economy.bill == 0:
 		machine_view.show_bill(0, 0.0)
 	var sale := machine.last_sale   # what a last sale in this step pays (it may grow after: SNOWBALL)
@@ -2085,13 +2101,14 @@ func _refresh_ui() -> void:
 	var reading := _reading_lines(named)
 	var blink := sin(_time * 7.0) > -0.4
 	var msg := tr(_msg) % _msg_args if not _msg_args.is_empty() else tr(_msg)
-	var sub := tr("READING BILL") if economy.bill > 0 \
+	var sub := (tr("COINS") + " " + Hud._money(economy.bill)) if economy.bill > 0 and economy.coins \
+		else tr("READING BILL") if economy.bill > 0 \
 		else (tr("PLAYALL") if blink else "") if machine.armed \
 		else (tr("NEW BOX?") if blink else "") if machine.change_armed \
 		else (tr("PICK A COLUMN") if blink else "") if aim != "" \
 		else msg if _time < _msg_until \
 		else str(reading[0]) if not reading.is_empty() \
-		else tr("SELECT A TICKET") if economy.can_buy(machine.min_price()) else tr("INSERT BILL")
+		else tr("SELECT A TICKET") if economy.can_buy(machine.min_price()) else tr(_insert_prompt())
 	var info := ""
 	if named >= 0 and named < columns.size():
 		var f: FormDef = machine.forms[columns[named]]
@@ -2134,7 +2151,7 @@ func _refresh_ui() -> void:
 	else:
 		hud.set_run("")
 		hud.set_open("")
-	hud.set_bill_window(at_machine and camera.cam > 0.97, economy, machine.busy(), change)
+	hud.set_bill_window(at_machine and camera.cam > 0.97, economy, machine.busy(), change, machine.min_price())
 
 
 ## Run: what reading a column's box tells (BoxReading), as the LCD's status line and,

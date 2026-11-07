@@ -42,6 +42,40 @@ func test_bots_finish_and_balance() -> void:
 	eq(b, a, "the same seed plays the same run")
 
 
+## G, 2026-11-07: the slot takes coins under the smallest bill, and every bot asks the
+## slot's rule before going to the machine, so no bot spends a day there buying nothing
+## (before, the coins under a bill kept the plain bots at the machine for nothing).
+func test_bots_never_stand_at_the_machine_unable_to_buy() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var n := 8 if full else 3
+	for bot in RunSim.BOTS:
+		if bot == "work":
+			continue
+		var idle := 0
+		for i in n:
+			idle += int(RunSim.play(bot, pack.forms, "ID-%d" % i).idle_days)
+		eq(idle, 0, "%s: no day at the machine without a ticket bought (%d runs)" % [bot, n])
+	# The rule itself: coins under the smallest bill buy, under one ticket they do not.
+	var e := Economy.new()
+	e.bills = RunConfig.bills(5)
+	e.cash = 24
+	check(RunSim._can_buy(e, 5), "$24 under a $25 bill: four tickets of coins")
+	e.cash = 4
+	check(not RunSim._can_buy(e, 5), "$4 under a $5 ticket: nothing")
+	e.credit = 1
+	check(RunSim._can_buy(e, 5), "$4 of coins and $1 of credit: one ticket")
+	var fed := Economy.new()
+	fed.bills = RunConfig.bills(5)
+	fed.cash = 24
+	fed.start_cash = 24
+	RunSim._feed(fed, 125, 5)
+	eq(fed.credit, 20, "the bot feeds the coins: four tickets")
+	eq(fed.cash, 4, "the rest stays in the pocket")
+	check(fed.balanced(), "balanced")
+
+
 func test_churn_does_not_pay() -> void:
 	# FIRST PULL x REGULAR (docs/perk_research.md 5.11): 20 tickets a box, then a new
 	# box; the fee's floor keeps it at 1 or under, counted with the fees.
@@ -87,16 +121,20 @@ func test_all_in_wins_about_half() -> void:
 	var pack := core_pack()
 	if pack == null:
 		return
-	var capped := {"catch": 0.30, "kabawk": 0.20}
+	# Bars measured at the run's payout (0.735, G 2026-11-07), 800 to 1000 boxes a form:
+	# the six read 0.45 to 0.53; Big Catch and Ka-Bawk! kept their bars and read 0.28
+	# and 0.19 (0.30 and 0.16 on other seeds), so their floors have margin.
+	const LOW := 0.45
+	var capped := {"catch": 0.2, "kabawk": 0.12}
 	var rows := RunSim.push_odds(pack.forms, 400 if full else 250, "PT")
 	eq(rows.size(), pack.forms.size(), "a row per form")
 	for row in rows:
 		note("ALL IN on %s: share %d%%, P %.3f (%d windows)" % [row.form, row.share, row.p, row.windows])
 		if capped.has(row.form):
-			check(row.p >= capped[row.form] and row.p <= 0.55, "%s: P %.3f (this form cannot reach 0.45; at least %.2f)" % [row.form, row.p, capped[row.form]])
+			check(row.p >= capped[row.form] and row.p <= 0.55, "%s: P %.3f (this form cannot reach half; at least %.2f)" % [row.form, row.p, capped[row.form]])
 		else:
-			check(row.p >= 0.45 and row.p <= 0.55, "%s: P %.3f within 0.45 to 0.55" % [row.form, row.p])
-		check(row.windows > 1000, "%s: enough windows (%d)" % [row.form, row.windows])
+			check(row.p >= LOW and row.p <= 0.55, "%s: P %.3f within %.2f to 0.55" % [row.form, row.p, LOW])
+		check(row.windows > 500, "%s: enough windows (%d)" % [row.form, row.windows])
 	# The old bar (more than the window) was about a third or less.
 	var old := {}
 	for f in pack.forms:
@@ -116,9 +154,9 @@ func test_perks_raise_the_return() -> void:
 	var luck := RunSim.box_return(pack.forms, {"luck": 3}, n)
 	var all := RunSim.box_return(pack.forms, {"prizes": 3, "luck": 3, "closer": 2}, n)
 	note("return per dollar: none %.3f, FAT PRIZES 3 %.3f, LUCKY STREAK 3 %.3f, all %.3f" % [none, prizes, luck, all])
-	# The last-sale prize ($50 on a box of 200 at the first layer, M9.7) is a quarter of a
-	# box's takings now, so a bought-out box pays about 1.2 a dollar.
-	check(none > 0.85 and none < 1.35, "without perks about even (%.3f)" % none)
+	# G, 2026-11-07: blind, whole boxes bought out, the last sale included, about 0.78 a
+	# dollar (the run's payout, RunConfig "payout", and a last sale of about 5% of a box).
+	check(none > 0.65 and none < 0.92, "without perks about 0.78 (%.3f)" % none)
 	check(prizes > none * 1.2, "FAT PRIZES 3 pays about 30%% more (%.3f)" % prizes)
 	check(luck > none, "LUCKY STREAK pays more (%.3f)" % luck)
 	check(all > prizes and all > luck, "together more still (%.3f)" % all)

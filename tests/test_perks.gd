@@ -196,15 +196,15 @@ func test_snowball_and_the_last_sale() -> void:
 		return
 	var r := _run()
 	var m := r.new_machine(pack.forms, true)
-	eq(r.last_sale_prize(), 50, "the stage's last sale")
+	eq(r.last_sale_prize(), 10, "the stage's last sale")
 	r.perks = {"closer": 2}
-	eq(r.last_sale_prize(), 300, "CLOSER 2: x6")
+	eq(r.last_sale_prize(), 60, "CLOSER 2: x6")
 	r.perks = {"snowball": 1}
 	r.cleared_box(m)
 	r.cleared_box(m)
 	check(absf(r.snow_x() - 1.21) < 1e-6, "SNOWBALL: two boxes cleared, x1.21")
 	eq(_pays(r, _ticket(2)), 121, "on every prize")
-	eq(m.last_sale, 61, "and on the last sale, put into the machine")
+	eq(m.last_sale, 12, "and on the last sale, put into the machine ($12.10)")
 	eq(r.stats.boxes_cleared, 2, "boxes cleared counted")
 	for n in [5, 10]:
 		r.snow = n
@@ -1601,7 +1601,14 @@ func test_box_reading() -> void:
 	var b := BoxGenerator.build(pack.forms[0], "RD-2")
 	for t in [["big_loss", "LEAN BOX"], ["break_even", "EVEN BOX"], ["mid_win", "FAT BOX"]]:
 		b.type_id = t[0]
+		b.net_type_id = t[0]
 		eq(BoxReading.nature(b), t[1], "%s reads %s" % t)
+	# The run: the box is told by its net after the payout, not the type it was drawn.
+	b.type_id = "break_even"
+	b.net_type_id = "small_loss"
+	eq(BoxReading.nature(b), "LEAN BOX", "drawn break even, losing after the payout: LEAN BOX")
+	b.net_type_id = ""
+	eq(BoxReading.nature(b), "EVEN BOX", "a box with no net type: its own type")
 	eq(BoxReading.feel(2.0), "HOT", "hot")
 	eq(BoxReading.feel(1.0), "FAIR", "fair")
 	eq(BoxReading.feel(0.4), "COLD", "cold")

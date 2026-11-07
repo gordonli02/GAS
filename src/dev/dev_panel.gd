@@ -216,13 +216,19 @@ func _refresh() -> void:
 	for c in _facts.get_children():
 		c.queue_free()
 	var serial := str(game.flow.ticket.serial) if game.flow.has_ticket() and game.flow.ticket.has("serial") else "-"
-	var type: Dictionary = BoxModel.standard().type_by_id(box.type_id)
+	# The type the box is told by (its net after the run's payout); the drawn one beside it
+	# when they differ (the run).
+	var type: Dictionary = BoxModel.standard().type_by_id(box.net_type())
+	var drawn: Dictionary = BoxModel.standard().type_by_id(box.type_id)
+	var type_text: String = _zh(type.label) if not type.is_empty() else box.net_type()
+	if box.net_type() != box.type_id and not drawn.is_empty():
+		type_text += "（抽到%s）" % _zh(drawn.label)
 	var facts := [
 		["本张序列号", serial],
 		["这盒张数", "%s 张" % Hud._num(box.size)],
 		["已开", "%s 张" % Hud._num(box.opened)],
 		["已卖", "%s 张" % Hud._num(box.cursor)],
-		["这盒类型", _zh(type.label) if not type.is_empty() else box.type_id],
+		["这盒类型", type_text],
 		["买完整盒", ("+" if s.net > 0 else "-" if s.net < 0 else "") + Hud._money(absi(s.net))],
 		["下一张期望", "$%.2f" % s.ev if s.remain > 0 else "已卖完"],
 	]
