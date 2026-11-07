@@ -609,3 +609,31 @@ section 5; this is how it landed in code. Every number is a placeholder.
 - **The simulator** keeps its bots; `build` buys QUICK HANDS off the shelf by its own rule
   and its list is the dealt perks of the draft; a bot that cannot work (NO WAY BACK) plays
   instead. Task 5 remakes the bots (gamble, the build lines, the exploit checks).
+
+## Milestone 9.5, step 3: dealing
+The rules are `docs/perk_research.md` section 5 ("12. 发牌规则") and `docs/roadmap.md`
+M9.5; this is how they landed. The weights are placeholders.
+- **A deal table per layer** (`Catalog.DEAL`, one entry per layer, the last one for any
+  layer after it; `Catalog.deal(layer)`): each rarity's weight and the kinds left out.
+  Layer 1: common 10 / rare 3 / legendary 0, no risk; layer 2: 10 / 5 / 2 (the old
+  `RARITY_WEIGHT`, which stays as the list of rarities); layer 3: 10 / 5 / 5.
+  `Catalog.deal_weight(p, layer)` is a perk's weight there, 0 when left out, and
+  `problems()` checks the table (three entries, a weight 0 or more for every rarity,
+  known kinds, layer 1 without legendary and without risk).
+- **`RunState.offerable()` is the layer's**: a perk the layer's deal leaves out is not
+  offerable at all, so the REROLL key greys out when nothing is left to deal.
+- **`deal_offers()`** draws by the layer's weights, still x1.5 for a level up and x2 for
+  a perk with requirements, from the same seed (seed, layer, day, reroll). The first
+  `Catalog.OFFERS` of a deal hold two kinds at least and two branches: when the last of
+  those would leave one kind, it is drawn again among the other kinds; failing that
+  (the pool has one kind), among the other branches. Offers past the first three
+  (DOUBLE DOWN, `offer_bonus`) are drawn freely. Two kinds means two branches (risk,
+  twist and sure are each a branch of their own), so the branch rule only matters when
+  the pool is all build.
+- **The offers card** (`Game._offer_card`) shows each offer's kind next to its rarity
+  (`Catalog.KIND_NAMES`) and, through `_perk_text`, a risk perk's cost; still no
+  requirements on it (those are the shelf's).
+- **The perks of a form** (section 6b) are not written; the hook is there: a dealt perk
+  with `form` (a form's uid) is offerable only when `offerable(forms)` /
+  `deal_offers(forms)` is given that uid. Nobody passes the machine's forms yet, so such
+  a perk would never be dealt until the callers do.

@@ -696,6 +696,117 @@ func test_offers_only_what_is_open() -> void:
 	eq(r.deal_offers(), [], "every dealt perk at the top: nothing to offer")
 
 
+## Every deal of `r` over 60 seeds and 3 rerolls each, at its layer and day.
+func _deals(r: RunState) -> Array:
+	var out := []
+	for i in 60:
+		r.seed = "DEAL-%d" % i
+		for k in 3:
+			r.offer_rerolls = k
+			out.append(r.deal_offers())
+	return out
+
+
+## How many perks of a deal hold `pred` (a perk's dictionary -> bool), over the deals.
+func _count(r: RunState, deals: Array, pred: Callable) -> int:
+	var n := 0
+	for d in deals:
+		for id in d:
+			if pred.call(r.catalog.perk(id)):
+				n += 1
+	return n
+
+
+## Two kinds and two branches among the first three of every deal.
+func _two_and_two(r: RunState, deals: Array, what: String) -> void:
+	var bad := 0
+	for d in deals:
+		var kinds := {}
+		var branches := {}
+		for id in d.slice(0, Catalog.OFFERS):
+			kinds[Catalog.kind(r.catalog.perk(id))] = true
+			branches[r.catalog.perk(id).branch] = true
+		if d.size() >= Catalog.OFFERS and (kinds.size() < 2 or branches.size() < 2):
+			bad += 1
+	eq(bad, 0, "%s: every deal has two kinds and two branches" % what)
+
+
+func test_the_deal_by_layer() -> void:
+	var r := _run()
+	var legendary := func(p: Dictionary) -> bool: return p.rarity == "legendary"
+	var risk := func(p: Dictionary) -> bool: return Catalog.kind(p) == "risk"
+	# Layer 1: no legendary, no risk; mostly common.
+	var d1 := _deals(r)
+	eq(_count(r, d1, legendary), 0, "layer 1: nothing legendary dealt")
+	eq(_count(r, d1, risk), 0, "layer 1: no risk perk dealt")
+	check(_count(r, d1, func(p: Dictionary) -> bool: return p.rarity == "common") > _count(r, d1, func(p: Dictionary) -> bool: return p.rarity == "rare"),
+		"layer 1: more common than rare")
+	for id in r.offerable():
+		check(Catalog.kind(r.catalog.perk(id)) != "risk" and r.catalog.perk(id).rarity != "legendary", "layer 1: %s not even offerable" % id)
+	_two_and_two(r, d1, "layer 1")
+	# Layer 2: everything open.
+	r.layer = 1
+	var d2 := _deals(r)
+	var leg2 := _count(r, d2, legendary)
+	check(leg2 > 0, "layer 2: legendary perks dealt (%d)" % leg2)
+	check(_count(r, d2, risk) > 0, "layer 2: risk perks dealt (%d)" % _count(r, d2, risk))
+	_two_and_two(r, d2, "layer 2")
+	# Layer 3: legendary weighed up.
+	r.layer = 2
+	var d3 := _deals(r)
+	var leg3 := _count(r, d3, legendary)
+	check(leg3 > leg2, "layer 3: more legendary than layer 2 (%d to %d)" % [leg3, leg2])
+	_two_and_two(r, d3, "layer 3")
+	note("legendary dealt over 180 deals: layer 2 %d, layer 3 %d" % [leg2, leg3])
+	# A layer past the table deals by the last one's weights (the seed has the layer in it).
+	eq(Catalog.deal(5), Catalog.deal(2), "past the table: the last layer's weights")
+	r.layer = 5
+	eq(r.offerable(), _at_layer(2).offerable(), "and the same perks open")
+	# The same seed, layer, day and reroll deal the same.
+	var a := _at_layer(1)
+	var b := _at_layer(1)
+	check(a.deal_offers() == b.deal_offers() and _deals(a) == _deals(b), "the same seed deals the same")
+	# DOUBLE DOWN 2: five offers, the first three still two kinds and two branches.
+	a.perks = {"double": 2}
+	var d5 := _deals(a)
+	var five := 0
+	for d in d5:
+		if d.size() == Catalog.OFFERS + 2:
+			five += 1
+	eq(five, d5.size(), "DOUBLE DOWN 2: five offers every time")
+	_two_and_two(a, d5, "DOUBLE DOWN 2")
+	var kinds_ok := 0
+	for d in d5:
+		var kinds := {}
+		for id in d:
+			kinds[Catalog.kind(a.catalog.perk(id))] = true
+		if kinds.size() >= 2:
+			kinds_ok += 1
+	eq(kinds_ok, d5.size(), "DOUBLE DOWN 2: two kinds in all five")
+
+
+## A run moved to layer `l` (0-based), nothing else changed.
+func _at_layer(l: int) -> RunState:
+	var r := _run()
+	r.layer = l
+	return r
+
+
+func test_a_perk_of_a_form() -> void:
+	# The hook for the perks of a form (section 6b, none written yet): one with `form`
+	# is offered only while that form is on the machine.
+	var r := _run()
+	r.layer = 1
+	var p: Dictionary = r.catalog.perk("closer").duplicate(true)
+	p.id = "of_a_form"
+	p.erase("requires")
+	p.erase("requires_any")
+	p["form"] = "catch"
+	r.catalog.perks.append(p)
+	check(not r.offerable().has("of_a_form"), "its form not on the machine: not offered")
+	check(r.offerable(["catch"]).has("of_a_form"), "its form on the machine: offered")
+
+
 func test_the_shelf_of_perks() -> void:
 	var res := _rich(100000)
 	var r: RunState = res[0]

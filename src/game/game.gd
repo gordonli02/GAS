@@ -784,8 +784,9 @@ func _on_offer(id: String) -> void:
 	_show_run_card()
 
 
-## The card of perk offers: each offer, its level, rarity and what it does, a key to buy
-## each (and to take one free with a CHEAT SHEET), reroll, done.
+## The card of perk offers: each offer, its level, kind, rarity and what it does (a risk
+## perk's cost after it, _perk_text), a key to buy each (and to take one free with a
+## CHEAT SHEET), reroll, done. No requirements here: those are the shelf's (G).
 func _offer_card() -> void:
 	var lines := [[tr("CASH %s") % Hud._money(economy.cash), "dim"]]
 	var buy := []
@@ -794,7 +795,8 @@ func _offer_card() -> void:
 		var id := str(run.offers[k])
 		var p := run.catalog.perk(id)
 		var lv := run.level(id) + 1
-		lines.append(["%d  %s %d · %s" % [k + 1, tr(p.name), lv, tr(str(p.rarity).to_upper())], "big"])
+		lines.append(["%d  %s %d · %s · %s" % [k + 1, tr(p.name), lv, tr(Catalog.KIND_NAMES[Catalog.kind(p)]),
+				tr(str(p.rarity).to_upper())], "big"])
 		lines.append([_perk_text(p, lv), "note"])
 		buy.append({"id": "offer_%d" % k, "text": tr("BUY %s") % Hud._money(run.perk_price(id)), "disabled": not run.can_buy_offer(k, economy)})
 		if run.held("cheat") > 0:

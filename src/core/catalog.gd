@@ -23,7 +23,9 @@ extends RefCounted
 ## A level's `value` feeds the perk's `effect`; `extra` on a level puts more effects
 ## on at that level; `show` (when there) is what the text shows instead of the value,
 ## and a level's own `desc` replaces the perk's. `requires` are all needed,
-## `requires_any` one of them.
+## `requires_any` one of them. A dealt perk with `form` (a form's uid; the perks of a
+## form, section 6b, are not written yet) is offered only while that form is on the
+## machine (RunState.offerable).
 ##
 ## How a prize is paid (RunState.pay_ticket): the printed prize times the bet, times
 ## one plus the sum of every "+%" (prize_pct, owe_pct's share, worth_pct, pity_pct,
@@ -106,6 +108,16 @@ const MARKED_WINDOW := 10        ## MARKED: the PEEKed column's winners of this 
 const QUEUE_WINDOW := 20         ## QUEUE JUMP: winners moved into the next this many
 const QUEUE_MOVES := 5
 const RARITY_WEIGHT := {"common": 10, "rare": 5, "legendary": 2}
+## The deal at each layer (RunState.deal_offers), one entry per layer, the last one
+## for any layer after it: the weight of each rarity (0 deals none) and the kinds left
+## out (G, docs/perk_research.md section 5.12). Layer 1 is mostly common, a few rare,
+## no legendary and no risk; layer 2 opens everything at RARITY_WEIGHT; layer 3 weighs
+## legendary up. The weights are placeholders.
+const DEAL := [
+	{"rarity": {"common": 10, "rare": 3, "legendary": 0}, "no_kinds": ["risk"]},
+	{"rarity": {"common": 10, "rare": 5, "legendary": 2}, "no_kinds": []},
+	{"rarity": {"common": 10, "rare": 5, "legendary": 5}, "no_kinds": []},
+]
 const ITEM_WEIGHT := {"common": 10, "rare": 4, "legendary": 1}
 const KINDS := ["shelf", "build", "risk", "twist", "sure"]
 const KIND_NAMES := {"shelf": "THE SHELF", "build": "BUILD", "risk": "RISK", "twist": "TWIST", "sure": "CERTAINTY"}
@@ -354,6 +366,20 @@ static func kind(p: Dictionary) -> String:
 	return str(KIND_BRANCHES.get(str(p.get("branch", "")), "build"))
 
 
+## The deal at a layer (0-based): an entry of DEAL, the last one past the end.
+static func deal(layer: int) -> Dictionary:
+	return DEAL[clampi(layer, 0, DEAL.size() - 1)]
+
+
+## A perk's weight in a deal at a layer: its rarity's weight in DEAL, 0 when the layer
+## leaves its kind (or its rarity) out.
+static func deal_weight(p: Dictionary, layer: int) -> float:
+	var d := deal(layer)
+	if d.no_kinds.has(kind(p)):
+		return 0.0
+	return float(d.rarity.get(str(p.get("rarity", "")), 0))
+
+
 ## Perks of a kind ("shelf" is the shelf, the others are dealt).
 func perks_of(kind_id: String) -> Array:
 	var out := []
@@ -438,6 +464,17 @@ func problems() -> PackedStringArray:
 				out.append("perk %s needs %s, which is not there" % [p.id, need])
 			elif lv > other.levels.size():
 				out.append("perk %s needs %s at a level it does not have" % [p.id, need])
+	if DEAL.size() != 3:
+		out.append("the deal: one entry per layer, three")
+	for i in DEAL.size():
+		for r in RARITY_WEIGHT:
+			if not DEAL[i].rarity.has(r) or int(DEAL[i].rarity[r]) < 0:
+				out.append("the deal at layer %d: a weight for %s, 0 or more" % [i + 1, r])
+		for k in DEAL[i].no_kinds:
+			if not KINDS.has(k):
+				out.append("the deal at layer %d: no kind %s" % [i + 1, k])
+	if not DEAL.is_empty() and (int(DEAL[0].rarity.get("legendary", 0)) != 0 or not DEAL[0].no_kinds.has("risk")):
+		out.append("the deal at layer 1: no legendary and no risk (G)")
 	for p in perks:
 		if _circular(p.id, {}):
 			out.append("perk %s needs itself" % p.id)

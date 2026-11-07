@@ -795,12 +795,20 @@ func missing(perk_id: String) -> Dictionary:
 	return out
 
 
-## Perks that can be offered: off the shelf, requirements met, not at the top level.
-func offerable() -> Array:
+## Perks that can be offered: off the shelf, requirements met, not at the top level,
+## of a kind and a rarity the layer's deal has (Catalog.DEAL). A perk of a form (`form`,
+## a form's uid) only while that form is on the machine: `forms`, the uids of the
+## machine's columns (no perk has one yet; the callers pass none until there are some).
+func offerable(forms: Array = []) -> Array:
 	var out := []
 	for p in catalog.dealt():
-		if level(p.id) < p.levels.size() and missing(p.id).is_empty():
-			out.append(p.id)
+		if level(p.id) >= p.levels.size() or not missing(p.id).is_empty():
+			continue
+		if Catalog.deal_weight(p, layer) <= 0.0:
+			continue
+		if p.has("form") and not forms.has(str(p.form)):
+			continue
+		out.append(p.id)
 	return out
 
 
@@ -813,33 +821,46 @@ func shelf_perks() -> Array:
 	return out
 
 
-## This round's offers: offer_count() perks out of offerable(), drawn by rarity, from
-## the run's seed, the layer, the day and the reroll (so a save cannot be rerolled by
-## loading it). A level up of a perk held, and a perk its requirements opened, weigh
-## more, so that a build comes together. Two branches at least, when there are two.
-func deal_offers() -> Array:
+## This round's offers: offer_count() perks out of offerable(), drawn by the layer's
+## rarity weights (Catalog.DEAL), from the run's seed, the layer, the day and the reroll
+## (so a save cannot be rerolled by loading it). A level up of a perk held, and a perk
+## its requirements opened, weigh more, so that a build comes together. The first
+## Catalog.OFFERS of them hold two kinds at least (build / risk / twist / sure) and two
+## branches, when the pool has them: the last of those is drawn again, among the others,
+## when it would leave the deal with one. Offers past those (DOUBLE DOWN, a bonus from
+## outside the run) are drawn freely.
+func deal_offers(forms: Array = []) -> Array:
 	var r := SeededRng.new("%s|offer|%d|%d|%d" % [seed, layer, day, offer_rerolls])
 	var pool := []
-	for id in offerable():
+	for id in offerable(forms):
 		var p := catalog.perk(id)
-		var w := float(Catalog.RARITY_WEIGHT.get(p.rarity, 1))
+		var w := Catalog.deal_weight(p, layer)
 		if level(id) > 0:
 			w *= 1.5
 		if not p.get("requires", {}).is_empty():
 			w *= 2.0
-		pool.append({"id": id, "w": w, "branch": p.branch})
+		pool.append({"id": id, "w": w, "branch": p.branch, "kind": Catalog.kind(p)})
+	var n := offer_count()
+	var last := mini(Catalog.OFFERS, n) - 1
 	var out := []
+	var kinds := {}
 	var branches := {}
-	while out.size() < offer_count() and not pool.is_empty():
+	while out.size() < n and not pool.is_empty():
 		var pick := _draw(pool, r)
-		if out.size() == offer_count() - 1 and out.size() > 0 and branches.size() == 1 and branches.has(pool[pick].branch):
-			var other := []
-			for c in pool:
-				if not branches.has(c.branch):
-					other.append(c)
-			if not other.is_empty():
-				pick = pool.find(other[_draw(other, r)])
+		if out.size() == last and out.size() > 0:
+			for key in ["kind", "branch"]:
+				var seen: Dictionary = kinds if key == "kind" else branches
+				if seen.size() >= 2 or not seen.has(pool[pick][key]):
+					continue
+				var other := []
+				for c in pool:
+					if not seen.has(c[key]):
+						other.append(c)
+				if not other.is_empty():
+					pick = pool.find(other[_draw(other, r)])
+					break
 		out.append(pool[pick].id)
+		kinds[pool[pick].kind] = true
 		branches[pool[pick].branch] = true
 		pool.remove_at(pick)
 	return out
