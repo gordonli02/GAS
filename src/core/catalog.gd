@@ -27,7 +27,8 @@ extends RefCounted
 ## form, section 6b, are not written yet) is offered only while that form is on the
 ## machine (RunState.offerable).
 ##
-## How a prize is paid (RunState.pay_ticket): the printed prize times the bet, times
+## How a prize is paid (RunState.pay_ticket): the printed prize (a ticket CRUMBS split
+## prints what it kept) times the bet, times
 ## one plus the sum of every "+%" (prize_pct, owe_pct's share, worth_pct, pity_pct,
 ## trash_pct, hunter_pct, noback_pct's days, STREAK's windows, loyal_pct or
 ## variety_pct, a HAPPY HOUR), times every "x" (top_x, mid_x and low_x on their prizes,
@@ -98,6 +99,14 @@ extends RefCounted
 ##   insure       after this many losers in a row, the next ticket sold wins
 ##   stakeout     the first ticket sold on a day wins
 ##   marked       a column PEEKed at has its winners of the next MARKED_WINDOW come first
+##   consolation  % of the losers taken from a box win the smallest prize (CONSOLATION)
+##   packed       a box loaded from now on has up to % more smallest prizes, its middle
+##                ones paying for them (PACKED; the box's money is the same)
+##   crumbs       a winner taken from a box splits its prize over up to this many of the
+##                next losers in it, each the smallest prize (CRUMBS; the money is the same)
+## The last three are the line that wins more often (docs/perk_research.md section 15):
+## the ticket really is a winner (it shows it, STREAK and ALL IN count it), decided
+## from the seed as it leaves the box (MachineLogic._take, TicketBox).
 ## Items are used up: each one held is one use. `use`: "column" (pick a column at the
 ## machine), "now" (used from the phone), "auto" (works by itself), "offer" (a key on
 ## the day's perk offers).
@@ -115,6 +124,11 @@ const WINDOW := 10               ## STREAK and ALL IN: a window is this many tic
 const MARKED_WINDOW := 10        ## MARKED: the PEEKed column's winners of this many come first
 const QUEUE_WINDOW := 20         ## QUEUE JUMP: winners moved into the next this many
 const QUEUE_MOVES := 5
+## CONSOLATION's share of losers that win the smallest prize, at levels 1 and 2. Section
+## 15 had 10 / 20 when the smallest prizes were $25; at $5 on a $1 ticket that would
+## add 40 to 85% to the return, so 5 / 10 (about +20 / +40%, FAT PRIZES' range; winners
+## from about 15 in 100 to 19 / 23). The balance pass tunes it here.
+const CONSOLATION := [5, 10]
 const RARITY_WEIGHT := {"common": 10, "rare": 5, "legendary": 2}
 ## The deal at each layer (RunState.deal_offers), one entry per layer, the last one
 ## for any layer after it: the weight of each rarity (0 deals none) and the kinds left
@@ -142,6 +156,7 @@ const STANDARD := {
 		{"id": "batch", "name": "ALL AT ONCE"},
 		{"id": "money", "name": "MONEY"},
 		{"id": "luck", "name": "LUCK"},
+		{"id": "often", "name": "WIN MORE OFTEN"},
 		{"id": "risk", "name": "RISK"},
 		{"id": "twist", "name": "TWIST"},
 		{"id": "sure", "name": "CERTAINTY"},
@@ -237,6 +252,15 @@ const STANDARD := {
 			"requires": {"luck": 3}, "effect": "fortune", "levels": [{"price": 1200, "value": 1}]},
 		{"id": "prizes", "branch": "luck", "rarity": "common", "name": "FAT PRIZES", "desc": "EVERY PRIZE +%d%%",
 			"effect": "prize_pct", "levels": [{"price": 150, "value": 25}, {"price": 400, "value": 50}, {"price": 1000, "value": 100}]},
+		# Build: winning more often (G, section 15): more tickets win, the return barely
+		# moves (CONSOLATION adds some; PACKED and CRUMBS put the same money on more tickets).
+		{"id": "consolation", "branch": "often", "rarity": "common", "name": "CONSOLATION", "desc": "%d%% OF LOSERS WIN THE SMALLEST PRIZE",
+			"effect": "consolation", "levels": [{"price": 100, "value": CONSOLATION[0]}, {"price": 300, "value": CONSOLATION[1]}]},
+		{"id": "packed", "branch": "often", "rarity": "rare", "name": "PACKED", "desc": "BOXES LOADED FROM NOW ON: MIDDLE PRIZES BROKEN INTO SMALLEST ONES, UP TO +%d%%",
+			"effect": "packed", "levels": [{"price": 200, "value": 25}, {"price": 500, "value": 50}]},
+		{"id": "crumbs", "branch": "often", "rarity": "rare", "name": "CRUMBS", "effect": "crumbs", "levels": [
+			{"price": 250, "value": 1, "desc": "A PRIZE SPLITS IN TWO: THE NEXT LOSER IN THE BOX WINS THE SMALLEST"},
+			{"price": 600, "value": 2, "desc": "A PRIZE SPLITS IN THREE: THE NEXT TWO LOSERS IN THE BOX WIN THE SMALLEST"}]},
 		# Risk: strong, with a price at every level.
 		{"id": "shark", "branch": "risk", "rarity": "rare", "name": "LOAN SHARK", "desc": "HOUSE LINE X%d",
 			"effect": "loan_x", "levels": [{"price": 150, "value": 2, "extra": {"rate_x": 2}, "cost": "INTEREST X2"},

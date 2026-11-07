@@ -896,3 +896,48 @@ break-even, so its retune may not be needed. The pictures in `docs/m9.6/` still 
 the old smallest prizes. Box size was not touched: a smaller box cannot hold the
 $1,000 top at $1 a ticket (roadmap M9.7 has the two ways out). G's list after this
 game is `docs/roadmap.md` M9.7.
+
+## M9.7 item 3: the line that wins more often
+G picked three of section 15's five (`docs/perk_research.md`): CONSOLATION, PACKED and
+CRUMBS, in a new build line `often` (WIN MORE OFTEN, 多中). All three act as the ticket
+leaves the box (`MachineLogic._take`, after the sure win and MAGNET), decided from the
+seed and logged in the box's `ops` (`{"w"}`, `{"c"}`, `{"p"}`; `TicketBox.replay` does
+them again), so the ticket really is a winner: its face, STREAK's window, ALL IN's
+printed sum and the win pile all see it. `TicketBox.counts` follow, so reading the box
+stays true.
+- **CONSOLATION** (安慰奖, common, $100 / $300, effect `consolation`): a loser wins the
+  smallest prize `Catalog.CONSOLATION` = 5 / 10 times in a hundred (rolled from the seed
+  and the place). **Decided here: half of section 15's 10 / 20.** Those were for $25
+  smallest prizes; at $5 on a $1 ticket they would add 40 to 85% to the return. At 5 /
+  10 it is about +20 / +40% (FAT PRIZES' range) and winners go from about 15 in 100 to 19
+  / 23. New money: the box's prize total grows by it.
+- **PACKED** (多装点, rare, $200 / $500, effect `packed`): a box that goes on the machine
+  while it is held (the machine's `packed`, also given to `MachineLogic.new` so a
+  layer's first boxes count; boxes already on the machine stay as they were, the card
+  says FROM NOW ON) breaks middle prizes into smallest ones: up to +25 / +50% smallest
+  prizes, rounded to whole middle prizes, the money the same to the coin.
+  **Decided here: middle prizes only** (`TicketBox.PACK_ROLES`), G's "钱从中奖那份匀";
+  top prizes stay. Since the smallest prizes came down most of a box's money is in them
+  already, so it lands where middle prizes are: Lucky Spur the full +25 / +50%, Nugget
+  Rush +19 / +21%, Pecking Order +15%, Hot Plate, Big Catch and Ka-Bawk! almost nothing
+  (60 boxes each). With tops too it was Hot Plate +7%, Big Catch +1 / +5%, and a Hot
+  Plate box could lose its only top. The card says UP TO.
+- **CRUMBS** (碎奖, rare, $250 / $600, effect `crumbs`): a winner taken splits over the
+  next 1 / 2 losers still in its box, each the smallest prize; the ticket keeps the rest
+  (`cut` on the ticket, `cut_total` on the box), only while it keeps at least the
+  smallest prize, fewer pieces when fewer losers are left, and a piece never splits.
+  **Decided here: the pieces are the smallest prize and the ticket prints what it kept**
+  ($100 becomes $95, a $95 under the boot). The brief wanted every piece a table prize
+  and the total exact; with tables like $1000 / $100 / $5 no two prizes add up to a
+  third, so the kept amount cannot be one. `RunState.pay_ticket` takes the cut off the
+  best tier's prize (before the role's x); `TicketArt.interior` prints it on the group
+  of that tier for a form that wins by group. It adds few winners now (only middle and
+  top prizes split, and there are few): Lucky Spur +1.5 / +3%, the others under 1%.
+- **The simulator**: the small line takes CONSOLATION, PACKED and CRUMBS after PENNY
+  JAR and STACKER (CRUMBS after SCRAP DEALER), the batch line CRUMBS (for CHAIN);
+  `EV_SETS` has a row for each and three combos. Not run here.
+- **Tests** (`test_perks`): the share of losers turned against 5 / 10% within a point,
+  their prize and the box's counts; PACKED's money and tops unchanged, the count up to
+  the share (the full share on Lucky Spur), boxes already on the machine untouched;
+  CRUMBS's total paid per box unchanged, pieces on the next losers, edges (fewer losers,
+  no second split); all three the same from a seed and replayed from the log.

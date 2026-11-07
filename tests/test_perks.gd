@@ -53,7 +53,7 @@ func _losing_column(m: MachineLogic) -> int:
 func test_catalog_holds_together() -> void:
 	var c := Catalog.standard()
 	eq(c.problems(), PackedStringArray(), "standard catalog")
-	eq(c.branches.size(), 10, "the shelf, six build lines, risk, twist and certainty")
+	eq(c.branches.size(), 11, "the shelf, seven build lines, risk, twist and certainty")
 	for k in Catalog.KINDS:
 		check(c.perks_of(k).size() >= 3, "kind %s has its perks (%d)" % [k, c.perks_of(k).size()])
 	for p in c.perks_of("shelf"):
@@ -1552,3 +1552,328 @@ func test_saved_and_loaded() -> void:
 	var e3 := Economy.new()
 	e3.from_dict(e2.to_dict())
 	check(e3.tab == 30 and e3.tab_on and e3.tab_limit == 50 and e3.balanced(), "the tab, open, with its limit")
+
+
+# --- the line that wins more often (docs/perk_research.md section 15) ------------------
+
+## The run's form `id` (its run table on, stake 1), or null without the core pack.
+func _run_form(id: String) -> FormDef:
+	var pack := core_pack()
+	if pack == null:
+		return null
+	for f in pack.forms:
+		if f.id == id:
+			return f.shaped()
+	return null
+
+
+## A box of the run's model, prizes only.
+func _run_box(form: FormDef, seed_text: String) -> TicketBox:
+	return BoxGenerator.build(form, seed_text, RunConfig.standard().box_model(0), true)
+
+
+## The prize money a box's tickets hold, and whether its counts match its tickets.
+func _holds(box: TicketBox) -> Dictionary:
+	var money := 0
+	var counts := []
+	counts.resize(box.counts.size())
+	counts.fill(0)
+	for t in box.tickets:
+		money += int(t.prize)
+		for tier in t.get("wins", [t.tier]):
+			if int(tier) >= 0:
+				counts[int(tier)] += 1
+	return {"money": money, "counts_match": counts == box.counts}
+
+
+## The prizes of a box's tickets, in order (to compare two boxes).
+func _prizes(box: TicketBox) -> Array:
+	return box.tickets.map(func(t): return int(t.prize))
+
+
+func _winners(box: TicketBox) -> int:
+	return box.tickets.filter(func(t): return int(t.prize) > 0).size()
+
+
+func test_consolation_turns_losers_into_the_smallest_prize() -> void:
+	var p := Catalog.standard().perk("consolation")
+	eq(p.rarity, "common", "CONSOLATION is common")
+	eq(p.levels.map(func(l): return int(l.value)), Catalog.CONSOLATION, "its rates are Catalog.CONSOLATION")
+	eq(Catalog.CONSOLATION, [5, 10], "5 and 10 in a hundred (section 15's 10 / 20 were for $25 smallest prizes)")
+	for id in ["catch", "plate"]:
+		var form := _run_form(id)
+		if form == null:
+			return
+		var s := int(form.tiers[RunState.smallest_tier(form)].prize)
+		for lv in 2:
+			var pct: int = Catalog.CONSOLATION[lv]
+			var losers := 0
+			var turned := 0
+			var bad := 0
+			var off := 0
+			for n in 30:
+				var box := _run_box(form, "CO-%02d" % n)
+				var before := box.prize_total()
+				var k := 0
+				while box.cursor < box.size:
+					var at := box.cursor
+					if not box.wins(at):
+						losers += 1
+						if box.console(at, pct):
+							turned += 1
+							k += 1
+							var t: Dictionary = box.tickets[at]
+							if int(t.prize) != s or int(t.tier) != box.smallest_tier() or (form.wins_by_group() and not t.wins.has(t.tier)):
+								bad += 1
+					elif box.console(at, pct):
+						bad += 1
+					box.cursor += 1
+				var h := _holds(box)
+				if h.money != box.prize_total() or not h.counts_match or box.prize_total() != before + k * s:
+					off += 1
+			var share := float(turned) / losers
+			check(absf(share - pct / 100.0) <= 0.01, "%s, CONSOLATION %d: %.3f of %d losers turned (%d%%)" % [id, lv + 1, share, losers, pct])
+			eq(bad, 0, "%s: every one turned is the smallest prize ($%d), on the ticket; winners left alone" % [id, s])
+			eq(off, 0, "%s: the box counts them, as new money" % id)
+	# The same seed turns the same tickets; the log replays them.
+	var catch := _run_form("catch")
+	var a := _run_box(catch, "CO-SAME")
+	var b := _run_box(catch, "CO-SAME")
+	for at in a.size:
+		a.cursor = at
+		b.cursor = at
+		a.console(at, 10)
+		b.console(at, 10)
+	eq(_prizes(a), _prizes(b), "same seed, same tickets turned")
+	var again := _run_box(catch, "CO-SAME")
+	again.replay(a.ops)
+	eq(_prizes(again), _prizes(a), "a saved box comes back with them")
+
+
+func test_consolation_on_the_machine_is_a_real_winner() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var r := _run()
+	r.perks = {"consolation": 2}
+	var m := r.new_machine([pack.forms[0]], true)
+	eq(m.consolation, 10, "the machine has it")
+	var plain := _run().new_machine([pack.forms[0]], true)
+	var e := r.new_economy()
+	e.credit = 300
+	e.cash -= 300
+	var e2 := r.new_economy()
+	e2.credit = 300
+	e2.cash -= 300
+	var won := 0
+	var won_plain := 0
+	var turned: Array = []
+	for k in 300:
+		var sold := m.sell_now(0, e)
+		var other := plain.sell_now(0, e2)
+		if int(sold.ticket.prize) > 0:
+			won += 1
+		if int(other.ticket.prize) > 0:
+			won_plain += 1
+		if int(other.ticket.prize) == 0 and int(sold.ticket.prize) > 0:
+			turned.append(sold.ticket)
+	check(won > won_plain, "more winners in 300 (%d against %d)" % [won, won_plain])
+	if not check(not turned.is_empty(), "some losers turned"):
+		return
+	# It pays the smallest prize and counts as a winner in the window (STREAK, ALL IN).
+	var paid := r.pay_ticket(r.new_economy(), turned[0], m.forms[0])
+	eq(paid, int(m.forms[0].tiers[RunState.smallest_tier(m.forms[0])].prize), "it pays the smallest prize")
+	eq(r.window_wins, 1, "a winner in the window")
+	eq(r.window_printed, paid, "its printed prize in the window (ALL IN compares those)")
+
+
+func test_packed_puts_the_money_in_more_smallest_prizes() -> void:
+	var p := Catalog.standard().perk("packed")
+	eq(p.rarity, "rare", "PACKED is rare")
+	eq(p.levels.map(func(l): return int(l.value)), [25, 50], "+25 / +50%")
+	eq(TicketBox.PACK_ROLES, ["mid"], "the middle prizes pay (G: 钱从中奖那份匀); top prizes stay")
+	for id in ["spur", "nugget", "order", "plate", "catch", "kabawk"]:
+		var form := _run_form(id)
+		if form == null:
+			return
+		var low := RunState.smallest_tier(form)
+		var s := int(form.tiers[low].prize)
+		for pct in [25, 50]:
+			var lows := 0
+			var lows_packed := 0
+			var winners := 0
+			var winners_packed := 0
+			var off := 0
+			for n in 60:
+				var plain := _run_box(form, "PK-%02d" % n)
+				var box := _run_box(form, "PK-%02d" % n)
+				var added := box.pack(pct)
+				lows += int(plain.counts[low])
+				lows_packed += int(box.counts[low])
+				winners += _winners(plain)
+				winners_packed += _winners(box)
+				var h := _holds(box)
+				var tops_kept := true
+				for i in form.tier_indices("top"):
+					tops_kept = tops_kept and box.counts[i] == plain.counts[i]
+				if absi(box.prize_total() - plain.prize_total()) >= s or h.money != box.prize_total() or not h.counts_match \
+						or int(box.counts[low]) != int(plain.counts[low]) + added or box.type_id != plain.type_id or not tops_kept:
+					off += 1
+			eq(off, 0, "%s +%d%%: the same money (to the smallest prize), counts that match the tickets, the same type and tops" % [id, pct])
+			var up := float(lows_packed) / lows - 1.0
+			note("%s PACKED +%d%%: smallest prizes +%.0f%%, winners %d -> %d (60 boxes)" % [id, pct, up * 100.0, winners, winners_packed])
+			check(up >= 0.0 and up <= pct / 100.0 + 0.05, "%s: smallest prizes up by %d%% at most, as far as the middle prizes go (%.0f%%)" % [id, pct, up * 100.0])
+			if ["spur", "nugget", "order"].has(id):
+				check(winners_packed > winners, "%s: more winners" % id)
+			if id == "spur":
+				check(absf(up - pct / 100.0) <= 0.05, "Lucky Spur, all middle prizes: the full +%d%% (%.0f%%)" % [pct, up * 100.0])
+	# Deterministic, logged, replayed.
+	var plate := _run_form("plate")
+	var a := _run_box(plate, "PK-SAME")
+	var b := _run_box(plate, "PK-SAME")
+	a.pack(50)
+	b.pack(50)
+	eq(_prizes(a), _prizes(b), "same seed, same box")
+	var again := _run_box(plate, "PK-SAME")
+	again.replay(a.ops)
+	eq(_prizes(again), _prizes(a), "a saved box comes back packed")
+	eq(again.counts, a.counts, "with its counts")
+	a.cursor = 1
+	eq(a.pack(50), 0, "a box sold from is not packed again")
+
+
+func test_packed_acts_on_boxes_loaded_while_held() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var r := _run()
+	var m := r.new_machine(pack.forms, true)
+	r.perks = {"packed": 1}
+	r.apply(m)
+	eq(m.packed, 25, "the machine has it")
+	for box in m.boxes:
+		check(box.ops.is_empty(), "%s: a box on the machine when it was bought stays as it was" % box.form.id)
+	var e := r.new_economy()
+	e.bonus(r.change_fee())
+	check(r.change_box(e, m, 0), "NEW BOX")
+	eq(m.boxes[0].ops, [{"p": 25}], "the next box loaded is packed")
+	var held := _run()
+	held.perks = {"packed": 2}
+	var m2 := held.new_machine(pack.forms, true)
+	for box in m2.boxes:
+		eq(box.ops, [{"p": 50}], "%s: a layer's first boxes, loaded while held, are packed" % box.form.id)
+
+
+func test_crumbs_split_a_prize_over_the_next_losers() -> void:
+	var p := Catalog.standard().perk("crumbs")
+	eq(p.rarity, "rare", "CRUMBS is rare")
+	eq(p.levels.map(func(l): return int(l.value)), [1, 2], "two or three tickets")
+	for id in ["spur", "catch", "plate"]:
+		var form := _run_form(id)
+		if form == null:
+			return
+		var s := int(form.tiers[RunState.smallest_tier(form)].prize)
+		for n in [1, 2]:
+			var winners := 0
+			var winners_split := 0
+			var off := 0
+			var bad := 0
+			for k in 30:
+				var plain := _run_box(form, "CR-%02d" % k)
+				var box := _run_box(form, "CR-%02d" % k)
+				var money := box.prize_total()
+				while box.cursor < box.size:
+					var at := box.cursor
+					if box.wins(at):
+						var t: Dictionary = box.tickets[at]
+						var dead := []
+						for j in range(at + 1, box.size):
+							if dead.size() >= n:
+								break
+							if not box.wins(j):
+								dead.append(j)
+						var was := int(t.prize)
+						var crumb: bool = t.get("crumb", false)
+						var made := box.crumble(at, n)
+						var table := int(form.tiers[int(t.tier)].prize)
+						var want := 0 if crumb else mini(mini(n, table / s - 1), dead.size())
+						if made != want:
+							bad += 1
+						var got := 0
+						for q in made:
+							var piece: Dictionary = box.tickets[dead[q]]
+							if int(piece.prize) != s or not piece.get("crumb", false):
+								bad += 1
+							got += int(piece.prize)
+						if made > 0 and (got + int(t.prize) != was or int(t.cut) != made * s):
+							bad += 1
+					box.cursor += 1
+				var h := _holds(box)
+				if h.money != money or box.prize_total() != money or not h.counts_match:
+					off += 1
+				winners += _winners(plain)
+				winners_split += _winners(box)
+			eq(off, 0, "%s CRUMBS %d: every box pays what it held" % [id, n])
+			eq(bad, 0, "%s CRUMBS %d: pieces are the smallest prize, on the next losers, the rest kept" % [id, n])
+			check(winners_split > winners, "%s CRUMBS %d: more winners (%d against %d)" % [id, n, winners_split, winners])
+			note("%s CRUMBS %d: winners %d -> %d (30 boxes)" % [id, n, winners, winners_split])
+	# Deterministic, logged, replayed.
+	var spur := _run_form("spur")
+	var a := _run_box(spur, "CR-SAME")
+	var b := _run_box(spur, "CR-SAME")
+	for at in a.size:
+		a.cursor = at
+		b.cursor = at
+		a.crumble(at, 2)
+		b.crumble(at, 2)
+	eq(_prizes(a), _prizes(b), "same seed, same split")
+	var again := _run_box(spur, "CR-SAME")
+	again.replay(a.ops)
+	eq(_prizes(again), _prizes(a), "a saved box comes back split")
+
+
+func test_crumbs_pay_and_edges() -> void:
+	var form := _run_form("catch")
+	if form == null:
+		return
+	var low := RunState.smallest_tier(form)
+	var s := int(form.tiers[low].prize)
+	var mid: int = form.tier_indices("mid")[0]
+	var m := int(form.tiers[mid].prize)
+	# A middle prize, a loser, a small prize, a loser: split in three, the small prize
+	# in the way is passed over.
+	var box := TicketBox.new()
+	box.form = form
+	box.seed = "CR-EDGE"
+	box.size = 4
+	box.tickets = [{"no": 1, "tier": mid, "prize": m}, {"no": 2, "tier": -1, "prize": 0},
+		{"no": 3, "tier": low, "prize": s}, {"no": 4, "tier": -1, "prize": 0}]
+	box.counts = [0, 0, 0, 0]
+	box.counts[low] = 1
+	box.counts[mid] = 1
+	eq(box.crumble(2, 2), 0, "the smallest prize does not split")
+	eq(box.crumble(0, 2), 2, "split in three")
+	eq(_prizes(box), [m - 2 * s, s, s, s], "the rest kept, the losers the smallest prize")
+	eq(box.crumble(0, 2), 0, "never split twice")
+	eq(box.crumble(1, 2), 0, "a piece is never split")
+	# Fewer losers than pieces: as many as are left.
+	var short := TicketBox.new()
+	short.form = form
+	short.seed = "CR-SHORT"
+	short.size = 2
+	short.tickets = [{"no": 1, "tier": mid, "prize": m}, {"no": 2, "tier": -1, "prize": 0}]
+	short.counts = [0, 0, 0, 0]
+	short.counts[mid] = 1
+	eq(short.crumble(0, 2), 1, "one loser left: split in two")
+	# The run pays what the ticket kept and the pieces the rest: the whole prize.
+	var r := _run()
+	var e := r.new_economy()
+	var sum := 0
+	for t in box.tickets:
+		if int(t.no) != 3:
+			sum += r.pay_ticket(e, t, form)
+	eq(sum, m, "the split prize pays its whole, over three tickets")
+	var pack := core_pack()
+	var rc := _run()
+	rc.perks = {"crumbs": 2}
+	eq(rc.new_machine([pack.forms[0]], true).crumbs, 2, "the machine has it")
