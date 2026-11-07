@@ -12,7 +12,7 @@ extends RefCounted
 ## Writes go to "<path>.tmp" first and then replace the file, so a crash mid-write
 ## leaves the previous save intact.
 
-const VERSION := 2    ## 2: the run (story mode) beside the free-play session
+const VERSION := 3    ## 2: the run (story mode) beside the free-play session; 3: smaller run boxes
 
 ## Defaults for every setting. Unknown keys in a file are dropped; missing ones filled,
 ## so a new setting needs no new version.
@@ -85,6 +85,11 @@ static func migrate(data: Dictionary) -> Dictionary:
 		match v:
 			1:
 				data["run"] = {}   # version 1 had free play only
+			2:
+				# Boxes are rebuilt from the seed, and the run's boxes got smaller and
+				# chance-rounded (M9.7): a run in progress would rebuild other boxes. It is
+				# dropped; settings and the free-play session stay.
+				data["run"] = {}
 		v += 1
 	data.version = VERSION
 	return data

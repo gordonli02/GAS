@@ -26,7 +26,7 @@ const STANDARD := {
 			"loan": 200, "loan_step": 100,        ## house line for the layer, and how much one press borrows
 			"change_fee": 25,              ## a new box in one column
 			"last_sale": 50,               ## prize for buying the last ticket of a box
-			"box": {"size_min": 900, "size_step": 10, "size_steps": 21},
+			"box": {"size_min": 180, "size_step": 2, "size_steps": 21},
 			## "forms": ["core:catch", ...] would name what this layer's machine sells, column
 			## by column; without it the machine sells every form the game was started with.
 		},
@@ -37,7 +37,7 @@ const STANDARD := {
 			"loan": 1000, "loan_step": 500,
 			"change_fee": 125,
 			"last_sale": 250,
-			"box": {"size_min": 900, "size_step": 10, "size_steps": 21},
+			"box": {"size_min": 270, "size_step": 3, "size_steps": 21},
 		},
 		{
 			"days": 7,
@@ -46,7 +46,7 @@ const STANDARD := {
 			"loan": 4000, "loan_step": 2000,
 			"change_fee": 500,
 			"last_sale": 1000,
-			"box": {"size_min": 900, "size_step": 10, "size_steps": 21},
+			"box": {"size_min": 450, "size_step": 5, "size_steps": 21},
 		},
 	],
 }
@@ -87,10 +87,12 @@ func layer(i: int) -> Dictionary:
 
 
 ## The box model of layer `i`: the standard odds at the layer's box sizes, with the
-## forms' own shapes (G, M9.6: the run only; free play keeps the web build's boxes).
+## forms' own shapes and chance-rounded prizes (G, M9.6 and M9.7: the run only; free
+## play keeps the web build's boxes).
 func box_model(i: int) -> BoxModel:
 	var m := BoxModel.standard()
 	m.shapes = true
+	m.chance_round = true
 	var b: Dictionary = layer(i).get("box", {})
 	m.size_min = int(b.get("size_min", m.size_min))
 	m.size_step = int(b.get("size_step", m.size_step))

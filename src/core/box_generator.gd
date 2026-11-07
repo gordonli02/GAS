@@ -20,6 +20,7 @@ static func build(form: FormDef, seed_text: String, model: BoxModel = null, priz
 	var box := TicketBox.new()
 	box.form = form
 	box.seed = seed_text
+	box.model = model
 	_roll(form, model, r, box)
 
 	var groups := Array(form.digit_groups)
@@ -174,15 +175,32 @@ static func _roll(form: FormDef, model: BoxModel, r: SeededRng, box: TicketBox) 
 		if form.shape.has("mid"):
 			mid_min = float(form.shape.mid[0])
 			mid_span = float(form.shape.mid[1]) - mid_min
-	var tops := int(floor(total * (top_min + top_span * r.next_float()) / top_prize))
+	var top_money: float = total * (top_min + top_span * r.next_float())
+	var tops := int(floor(top_money / top_prize))
+	# Chance rounding (the run's small boxes): the rest of the top money is the chance
+	# of one more top. Draw 1 of 2 new draws, right after the top share.
+	if model.chance_round and r.next_float() < top_money / top_prize - tops:
+		tops += 1
 	var counts := []
 	counts.resize(form.tiers.size())
 	counts.fill(0)
 	for i in tops:
 		counts[top_ids[r.next_int(top_ids.size())]] += 1
-	var mids := int(floor((total - tops * top_prize) * (mid_min + mid_span * r.next_float()) / mid_prize))
-	counts[mid_id] = mids
-	counts[low_id] = (total - tops * top_prize - mids * mid_prize) / low_prize
+	var mids: int
+	if model.chance_round:
+		# The mid money is a share of what the full top money leaves (not of what the tops
+		# drawn happened to take), so the expectation holds. Draw 2 of 2 new draws.
+		var mid_money: float = (total - top_money) * (mid_min + mid_span * r.next_float())
+		mids = int(floor(mid_money / mid_prize))
+		if r.next_float() < mid_money / mid_prize - mids:
+			mids += 1
+		counts[mid_id] = mids
+		# What is left of the total after the full top and mid money, in smallest prizes.
+		counts[low_id] = maxi(0, int(_js_round((total - top_money - mid_money) / low_prize)))
+	else:
+		mids = int(floor((total - tops * top_prize) * (mid_min + mid_span * r.next_float()) / mid_prize))
+		counts[mid_id] = mids
+		counts[low_id] = (total - tops * top_prize - mids * mid_prize) / low_prize
 	box.counts = counts
 
 

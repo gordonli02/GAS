@@ -19,6 +19,7 @@ extends RefCounted
 
 var form: FormDef
 var seed := ""
+var model: BoxModel = null   ## the odds it was built under (BoxGenerator.build sets it); its sizes are kept in a save when they differ from the machine's
 var type_id := ""
 var size := 0
 var counts: Array = []       ## real count per tier, same order as form.tiers

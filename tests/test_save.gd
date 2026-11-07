@@ -87,6 +87,24 @@ func test_run_slot_and_version_1() -> void:
 	eq(r.run, {}, "a run that is not an object is dropped")
 
 
+## M9.7: the run's boxes got smaller (rebuilt from the seed), so a version 2 run in
+## progress is dropped; the settings, the mode and the free-play session stay.
+func test_version_2_run_is_dropped() -> void:
+	var p := _path("v2.json")
+	SaveFile.write_text(p, JSON.stringify({"version": 2, "settings": {"room": "bar", "mode": "run"},
+		"session": {"economy": {"cash": 5}}, "run": {"state": {"seed": "R-1"}, "session": {"economy": {"cash": 7}}}}))
+	var r := SaveFile.read(p)
+	eq(r.note, "", "version 2 reads without complaint")
+	eq(r.run, {}, "the run in progress is dropped")
+	eq(r.settings.room, "bar", "settings kept")
+	eq(r.settings.mode, "run", "the mode kept")
+	eq(int(r.session.economy.cash), 5, "free play kept")
+	eq(SaveFile.VERSION, 3, "version 3")
+	# A version 3 file keeps its run.
+	check(SaveFile.write(p, SaveFile.SETTINGS, {}, {"state": {"seed": "R-2"}, "session": {}}), "write")
+	eq(str(SaveFile.read(p).run.state.seed), "R-2", "a version 3 run is kept")
+
+
 func test_bad_files_start_fresh() -> void:
 	var p := _path("b.json")
 	SaveFile.write_text(p, "{ not json")

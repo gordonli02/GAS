@@ -289,6 +289,15 @@ func shuffle(i: int) -> void:
 	boxes[i].shuffle_rest()
 
 
+## Whether a box was built under other box sizes than `machine_model`'s (a SEALed box
+## brought into the next layer): its save then carries its own sizes.
+static func differs(box_model: BoxModel, machine_model: BoxModel) -> bool:
+	if box_model == null:
+		return false
+	var base := machine_model if machine_model != null else BoxModel.standard()
+	return box_model.sizes_key() != base.sizes_key()
+
+
 ## "G-0001" -> "G-0002"; a seed without a trailing number gets "-2".
 static func next_seed(s: String) -> String:
 	var m := RegEx.create_from_string("^(.*?)(\\d+)$").search(s)
@@ -323,7 +332,12 @@ func load_boxes(saved: Array, box_for: Callable) -> void:
 					i = c
 		if i < 0:
 			continue
-		var box: TicketBox = box_for.call(str(d.get("form", "")), str(d.get("seed", "")))
+		var sizes = d.get("sizes", [])
+		var box: TicketBox
+		if typeof(sizes) == TYPE_ARRAY and sizes.size() == 3:
+			box = box_for.call(str(d.get("form", "")), str(d.get("seed", "")), sizes)
+		else:
+			box = box_for.call(str(d.get("form", "")), str(d.get("seed", "")))
 		if box == null:
 			continue
 		if box.form != null and box.form.uid() != forms[i].uid():
@@ -351,5 +365,7 @@ func to_dict() -> Dictionary:
 			"opened": boxes[i].opened, "loaded": loaded[i]}
 		if not boxes[i].ops.is_empty():
 			d.ops = boxes[i].ops.duplicate(true)
+		if differs(boxes[i].model, model):
+			d.sizes = boxes[i].model.sizes_key()
 		out.append(d)
 	return {"boxes": out}

@@ -37,10 +37,44 @@ var stack_share := 0.12
 ## boxes, shape or no shape (G, M9.6). The same draws are made either way, so a seed
 ## gives the same type and size, and the same prize total, with shapes on or off.
 var shapes := false
+## Chance rounding, for boxes too small to hold a whole top or mid prize (the run's
+## boxes of 200 to 500 tickets, G 2026-11-07). The money a tier is meant to get is kept
+## as a float: the box holds floor(money / prize) of that prize, and one more with the
+## chance of the remainder (money / prize - floor), so the box's expected prize money is
+## the same as if prizes could be cut. The smallest prizes take what is left of the
+## total after the full top and mid money, rounded to the nearest prize; a box that
+## hits a top therefore pays more than its type says, one that misses pays less. Two
+## draws more than the standard deal, the top's chance right after the top share and
+## the mid's right after the mid share. With it off (free play, the web build) the draws
+## and every number are exactly the web build's.
+var chance_round := false
 
 
 static func standard() -> BoxModel:
 	return BoxModel.new()
+
+
+## The three numbers that set a box's size, [size_min, size_step, size_steps]. A saved
+## box that was built under another layer's sizes (SEAL carries one over) keeps them.
+func sizes_key() -> Array:
+	return [size_min, size_step, size_steps]
+
+
+## This model with other box sizes (a key from sizes_key): the same odds otherwise.
+func with_sizes(key: Array) -> BoxModel:
+	var m := BoxModel.new()
+	m.types = types
+	m.top_share_min = top_share_min
+	m.top_share_span = top_share_span
+	m.mid_share_min = mid_share_min
+	m.mid_share_span = mid_share_span
+	m.stack_share = stack_share
+	m.shapes = shapes
+	m.chance_round = chance_round
+	m.size_min = int(key[0])
+	m.size_step = int(key[1])
+	m.size_steps = int(key[2])
+	return m
 
 
 func type_by_id(id: String) -> Dictionary:

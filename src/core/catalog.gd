@@ -142,16 +142,20 @@ const CONSOLATION := [5, 10]
 ## ALL IN's bar (G, 2026-11-07: a push wins about half the time on every form; the x3
 ## stays): the next window wins when its printed prizes reach this percentage of the
 ## staked window's, each ticket of the staked window counted at its own form's share
-## (form uid -> percent). Measured with RunSim.push_odds (blind P, windows of ten, 200
-## boxes a form): Big Catch 0.53, Hot Plate 0.50, Lucky Spur 0.52, Pecking Order 0.50,
-## Ka-Bawk! 0.54, One Flock 0.50, Nugget Rush 0.49, Peckeye 0.54. The windows print in
-## steps of the smallest prize, so P jumps between bars (Ka-Bawk! 0.44 at 55%, 0.54 at
-## 50%). A form without a row (a Workshop form) uses ALL_IN_DEFAULT, the middle of the
-## core forms'. Kept here beside the perk's other numbers (CONSOLATION) rather than in
-## the form's json: it is ALL IN's balance, measured by the simulator.
-const ALL_IN_SHARE := {"core:catch": 100, "core:plate": 100, "core:spur": 100, "core:order": 75,
-	"core:kabawk": 50, "core:flock": 75, "core:nugget": 70, "core:peckeye": 100}
-const ALL_IN_DEFAULT := 75
+## (form uid -> percent). Measured with RunSim.push_odds on the run's small boxes (M9.7,
+## windows of ten, 400 boxes a form, the three layers): Hot Plate 0.50, Lucky Spur 0.51,
+## Pecking Order 0.48, One Flock 0.49, Nugget Rush 0.50, Peckeye 0.50 (layer 1; the
+## others within 0.02 of it). Big Catch (bar 100%: 0.33) and Ka-Bawk! (bar 50%: 0.25) are
+## left as they were: they pay on so few tickets (4.7 and 2.6 in 100) that a window of
+## ten prints anything only 0.38 and 0.23 of the time, so no bar reaches half (the
+## lowest, a tenth of the window, gives 0.42 to 0.45 and 0.25 to 0.27); that wants a
+## change of rule, not of bar. A form without a row (a Workshop form) uses
+## ALL_IN_DEFAULT, the middle of the core forms'. Kept here beside the perk's other
+## numbers (CONSOLATION) rather than in the form's json: it is ALL IN's balance,
+## measured by the simulator.
+const ALL_IN_SHARE := {"core:catch": 100, "core:plate": 75, "core:spur": 65, "core:order": 60,
+	"core:kabawk": 50, "core:flock": 60, "core:nugget": 60, "core:peckeye": 80}
+const ALL_IN_DEFAULT := 65
 const RARITY_WEIGHT := {"common": 10, "rare": 5, "legendary": 2}
 ## The deal at each layer (RunState.deal_offers), one entry per layer, the last one
 ## for any layer after it: the weight of each rarity (0 deals none) and the kinds left

@@ -157,7 +157,7 @@ func test_shapes_move_money_between_tiers_only_in_the_run() -> void:
 	var pack := core_pack()
 	if pack == null:
 		return
-	var run_model := RunConfig.standard().box_model(0)
+	var run_model := _shaped_900()   # the run before the smaller boxes: only the shapes are tested here
 	check(run_model.shapes, "the run's model asks for shapes")
 	check(not BoxModel.standard().shapes, "the standard model (free play) does not")
 	# Every form has the run's prize table (the smallest prizes came down for G, after
@@ -272,3 +272,163 @@ func test_group_wins_keep_the_box() -> void:
 		for k in groups:
 			check(absf(float(by_group[k]) / prizes - share) <= 5.0 * sd, "%s: group %d holds %.4f of the prizes" % [id, k, float(by_group[k]) / prizes])
 		note("%s: %d prizes on %d tickets, %d with two or more, at most %d on one (200 boxes)" % [id, prizes, winners, doubles, most])
+
+
+## The run's model as it was before the smaller boxes: shapes, 900 to 1100 tickets, no
+## chance rounding. Free play's boxes are the standard model's.
+func _shaped_900() -> BoxModel:
+	var m := BoxModel.standard()
+	m.shapes = true
+	return m
+
+
+## The run's model of a layer without chance rounding: the same size, type and total.
+func _without_chance(m: BoxModel) -> BoxModel:
+	var o := BoxModel.standard()
+	o.shapes = m.shapes
+	o.size_min = m.size_min
+	o.size_step = m.size_step
+	o.size_steps = m.size_steps
+	return o
+
+
+## M9.7: chance rounding is the run's alone. With it off every box is what it was (the
+## values below were recorded from the generator before the change: size, type, counts).
+func test_chance_rounding_off_changes_nothing() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	check(RunConfig.standard().box_model(0).chance_round, "the run's model rounds by chance")
+	check(not BoxModel.standard().chance_round, "free play's does not")
+	var rows := [
+		["catch", "GOLD-1", false, 980, "small_loss", [0, 0, 1, 29]],
+		["catch", "GOLD-1", true, 980, "small_loss", [0, 0, 0, 163]],
+		["catch", "GOLD-2", true, 1090, "big_loss", [0, 0, 0, 66]],
+		["spur", "GOLD-2", false, 1000, "mid_win", [1, 0, 1, 37]],
+		["spur", "GOLD-3", true, 1040, "big_win", [0, 0, 10, 290]],
+		["kabawk", "GOLD-2", true, 1000, "small_loss", [1, 0, 0, 75]],
+		["kabawk", "GOLD-3", true, 980, "small_win", [0, 1, 0, 154]],
+		["flock", "GOLD-1", false, 1020, "mid_win", [0, 0, 4, 54]],
+		["nugget", "GOLD-3", true, 920, "mid_win", [0, 0, 7, 253]],
+		["order", "GOLD-3", false, 1100, "mid_win", [0, 0, 1, 65]],
+		["peckeye", "GOLD-1", true, 970, "small_loss", [0, 0, 1, 143]],
+		["plate", "GOLD-1", true, 930, "small_win", [0, 0, 0, 242]],
+	]
+	for row in rows:
+		var form: FormDef = pack.form(row[0])
+		var box: TicketBox
+		if row[2]:
+			box = BoxGenerator.build(form.shaped(), row[1], _shaped_900(), true)
+		else:
+			box = BoxGenerator.build(form, row[1])
+		var tag := "%s %s %s" % [row[0], row[1], "run (shapes)" if row[2] else "free play"]
+		eq(box.size, row[3], tag + ": size")
+		eq(box.type_id, row[4], tag + ": type")
+		eq(box.counts, row[5], tag + ": prize counts")
+
+
+## M9.7: the run's boxes are 200, 300 and 500 tickets (each 10% either way).
+func test_run_box_sizes() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var cfg := RunConfig.standard()
+	var want := [[180, 220, 2], [270, 330, 3], [450, 550, 5]]
+	for layer in 3:
+		var model := cfg.box_model(layer)
+		var seen := {}
+		for form in pack.forms:
+			for n in 40:
+				var box := BoxGenerator.build(form.shaped(), "SZ-%d" % n, model, true)
+				seen[box.size] = true
+				check(box.size >= want[layer][0] and box.size <= want[layer][1] and (box.size - want[layer][0]) % want[layer][2] == 0,
+					"layer %d: size %d" % [layer + 1, box.size])
+				eq(box.tickets.size(), box.size, "layer %d: ticket count" % [layer + 1])
+		check(seen.size() > 10, "layer %d: the sizes vary (%d seen)" % [layer + 1, seen.size()])
+
+
+## The same seed gives the same box with chance rounding on.
+func test_chance_rounding_is_deterministic() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	for layer in 3:
+		var model := RunConfig.standard().box_model(layer)
+		for form in pack.forms:
+			var f: FormDef = form.shaped()
+			var a := BoxGenerator.build(f, "CR-det", model)
+			var b := BoxGenerator.build(f, "CR-det", model)
+			eq(var_to_str(a.tickets), var_to_str(b.tickets), "%s layer %d: same seed, same box" % [form.id, layer + 1])
+			eq(a.counts, b.counts, "%s layer %d: same counts" % [form.id, layer + 1])
+
+
+## The money a tier is owed becomes the chance of one more prize, so the average box
+## pays what its type says. Against the same boxes without chance rounding (the same
+## size, type and total), the mean return is the same within the noise: 4.5 standard
+## errors of the per-box difference, and the rounding of the smallest prize.
+func test_chance_rounding_keeps_the_average() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var n := 3000 if full else 500
+	for layer in 3:
+		var on := RunConfig.standard().box_model(layer)
+		var off := _without_chance(on)
+		for form in pack.forms:
+			var f: FormDef = form.shaped()
+			var low := float(f.tiers[f.tier_indices("low")[0]].prize)
+			var sum := 0.0
+			var sq := 0.0
+			var tops := 0
+			for i in n:
+				var seed := "CA-%d" % i
+				var a := BoxGenerator.build(f, seed, on, true)
+				var b := BoxGenerator.build(f, seed, off, true)
+				eq(a.size, b.size, "%s %s: same size" % [form.id, seed])
+				eq(a.type_id, b.type_id, "%s %s: same type" % [form.id, seed])
+				var d := float(a.prize_total() - b.prize_total()) / a.gross()
+				sum += d
+				sq += d * d
+				for k in a.counts.size():
+					if f.is_top(k):
+						tops += a.counts[k]
+			var mean := sum / n
+			var se := sqrt(maxf(0.0, sq / n - mean * mean) / n)
+			var slack := 4.5 * se + 0.5 * low / (on.size_min * f.price)
+			check(absf(mean) <= slack, "%s layer %d: return differs by %.4f from the type's (allowed %.4f)" % [form.id, layer + 1, mean, slack])
+			check(tops > 0, "%s layer %d: some box holds a top prize (%d in %d)" % [form.id, layer + 1, tops, n])
+
+
+## No box holds more winners than tickets (more prizes than groups, by group), whatever
+## the form, the box type and the size, in the run's three layers.
+func test_chance_rounding_never_overfills_a_box() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var seeds := 3 if full else 1
+	var boxes := 0
+	for layer in 3:
+		var base := RunConfig.standard().box_model(layer)
+		for type in BoxModel.STANDARD_TYPES:
+			for step in (range(base.size_steps) if full else [0, base.size_steps / 2, base.size_steps - 1]):
+				var m := RunConfig.standard().box_model(layer)
+				m.types = [{"id": type.id, "weight": 1.0, "min": type["min"], "max": type["max"]}]
+				m.size_min = base.size_min + step * base.size_step
+				m.size_steps = 1
+				for form in pack.forms:
+					var f: FormDef = form.shaped()
+					var room := 1 if not f.wins_by_group() else f.digit_groups.size()
+					for s in seeds:
+						var box := BoxGenerator.build(f, "OF-%d" % s, m, true)
+						boxes += 1
+						var winners := 0
+						for c in box.counts:
+							winners += c
+						if winners > box.size * room or box.size != m.size_min:
+							check(false, "%s layer %d %s size %d: %d prizes" % [form.id, layer + 1, type.id, box.size, winners])
+	note("overfill sweep: %d boxes" % boxes)
+	# The full build (tickets printed) once as well.
+	for layer in 3:
+		for form in pack.forms:
+			var box := BoxGenerator.build(form.shaped(), "OF-full", RunConfig.standard().box_model(layer))
+			eq(box.tickets.size(), box.size, "%s layer %d: full build" % [form.id, layer + 1])

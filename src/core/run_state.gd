@@ -127,7 +127,12 @@ func new_machine(base_forms: Array, light := false) -> MachineLogic:
 	for s in sealed:
 		for i in m.forms.size():
 			if m.forms[i].uid() == str(s.get("form", "")):
-				var box := BoxGenerator.build(m.forms[i], str(s.get("seed", "")), m.model, light)
+				# Under the box sizes of the layer it came from (a later layer's differ).
+				var own := m.model
+				var sizes = s.get("sizes", [])
+				if typeof(sizes) == TYPE_ARRAY and sizes.size() == 3 and own != null:
+					own = own.with_sizes(sizes)
+				var box := BoxGenerator.build(m.forms[i], str(s.get("seed", "")), own, light)
 				box.replay(s.get("ops", []))
 				box.cursor = clampi(int(s.get("cursor", 0)), 0, box.size)
 				box.opened = clampi(int(s.get("opened", 0)), 0, box.size)
@@ -460,8 +465,11 @@ func _seal(m: MachineLogic, keep: Array = []) -> void:
 	sealed = []
 	for k in mini(effect("seal"), ranked.size()):
 		var box: TicketBox = m.boxes[ranked[k].i]
-		sealed.append({"form": box.form.uid(), "seed": box.seed, "cursor": box.cursor, "opened": box.opened,
-			"ops": box.ops.duplicate(true)})
+		var kept := {"form": box.form.uid(), "seed": box.seed, "cursor": box.cursor, "opened": box.opened,
+			"ops": box.ops.duplicate(true)}
+		if box.model != null:
+			kept.sizes = box.model.sizes_key()
+		sealed.append(kept)
 	stats.sealed += sealed.size()
 
 
@@ -1419,8 +1427,12 @@ static func from_dict(d: Dictionary, run_config: RunConfig) -> RunState:
 		for sb in sl:
 			if typeof(sb) == TYPE_DICTIONARY and sb.has("form") and sb.has("seed"):
 				var ops = sb.get("ops", [])
-				r.sealed.append({"form": str(sb.form), "seed": str(sb.seed), "cursor": int(sb.get("cursor", 0)),
-					"opened": int(sb.get("opened", 0)), "ops": ops if typeof(ops) == TYPE_ARRAY else []})
+				var kept := {"form": str(sb.form), "seed": str(sb.seed), "cursor": int(sb.get("cursor", 0)),
+					"opened": int(sb.get("opened", 0)), "ops": ops if typeof(ops) == TYPE_ARRAY else []}
+				var sizes = sb.get("sizes", [])
+				if typeof(sizes) == TYPE_ARRAY and sizes.size() == 3:
+					kept.sizes = [int(sizes[0]), int(sizes[1]), int(sizes[2])]
+				r.sealed.append(kept)
 	var rep = d.get("reports", {})
 	if typeof(rep) == TYPE_DICTIONARY:
 		for k in rep:

@@ -418,11 +418,16 @@ func test_twist_perks() -> void:
 	var m := r3.new_machine([pack.forms[0]], true)
 	eq(m.magnet, 20, "the machine has it")
 	var e3 := r3.new_economy()
-	e3.credit = 400
-	e3.cash -= 400
+	var windows: int = m.boxes[0].size / 20   # the run's boxes are 200 tickets now: whole windows of one box
+	var winners_in_box := 0
+	for t in m.boxes[0].tickets:
+		if int(t.prize) > 0:
+			winners_in_box += 1
+	e3.credit = windows * 20
+	e3.cash -= windows * 20
 	var dry_windows := 0
 	var pulled := 0
-	for w in 20:
+	for w in windows:
 		var won := 0
 		for k in 20:
 			var sold := m.sell_now(0, e3)
@@ -433,7 +438,9 @@ func test_twist_perks() -> void:
 	for op in m.boxes[0].ops:
 		if op.has("m"):
 			pulled += 1
-	eq(dry_windows, 0, "no window of 20 without a winner (%d prizes moved)" % pulled)
+	# A window gets its winner as long as the box has winners to give: Big Catch's box of
+	# 200 holds about ten, for ten windows, so it may come up short by the winners it lacks.
+	check(dry_windows <= maxi(0, windows - winners_in_box), "no window of 20 without a winner (%d dry of %d windows, %d winners, %d prizes moved)" % [dry_windows, windows, winners_in_box, pulled])
 	# SEAL: paying takes the hottest box along into the next layer, as it stands.
 	var r4 := _run()
 	var e4 := r4.new_economy()
@@ -463,6 +470,21 @@ func test_twist_perks() -> void:
 		eq(found.cursor, hot.cursor, "where it stood")
 		eq(found.form.stake, 5, "at the new layer's stake")
 		eq(found.tickets.map(func(t): return int(t.prize)), hot.tickets.map(func(t): return int(t.prize) * 5), "the same tickets, prizes x5")
+		eq(found.size, hot.size, "the same size: rebuilt under the layer it came from, not the new layer's")
+		# Saved in the new layer, it still comes back as that box (M9.7: the layers' box sizes differ).
+		var saved := m5.to_dict()
+		var col := m5.boxes.find(found)
+		eq(saved.boxes[col].sizes, hot.model.sizes_key(), "the save keeps the sizes it was built under")
+		check(not saved.boxes[(col + 1) % m5.boxes.size()].has("sizes"), "the layer's own boxes carry none")
+		var m5b := r4.new_machine(pack.forms, true)
+		var by_uid := {}
+		for f in m5b.forms:
+			by_uid[f.uid()] = f
+		m5b.load_boxes(saved.boxes, func(uid, s, sizes := []):
+			var model := m5b.model.with_sizes(sizes) if sizes.size() == 3 else m5b.model
+			return BoxGenerator.build(by_uid[uid], s, model, true))
+		eq(m5b.boxes[col].size, found.size, "restored: the same size")
+		eq(m5b.boxes[col].tickets.map(func(t): return int(t.prize)), found.tickets.map(func(t): return int(t.prize)), "restored: the same tickets")
 	# SEAL, the player's choice (the PAY key's card): the column chosen comes along, hot or not.
 	var rs := _run()
 	var es := rs.new_economy()
@@ -1847,13 +1869,15 @@ func test_packed_puts_the_money_in_more_smallest_prizes() -> void:
 			var winners_packed := 0
 			var off := 0
 			var share_off := 0
-			for n in 60:
+			var tickets := 0
+			for n in 300:   # the run's boxes are small now (M9.7): big prizes are few in 60 of them
 				var plain := _run_box(form, "PK-%02d" % n)
 				var box := _run_box(form, "PK-%02d" % n)
 				var added := box.pack(pct)
 				var b := _big(plain)
 				var gone := b - _big(box)
 				big += b
+				tickets += plain.size
 				broken += gone
 				winners += _winners(plain)
 				winners_packed += _winners(box)
@@ -1866,10 +1890,15 @@ func test_packed_puts_the_money_in_more_smallest_prizes() -> void:
 			eq(off, 0, "%s %d%%: the same money to the coin, counts that match the tickets, the same type" % [id, pct])
 			eq(share_off, 0, "%s %d%%: in every box that share of its big prizes, in whole prizes, is broken" % [id, pct])
 			var share := float(broken) / maxi(1, big)
-			note("%s PACKED %d%%: %d of %d big prizes broken (%.0f%%), winners per 100 %.1f -> %.1f (60 boxes)" % [id, pct, broken,
-				big, share * 100.0, winners / 600.0, winners_packed / 600.0])
-			# Within a tenth, or three prizes where a form has few (Big Catch: one a box).
-			check(absf(share - pct / 100.0) <= 0.1 or absf(broken - big * pct / 100.0) <= 3.0,
+			note("%s PACKED %d%%: %d of %d big prizes broken (%.0f%%), winners per 100 %.1f -> %.1f (300 boxes)" % [id, pct, broken,
+				big, share * 100.0, winners * 100.0 / tickets, winners_packed * 100.0 / tickets])
+			# Within a tenth, or three prizes where a form has few (Big Catch: one a box). A
+			# top prize that breaks into more pieces than a small box has losers (Big Catch's
+			# $1,000 into 199 fives in a box of 200, Lucky Spur's $500 into 249 twos) cannot be
+			# broken at all (M9.7): such a form can only fall short of its share, not pass it.
+			var top := int(form.tiers[form.tier_indices("top")[0]].prize) / s
+			var short := top > 150
+			check(share <= pct / 100.0 + 0.1 and (short or absf(share - pct / 100.0) <= 0.1) or absf(broken - big * pct / 100.0) <= 3.0,
 				"%s: about %d%% of the big prizes broken (%.0f%%)" % [id, pct, share * 100.0])
 			check(winners_packed > winners, "%s %d%%: more winners (%d against %d)" % [id, pct, winners_packed, winners])
 	# Deterministic, logged, replayed.

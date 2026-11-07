@@ -331,8 +331,9 @@ func test_run_boxes_are_shaped_free_play_boxes_are_not() -> void:
 		var in_run := BoxGenerator.build(run_catch, seed, m.model, true)
 		var in_free := BoxGenerator.build(catch, seed, free.model, true)
 		eq(in_free.counts, BoxGenerator.build(catch, seed, null, true).counts, "free play: the standard box")
-		# The same money, to the rounding of the smallest prize (the run's is $5, the pack's $25).
-		check(absi(in_run.prize_total() - in_free.prize_total()) <= 25, "the same money either way (%d against %d)" % [in_run.prize_total(), in_free.prize_total()])
+		# The run's boxes are its own size (200 at layer 1, M9.7) and chance-rounded; that the
+		# money is the type's on average is tested with the generator.
+		check(in_run.size >= 180 and in_run.size <= 220, "the run's first box has 180 to 220 tickets (%d)" % in_run.size)
 		if in_run.counts != in_free.counts:
 			differ += 1
 	check(differ > 10, "Big Catch is dealt differently in the run (%d of 20 boxes)" % differ)

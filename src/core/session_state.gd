@@ -17,9 +17,9 @@ static func capture(economy: Economy, machine: MachineLogic, tray: TicketTray, h
 	money.credit += economy.bill
 	var items := []
 	if not hand.is_empty():
-		items.append(_entry(hand))
+		items.append(_entry(hand, machine))
 	for e in tray.items:
-		items.append(_entry(e))
+		items.append(_entry(e, machine))
 	return {"economy": money, "machine": machine.to_dict(), "tray": items, "pile": pile}
 
 
@@ -36,11 +36,15 @@ static func restore(d: Dictionary, economy: Economy, machine: MachineLogic, tray
 	if not check.balanced() or check.cash < 0 or check.credit < 0:
 		return false
 	var cache := {}
-	var box_for := func(uid: String, seed_text: String) -> TicketBox:
-		var key := uid + "|" + seed_text
+	# `sizes`: a box built under other box sizes than the machine's (SEAL, M9.7).
+	var box_for := func(uid: String, seed_text: String, sizes := []) -> TicketBox:
+		var key := uid + "|" + seed_text + "|" + str(sizes)
 		if not cache.has(key):
 			var f: FormDef = find_form.call(uid)
-			cache[key] = BoxGenerator.build(f, seed_text, machine.model) if f != null and seed_text != "" else null
+			var model := machine.model
+			if sizes.size() == 3:
+				model = (model if model != null else BoxModel.standard()).with_sizes(sizes)
+			cache[key] = BoxGenerator.build(f, seed_text, model) if f != null and seed_text != "" else null
 		return cache[key]
 	var m = d.get("machine", {})
 	if typeof(m) == TYPE_DICTIONARY and typeof(m.get("boxes")) == TYPE_ARRAY:
@@ -51,7 +55,12 @@ static func restore(d: Dictionary, economy: Economy, machine: MachineLogic, tray
 		for it in items:
 			if typeof(it) != TYPE_DICTIONARY:
 				continue
-			var box: TicketBox = box_for.call(str(it.get("form", "")), str(it.get("seed", "")))
+			var sizes = it.get("sizes", [])
+			var box: TicketBox
+			if typeof(sizes) == TYPE_ARRAY and sizes.size() == 3:
+				box = box_for.call(str(it.get("form", "")), str(it.get("seed", "")), sizes)
+			else:
+				box = box_for.call(str(it.get("form", "")), str(it.get("seed", "")))
 			var no := int(it.get("no", 0))
 			if box == null or no < 1 or no > box.size:
 				continue
@@ -60,8 +69,10 @@ static func restore(d: Dictionary, economy: Economy, machine: MachineLogic, tray
 	return true
 
 
-static func _entry(e: Dictionary) -> Dictionary:
+static func _entry(e: Dictionary, machine: MachineLogic) -> Dictionary:
 	var d := {"form": e.form.uid(), "seed": e.box.seed, "no": int(e.ticket.no)}
+	if MachineLogic.differs(e.box.model, machine.model):
+		d.sizes = e.box.model.sizes_key()
 	if int(e.get("bet", 1)) > 1:
 		d.bet = int(e.bet)
 	return d
