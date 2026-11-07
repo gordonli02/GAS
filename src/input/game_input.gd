@@ -105,6 +105,9 @@ func _press(pos: Vector2) -> void:
 	if hit.has_meta("trash"):
 		game.click_trash()
 		return
+	if hit.has_meta("item"):
+		game.use_token(str(hit.get_meta("item")))
+		return
 	if hit.has_meta("items"):
 		game.open_items()
 		return
@@ -133,6 +136,7 @@ var _nothing := Node.new()
 func _update_cursor(pos: Vector2) -> void:
 	var shape := Input.CURSOR_ARROW
 	game.hover_column = -1
+	game.hover_item = ""
 	if _dragging:
 		shape = Input.CURSOR_DRAG
 	elif game.at_machine:
@@ -147,10 +151,13 @@ func _update_cursor(pos: Vector2) -> void:
 			shape = Input.CURSOR_CAN_DROP
 		else:
 			var hit := _pick(pos)
-			if hit.has_meta("machine") or hit.has_meta("phone") or hit.has_meta("trash") or hit.has_meta("items") \
+			# An item's token: the pointing hand, and its tip beside the pointer.
+			game.hover_item = str(hit.get_meta("item", ""))
+			if hit.has_meta("item") or hit.has_meta("machine") or hit.has_meta("phone") or hit.has_meta("trash") or hit.has_meta("items") \
 					or (hit.has_meta("tray") and game.flow.hand() in [TableNav.Hand.FRONT, TableNav.Hand.BACK]):
 				shape = Input.CURSOR_POINTING_HAND
 	Input.set_default_cursor_shape(shape)
+	game.show_item_tip(pos)
 
 
 func _notification(what: int) -> void:

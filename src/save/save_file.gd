@@ -25,7 +25,7 @@ const SETTINGS := {
 	"language": "",          ## "" follows the system, else "en" / "zh"
 	"back_first": false,     ## tickets come to the hand back side up, ready to open (no flip)
 	"one_click": false,      ## a click opens the whole ticket (band, flip and every flap)
-	"auto_wins": false,      ## a winner, once revealed, goes to the winners' pile by itself
+	"auto_wins": false,      ## an opened ticket goes to its pile by itself (named when only winners did)
 	"sounds": {},            ## developer: sound id -> {file, name, volume}
 	"lamp": 0,               ## developer: red button brightness step
 }

@@ -1,8 +1,8 @@
 class_name Menu
 extends CanvasLayer
 ## Player menu (Esc or the MENU key): mode (free play or the story's run), table,
-## volume, sound, full screen, tickets back side up, one-click open, winners to the table
-## by themselves, language, resume and quit. Same plate and LCD look as the HUD; layout
+## volume, sound, full screen, tickets back side up, one-click open, tickets away by
+## themselves, language, resume and quit. Same plate and LCD look as the HUD; layout
 ## after the web build's menu. Shows state only; the game applies the choices.
 
 signal mode_picked(id: String)   ## "free" / "run"
@@ -13,7 +13,7 @@ signal mute_toggled
 signal fullscreen_toggled
 signal back_first_toggled        ## tickets come to the hand back side up
 signal one_click_toggled         ## a click opens the whole ticket
-signal auto_wins_toggled         ## winners go to their pile by themselves
+signal auto_wins_toggled         ## opened tickets go to their piles by themselves
 signal language_picked(code: String)
 signal quit_pressed
 
@@ -104,7 +104,7 @@ func _ready() -> void:
 	_one_click = _toggle_key("ONE-CLICK OPEN")
 	_one_click.pressed.connect(func(): one_click_toggled.emit())
 	_row(col).add_child(_one_click)
-	_auto_wins = _toggle_key("WINNERS TO THE TABLE")
+	_auto_wins = _toggle_key("TICKETS AWAY BY THEMSELVES")
 	_auto_wins.pressed.connect(func(): auto_wins_toggled.emit())
 	_row(col).add_child(_auto_wins)
 

@@ -1,8 +1,10 @@
 extends "res://tests/test_case.gd"
 ## The item tray on the table and its picker (M9.7 item 5): a tray for each room with a
 ## token for each item held, clear of the room's props; the picker lists what the
-## phone's ITEMS page lists, USE lit and greyed alike, with the same reasons; and USE on
-## the picker does what USE on the phone does. Runs the game's parts without a window.
+## phone's ITEMS page lists, USE lit and greyed alike, with the same reasons; USE on
+## the picker does what USE on the phone does; and a click on a token uses that item
+## (a column item: to the machine with it aimed), its tip naming it and why it cannot be
+## used. Runs the game's parts without a window.
 
 
 func _root() -> Window:
@@ -29,7 +31,9 @@ func test_a_tray_for_each_room_with_a_token_per_item() -> void:
 		var hit := t.hit_box()
 		var model := t.bounds(t._model)
 		var tokens := t.bounds(t._tokens)
-		check(hit.encloses(model) and hit.encloses(tokens), "%s: the click box holds the tray and its tokens (%s, %s, %s)" % [id, hit, model, tokens])
+		check(hit.position.x <= model.position.x and hit.end.x >= model.end.x and hit.position.z <= model.position.z \
+			and hit.end.z >= model.end.z, "%s: the tray's click box covers its footprint (%s, %s)" % [id, hit, model])
+		check(is_equal_approx(hit.end.y, float(ItemTray.ROOMS[id].floor)), "%s: up to its floor, so the tokens catch their own clicks" % id)
 		check(model.size.x < 1.5 and model.size.z < 1.2, "%s: a small tray (%s)" % [id, model.size])
 		check(model.position.y > -0.01, "%s: it stands on the table" % id)
 		# Tokens lie inside the tray's walls.
@@ -41,6 +45,51 @@ func test_a_tray_for_each_room_with_a_token_per_item() -> void:
 	eq(t.token_count(), 2, "the tokens move to the next room's tray")
 	t.show_tray(false)
 	check(not t.visible and t._hit.collision_layer == 0, "free play: hidden, and no longer caught by clicks")
+	for h: StaticBody3D in t.token_hits():
+		eq(h.collision_layer, 0, "nor its tokens")
+	t.free()
+
+
+## Each token has a click box of its own with its item's id, around the token, apart from
+## its neighbours'; a ray down onto a token finds it, one onto the tray's floor the tray.
+func test_each_token_has_its_own_click_box() -> void:
+	var t := ItemTray.new()
+	_root().add_child(t)
+	t.show_tray(true)
+	var kinds := ["INFO", "ECONOMY", "ACTION", "SURE"]
+	var held := []
+	for i in ItemTray.MAX_TOKENS:
+		held.append({"id": "item%d" % i, "kind": kinds[i % 4], "rarity": "common"})
+	var space := t.get_world_3d().direct_space_state
+	for id in RoomSet.ORDER:
+		t.set_room(id)
+		t.show_items(held)
+		check(t._lid_shape.disabled == (id != "bar"), id + ": a click box for the lid only in the bar")
+		var hits := t.token_hits()
+		eq(hits.size(), ItemTray.MAX_TOKENS, id + ": a click box per token")
+		var boxes := []
+		var into := t.global_transform.affine_inverse()
+		for i in hits.size():
+			var h: StaticBody3D = hits[i]
+			eq(str(h.get_meta("item")), "item%d" % i, "%s: token %d knows its item" % [id, i])
+			check(h.collision_layer == 1, "%s: token %d catches clicks" % [id, i])
+			var size: Vector3 = ((h.get_child(0) as CollisionShape3D).shape as BoxShape3D).size
+			var b := (into * h.global_transform) * AABB(-size / 2.0, size)
+			var token := t.bounds(t._tokens.get_child(i))
+			# (The bingo hall's spots are narrower than a card: the box holds its middle.)
+			check(b.has_point(token.get_center()) and b.end.y >= token.end.y - .001, "%s: token %d in its box (%s, %s)" % [id, i, b, token])
+			check(b.position.y >= float(ItemTray.ROOMS[id].floor) - .001, "%s: token %d's box above the tray's floor" % [id, i])
+			for o: AABB in boxes:
+				check(not o.grow(-.001).intersects(b), "%s: token %d's box apart from the others" % [id, i])
+			boxes.append(b)
+		# Rays straight down: onto a token, and onto the floor clear of them.
+		var top := Vector3(0, 3, 0)
+		var at := t.token_point("item2")
+		var got := space.intersect_ray(PhysicsRayQueryParameters3D.create(at + top, at - top))
+		check(not got.is_empty() and str(got.collider.get_meta("item", "")) == "item2", id + ": a click on a token finds that token")
+		at = t.floor_point()
+		got = space.intersect_ray(PhysicsRayQueryParameters3D.create(at + top, at - top))
+		check(not got.is_empty() and got.collider.has_meta("items"), id + ": a click on the floor finds the tray")
 	t.free()
 
 
@@ -213,6 +262,119 @@ func test_use_from_the_picker_does_what_the_phone_does() -> void:
 		a.free()
 		b.free()
 	_sweep(orphans)
+	_quiet()
+
+
+func _quiet() -> void:
 	for p in Sfx._players:
 		p.stop()   # a toss still sounding when the tests quit is reported as leaked
 		p.stream = null
+
+
+## A token of an item used from where it lies (RETURN SLIP, HAPPY HOUR, OVERTIME): a click
+## on it does what USE on the phone does from the same state.
+func test_a_token_does_what_the_phones_use_does() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var orphans := Node.get_orphan_node_ids()
+	for c in [["overtime", "before"], ["happy", "table"], ["slip", "table"]]:
+		var id: String = c[0]
+		var a := _game(pack)
+		var b := _game(pack)
+		_put_in(a, pack, c[1])
+		_put_in(b, pack, c[1])
+		var before := a.run.held(id)
+		a._on_phone("use_item", id)
+		b.use_token(id)
+		eq(a.run.held(id), before - 1, id + ": used up once from the phone")
+		eq(b.run.to_dict(), a.run.to_dict(), id + ": the run the same")
+		eq(b.economy.cash, a.economy.cash, id + ": the cash the same")
+		eq(b.tray.size(), a.tray.size(), id + ": the tray the same")
+		eq([b.aim, b.at_machine], ["", false], id + ": still at the table, nothing aimed")
+		check(not b.item_picker.visible and not b.phone.visible, id + ": nothing opened")
+		a.free()
+		b.free()
+	_sweep(orphans)
+	_quiet()
+
+
+## A column item's token (PEEK) takes the player to the machine with it aimed, as USE on
+## the phone at the machine aims it: the next column press there uses it.
+func test_a_column_token_goes_to_the_machine_aimed() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var orphans := Node.get_orphan_node_ids()
+	var a := _game(pack)
+	var b := _game(pack)
+	_put_in(a, pack, "machine")
+	_put_in(b, pack, "machine")
+	b.at_machine = false   # the same day of play, at the table
+	a._on_phone("use_item", "peek")
+	b.use_token("peek")
+	check(b.at_machine and b.camera.at_machine, "at the machine")
+	eq(b.aim, "peek", "PEEK aimed: the next column press is it")
+	eq(b.aim, a.aim, "as USE on the phone at the machine aims it")
+	eq(b.run.held("peek"), 1, "not used up until the column is picked")
+	eq(b.run.to_dict(), a.run.to_dict(), "the run the same")
+	a.free()
+	b.free()
+	_sweep(orphans)
+	_quiet()
+
+
+## A token of an item that cannot be used now changes nothing and says why, the phone's
+## reason (COPIER: its rule); a column token waits while a ticket is on its way to the hand.
+func test_a_token_that_cannot_be_used_changes_nothing() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var orphans := Node.get_orphan_node_ids()
+	for c in [["peek", "before", "AT THE MACHINE, ON A DAY OF PLAY"], ["tip", "table", "AT THE MACHINE, ON A DAY OF PLAY"],
+			["overtime", "table", "BEFORE THE DAY IS CHOSEN, OR AFTER A SHIFT"], ["copy", "table", "COPIES THE LAST ITEM YOU BOUGHT"],
+			["peek", "moving", ""]]:
+		var id: String = c[0]
+		var g := _game(pack)
+		_put_in(g, pack, "table" if c[1] == "moving" else c[1])
+		if c[1] == "moving":
+			g.flow.state = TicketFlow.State.DEAL
+		g.hud.set_status("READY")
+		var run := g.run.to_dict()
+		var cash := g.economy.cash
+		var tray := g.tray.size()
+		g.use_token(id)
+		var name := "%s, %s" % [id, c[1]]
+		eq(g.run.to_dict(), run, name + ": the run unchanged")
+		eq([g.economy.cash, g.tray.size()], [cash, tray], name + ": cash and tray unchanged")
+		eq([g.aim, g.at_machine], ["", false], name + ": still at the table, nothing aimed")
+		eq(g.hud._status_key, tr(c[2]) if c[2] != "" else "READY", name + (": says why" if c[2] != "" else ": says nothing yet"))
+		g.free()
+	_sweep(orphans)
+	_quiet()
+
+
+## Over a token: its tip names the item and what it does, and why when it cannot be used.
+func test_a_tokens_tip() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var orphans := Node.get_orphan_node_ids()
+	var g := _game(pack)
+	_put_in(g, pack, "table")
+	var peek := g.run.catalog.item("peek")
+	g.hover_item = "peek"
+	g.show_item_tip()
+	eq(g.hud.tip(), [tr(peek.name), g._item_desc(peek)], "PEEK on a day of play: its name and what it does, no reason")
+	var tip := g.run.catalog.item("tip")
+	g.hover_item = "tip"
+	g.show_item_tip()
+	eq(g.hud.tip(), [tr(tip.name), g._item_desc(tip) + "\n" + tr("AT THE MACHINE, ON A DAY OF PLAY")], "TIP-OFF at the table: and why not here")
+	g.hover_item = "reel"
+	g.show_item_tip()
+	eq(g.hud.tip(), ["", ""], "an item not held: no tip")
+	g.hover_item = ""
+	g.show_item_tip()
+	eq(g.hud.tip(), ["", ""], "off the tokens: no tip")
+	g.free()
+	_sweep(orphans)

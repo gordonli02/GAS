@@ -78,6 +78,7 @@ var machine: MachineLogic
 var tray := TicketTray.new()
 var at_machine := true
 var hover_column := -1             ## the machine column under the pointer, or -1 (GameInput)
+var hover_item := ""               ## the item whose token in the tray is under the pointer, or "" (GameInput)
 var current: Dictionary = {}       ## tray entry of the ticket in hand
 var _go_machine := false            ## after this toss, go to the machine instead of dealing
 var _time := 0.0
@@ -1516,6 +1517,75 @@ func _show_items_state() -> void:
 		item_picker.show_state(items_state())
 
 
+## An item's token in the tray was clicked (M9.7, G: no USE key needed): that item is
+## used as USE on the phone or the picker uses it (use_item). A column item takes the
+## player to the machine (as clicking the machine does: TableNav) with it aimed, so the
+## next column press there is it; column items still act at the machine, the token only
+## walks the player there. One that cannot be used now does nothing but say why on the
+## status line.
+func use_token(id: String) -> void:
+	if run == null or at_machine or _covered():
+		return
+	var it := run.catalog.item(id)
+	if it.is_empty():
+		return
+	if not _token_can(it):
+		var why := _token_why(it)
+		if why == "" and it.use != "column":
+			why = tr(it.desc)   # COPIER: its rule is in its text
+		if why != "":
+			hud.set_status(why)
+		return
+	if it.use != "column":
+		use_item(id)
+		return
+	Sfx.play("button")
+	_leave_table(true)
+	aim = id
+	machine.armed = false
+	machine.change_armed = false
+
+
+## A token can be used now: as USE on the phone, except that a column item needs no
+## standing at the machine (the token takes the player there), only a day of play and
+## a way to leave the table (not with a ticket half torn in hand, or one on its way).
+func _token_can(it: Dictionary) -> bool:
+	if it.use != "column":
+		return _can_use(it)
+	return run.playing() and run.held(it.id) > 0 and run.today == "play" \
+		and TableNav.leave(flow.hand(), flow.has_band(), view.band_on, view.any_torn(), true) != TableNav.Action.STAY
+
+
+## Why a token cannot be used now, translated: the phone's reason, or, for a
+## column item on a day of play, ALREADY TORN (the ticket in hand keeps the player at
+## the table, as it keeps it out of the tray); "" while the ticket is on its way.
+func _token_why(it: Dictionary) -> String:
+	if it.use == "column" and run.playing() and run.held(it.id) > 0 and run.today == "play":
+		return "" if flow.hand() == TableNav.Hand.MOVING else tr("ALREADY TORN")
+	return _use_why(it)
+
+
+## The tip beside the pointer over a token: the item's name, then what it does and,
+## when it cannot be used now, why (the phone's reason), translated. {} for none.
+func item_tip(id: String) -> Dictionary:
+	if run == null or id == "" or run.held(id) <= 0:
+		return {}
+	var it := run.catalog.item(id)
+	var lines := [_item_desc(it)]
+	if not _token_can(it):
+		var why := _token_why(it)
+		if why != "":
+			lines.append(why)
+	return {"name": tr(it.name), "text": "\n".join(lines)}
+
+
+## Shows the tip for the token under the pointer (hover_item) beside `at`, or hides it;
+## at (-1, -1) keeps it where it is (a new text only).
+func show_item_tip(at := Vector2(-1, -1)) -> void:
+	var tip := item_tip(hover_item)
+	hud.set_tip(str(tip.get("name", "")), str(tip.get("text", "")), at)
+
+
 ## What lies in the item tray: a token for each item held, in the catalogue's order.
 func item_tokens() -> Array:
 	var out := []
@@ -1578,7 +1648,8 @@ func toggle_one_click() -> void:
 	_menu_state()
 
 
-## Setting: a winner goes to the winners' pile by itself once revealed. Takes hold at once.
+## Setting: a ticket goes to its pile by itself once revealed (a winner after a longer
+## look). Takes hold at once.
 func toggle_auto_wins() -> void:
 	Save.set_setting("auto_wins", not bool(Save.setting("auto_wins")))
 	flow.auto_wins = bool(Save.setting("auto_wins"))
@@ -1885,9 +1956,14 @@ func _take_ticket() -> Dictionary:
 	return current
 
 
-## A revealed winner may go to its pile by itself only while nothing is over the table.
+## A revealed ticket may go to its pile by itself only while nothing is over the table.
 func _may_auto_collect() -> bool:
-	return not (menu.visible or run_card.visible or phone.visible or item_picker.visible)
+	return not _covered()
+
+
+## The menu, a run card, the phone or the item picker is over the table.
+func _covered() -> bool:
+	return menu.visible or run_card.visible or phone.visible or item_picker.visible
 
 
 func _deal_after_toss() -> bool:
@@ -1987,6 +2063,11 @@ func _refresh_ui() -> void:
 	hud.set_ledger(tray.size(), economy)
 	if run != null:
 		item_tray.show_items(item_tokens())
+	# The token tip goes with the table: not at the machine, nor under a card or the menu;
+	# its text follows what is held (a token used up takes its tip with it).
+	if hover_item != "" and (at_machine or camera.cam > 0.1 or _covered()):
+		hover_item = ""
+	show_item_tip()
 	var n := economy.net()
 	var net := tr("NET %s") % (("+" if n > 0 else "-" if n < 0 else "") + Hud._money(absi(n)))
 	if run != null and run.reading() >= BoxReading.BOOKS:

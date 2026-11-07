@@ -15,6 +15,7 @@ const DEAL_TIME := 0.42
 const FLIP_TIME := 0.24
 const TOSS_TIME := 0.34
 const WIN_SHOW_TIME := 1.2   ## a winner going to its pile by itself is shown this long first
+const LOSE_SHOW_TIME := 0.5  ## a loser going to its pile by itself, this long
 const PAPER := Color("#f4f0e5")
 const CONFETTI := [Color("#ffe14d"), Color("#ff4a3d"), Color("#62d2ff")]
 
@@ -31,10 +32,11 @@ var back_first := false
 ## over if it is front up, and every flap still closed tears open by itself, the way
 ## Space opens one. The reveal that follows is the usual one.
 var one_click := false
-## Setting: a winner, once revealed, goes to the winners' pile by itself after
-## WIN_SHOW_TIME, as a click would send it.
+## Setting (named for winners when only they went; the save key stayed): a ticket, once
+## revealed, goes to its pile by itself, a winner after WIN_SHOW_TIME, a loser after
+## LOSE_SHOW_TIME, as a click would send it.
 var auto_wins := false
-## Asked before a winner goes to its pile by itself: false holds it in hand (a card or
+## Asked before a ticket goes to its pile by itself: false holds it in hand (a card or
 ## the menu is over the table); it goes once this says yes.
 var may_auto_collect: Callable = func() -> bool: return true
 ## Returns the next ticket as {form: FormDef, ticket: Dictionary}, or {} when the tray is empty.
@@ -335,7 +337,8 @@ func _process(dt: float) -> void:
 		_step_paper(dt)
 	elif state == State.REVEALED:
 		_shown += dt
-		if auto_wins and ticket.prize > 0 and _shown >= WIN_SHOW_TIME and may_auto_collect.call():
+		var wait := WIN_SHOW_TIME if ticket.prize > 0 else LOSE_SHOW_TIME
+		if auto_wins and _shown >= wait and may_auto_collect.call():
 			collect()
 	if state == State.IDLE:
 		return

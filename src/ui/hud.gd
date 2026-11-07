@@ -14,6 +14,8 @@ signal leave_pressed       ## run: leave for today
 signal new_box_pressed     ## run: change a column's box
 signal open_pressed        ## run: open tickets at once (QUICK HANDS)
 
+const TIP_WIDTH := 300.0      ## the item tip's lines wrap at this width
+
 var _cash := LcdStyle.label("", 46)
 var _status := LcdStyle.label("", 24)
 var _cash_glass: PanelContainer
@@ -34,6 +36,10 @@ var _status_key := ""
 var _status_args := []
 var menu_key: Button
 var phone_key: Button
+## The tip beside the pointer over an item's token in the tray: its name, what it does.
+var _tip := PanelContainer.new()
+var _tip_name := LcdStyle.label("", 22, LcdStyle.BRIGHT_TEXT)
+var _tip_text := LcdStyle.label("", 20, LcdStyle.DIM_TEXT)
 
 
 func _ready() -> void:
@@ -138,6 +144,25 @@ func _ready() -> void:
 	_arrow.polygon = PackedVector2Array([Vector2(0, -12), Vector2(0, 12), Vector2(-16, 0)])
 	_window.add_child(_arrow)
 
+	var tip_style := StyleBoxFlat.new()
+	tip_style.bg_color = LcdStyle.METAL
+	tip_style.border_color = LcdStyle.RIM
+	tip_style.set_border_width_all(2)
+	tip_style.set_corner_radius_all(6)
+	tip_style.set_content_margin_all(10)
+	_tip.add_theme_stylebox_override("panel", tip_style)
+	_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tip.visible = false
+	var tip_lines := VBoxContainer.new()
+	tip_lines.add_theme_constant_override("separation", 2)
+	for l: Label in [_tip_name, _tip_text]:
+		l.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size = Vector2(TIP_WIDTH, 0)
+		tip_lines.add_child(l)
+	_tip.add_child(tip_lines)
+	root.add_child(_tip)
+
 
 func _process(dt: float) -> void:
 	if _flash > 0.0:
@@ -241,6 +266,31 @@ func place_bill_window(side_x: float, slot_y: float, window_y: float, screen: Ve
 
 func bill_window_visible() -> bool:
 	return _window.visible
+
+
+## The tip beside the pointer (an item's token): a name and the lines under it, already
+## translated, below and right of `at` and kept on the screen; an empty name hides it.
+## at (-1, -1) leaves it where it is.
+func set_tip(title: String, text := "", at := Vector2(-1, -1)) -> void:
+	_tip.visible = title != ""
+	if title == "":
+		return
+	_tip_name.text = title
+	_tip_text.text = text
+	_tip.reset_size()
+	if at.x < 0:
+		return
+	var screen := _tip.get_viewport_rect().size
+	var s := _tip.get_combined_minimum_size()
+	var p := at + Vector2(18, 22)
+	if p.y + s.y > screen.y - 8.0:
+		p.y = at.y - s.y - 12.0   # no room below the pointer: above it
+	_tip.position = Vector2(clampf(p.x, 8.0, maxf(8.0, screen.x - s.x - 8.0)), maxf(8.0, p.y))
+
+
+## Tests: the tip's name and text ("" when it is hidden).
+func tip() -> Array:
+	return [_tip_name.text, _tip_text.text] if _tip.visible else ["", ""]
 
 
 static func _num(v: int) -> String:

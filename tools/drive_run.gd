@@ -3,7 +3,7 @@ extends Node
 ## keys, the story and day cards, a day at the machine (bills, tickets, NEW BOX, LOAN,
 ## the last sale of a box), the perk offers after a day (buy, reroll, done), the phone
 ## (LOAN, the perk tree, the item shelf, box reading, a call to a contact), the item tray
-## and its picker, HIGH ROLLER's fixed bet, opening at once, putting a ticket back in the
+## (its picker, a token's tip, a column item's token taking the player to the machine), HIGH ROLLER's fixed bet, opening at once, putting a ticket back in the
 ## tray, the trash can, tickets kept overnight, LEAVE, a shift of work, paying early into the next layer
 ## and its stake, saving and reloading mid-run, the deadline, the settlement, and a
 ## whole run cleared by work alone. Checks the money identity every frame and saves
@@ -361,15 +361,33 @@ func _run() -> void:
 	# is used on a column at the machine: grey at the table, the phone's reason under it.
 	_expect(game.item_tray.visible and game.item_tray.token_count() == mini(run.items_held(), ItemTray.MAX_TOKENS),
 		"the item tray on the table, a token for each item held")
-	_click(game.camera.unproject_position(game.item_tray.global_position + Vector3(0, 0.12, 0)))
+	_click(game.camera.unproject_position(game.item_tray.floor_point()))
 	await _wait(0.4)
 	var coin := game.item_picker.key("use_coin")
 	_expect(game.item_picker.visible and coin != null and coin.disabled and game.item_picker.why("coin") != "",
-		"clicking the item tray opens the picker: LUCKY COIN grey at the table, and why")
+		"clicking the item tray (not a token) opens the picker: LUCKY COIN grey at the table, and why")
 	await _shot("08c_item_picker")
 	_key(KEY_ESCAPE)
 	await _wait(0.3)
 	_expect(not game.item_picker.visible and not game.menu.visible, "Esc puts the picker away (and opens no menu)")
+	# A click on LUCKY COIN's token (G): to the machine with the coin aimed; PLAY ALL lets
+	# it go unused, B back to the table.
+	var coin_at := game.item_tray.token_point("coin")
+	_expect(coin_at != Vector3.INF, "LUCKY COIN has a token in the tray")
+	if coin_at != Vector3.INF:
+		_mouse_move(game.camera.unproject_position(coin_at))
+		await _wait(0.2)
+		_expect(game.hover_item == "coin" and game.hud.tip()[0] != "", "pointing at the token shows its tip")
+		await _shot("08d_item_tip")
+		_click(game.camera.unproject_position(coin_at))
+		await _wait(1.2)
+		_expect(game.at_machine and game.aim == "coin" and run.held("coin") == 1, "clicking the token: at the machine, LUCKY COIN aimed, not used yet")
+		game.press_play_all()
+		await _wait(0.3)
+		_expect(game.aim == "" and run.held("coin") == 1, "PLAY ALL lets it go")
+		_key(KEY_B)
+		await _wait(1.0)
+		_expect(not game.at_machine, "B: back at the table")
 
 	# LEAVE: the day's summary, then the next day.
 	_click(_button_center(game.hud.run_key("leave")))
@@ -639,6 +657,13 @@ func _key(k: Key) -> void:
 func _click(p: Vector2) -> void:
 	_mouse_button(p, true)
 	_mouse_button(p, false)
+
+
+func _mouse_move(p: Vector2) -> void:
+	var ev := InputEventMouseMotion.new()
+	ev.position = p
+	ev.global_position = p
+	Input.parse_input_event(ev)
 
 
 func _mouse_button(p: Vector2, down: bool) -> void:

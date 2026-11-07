@@ -1,6 +1,6 @@
 extends "res://tests/test_case.gd"
-## The two hand settings (M9.7): one click opens the whole ticket, and a revealed winner
-## goes to the winners' pile by itself. Runs TicketFlow on a real TicketView of every
+## The two hand settings (M9.7): one click opens the whole ticket, and a revealed ticket
+## goes to its pile by itself (a winner after a longer look than a loser). Runs TicketFlow on a real TicketView of every
 ## core form (flaps and band built from the layout, nothing painted) without a window.
 
 const DT := 0.05
@@ -156,7 +156,7 @@ func test_a_winner_goes_to_the_winners_pile_by_itself() -> void:
 	_free(rig)
 
 
-func test_auto_place_leaves_losers_and_waits_for_cards() -> void:
+func test_a_loser_goes_to_the_discard_pile_by_itself() -> void:
 	var pack := core_pack()
 	if pack == null:
 		return
@@ -165,18 +165,62 @@ func test_auto_place_leaves_losers_and_waits_for_cards() -> void:
 	flow.auto_wins = true
 	flow.one_click = true
 	flow.press(Vector2.ZERO)
-	_run_until(flow, TicketFlow.State.REVEALED)
-	eq(_run_until(flow, TicketFlow.State.TOSS), -1, "a loser stays in hand")
-	flow.press(Vector2.ZERO)
-	eq(flow.state, TicketFlow.State.TOSS, "until clicked, as before")
-	_run_until(flow, TicketFlow.State.IDLE)
+	check(_run_until(flow, TicketFlow.State.REVEALED) > 0, "revealed")
+	var shown := _run_until(flow, TicketFlow.State.TOSS)
+	check(shown > 0, "a loser goes by itself")
+	check(shown * DT >= TicketFlow.LOSE_SHOW_TIME - DT and shown * DT < TicketFlow.WIN_SHOW_TIME,
+		"after a shorter look than a winner's (%.2f s)" % (shown * DT))
+	check(_run_until(flow, TicketFlow.State.IDLE) > 0, "tossed")
 	eq(flow.pile.opened, 1, "onto the discard pile")
+	eq(flow.win_pile.opened, 0, "not the winners' pile")
+	eq(rig.tossed, 1, "tossed once")
+	eq(rig.revealed, 1, "revealed once")
+	_free(rig)
+
+	# A click still sends it at once.
+	rig = _rig(pack.form("catch"), 0)
+	flow = rig.flow
+	flow.auto_wins = true
+	flow.one_click = true
+	flow.press(Vector2.ZERO)
+	_run_until(flow, TicketFlow.State.REVEALED)
+	flow.press(Vector2.ZERO)
+	eq(flow.state, TicketFlow.State.TOSS, "a click before the time is up sends it at once")
+	_free(rig)
+
+	# Setting off: a loser stays in hand until clicked.
+	rig = _rig(pack.form("catch"), 0)
+	flow = rig.flow
+	flow.one_click = true
+	flow.press(Vector2.ZERO)
+	_run_until(flow, TicketFlow.State.REVEALED)
+	eq(_run_until(flow, TicketFlow.State.TOSS), -1, "setting off: a loser stays in hand")
+	flow.press(Vector2.ZERO)
+	eq(flow.state, TicketFlow.State.TOSS, "until clicked")
+	_free(rig)
+
+
+func test_auto_place_waits_for_cards() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var rig := _rig(pack.form("catch"), 0)
+	var flow: TicketFlow = rig.flow
+	flow.auto_wins = true
+	var held := [true]
+	flow.may_auto_collect = func() -> bool: return not held[0]
+	flow.one_click = true
+	flow.press(Vector2.ZERO)
+	_run_until(flow, TicketFlow.State.REVEALED)
+	eq(_run_until(flow, TicketFlow.State.TOSS), -1, "a card over the table holds a loser too")
+	held[0] = false
+	eq(_run_until(flow, TicketFlow.State.TOSS), 1, "it goes as soon as the card is gone")
 	_free(rig)
 
 	rig = _rig(pack.form("kabawk"), 50)
 	flow = rig.flow
 	flow.auto_wins = true
-	var held := [true]
+	held = [true]
 	flow.may_auto_collect = func() -> bool: return not held[0]
 	flow.one_click = true
 	flow.press(Vector2.ZERO)

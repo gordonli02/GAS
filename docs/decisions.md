@@ -1013,3 +1013,37 @@ stays true.
   the share (the full share on Lucky Spur), boxes already on the machine untouched;
   CRUMBS's total paid per box unchanged, pieces on the next losers, edges (fewer losers,
   no second split); all three the same from a seed and replayed from the log.
+
+## M9.7, items 5 and 6 after G's look: tokens used by a click, losers away too
+- **A token is its item's USE** (G: no USE key needed). Each token in the item tray has
+  a click box of its own (meta `item`, the item's id); the tray's own box now stops at
+  its floor (the bar's lid has one of its own), so a click on a token reaches the token
+  and a click on a rim goes on down to the tray, which still opens the picker for
+  reading. `Game.use_token` uses the item through `use_item`, as the phone and the
+  picker do. **A column item** (PEEK, LUCKY COIN and the rest) takes the player to the
+  machine the way clicking the machine does (`TableNav`: a ticket untouched goes back to
+  the tray, an opened one to its pile first) and aims it there (`aim`, the phone's), so
+  the next column press is it and PLAY ALL lets it go. Column items still act at the
+  machine; only the token walks the player there. The phone and the picker keep USE grey
+  for them at the table, as before. **Decided here**: a ticket half torn in hand keeps
+  the player at the table, so the token says ALREADY TORN (as putting it back does; no
+  new line); while a ticket is moving it does nothing. TIP-OFF, a NOW item used at the
+  machine, stays grey at the table and does not walk there.
+- **What a token cannot do it says**: on the status line under the cash, the phone's
+  reason (`_use_why`; COPIER its rule, the card's text). Nothing else changes.
+- **The tip**: pointing at a token shows a small plate beside the pointer (`Hud.set_tip`):
+  the item's name, what it does, and the reason when it cannot be used now. It goes when
+  the pointer leaves the token, at the machine and under any card or the menu. The
+  other props keep only the pointing hand.
+- **TICKETS AWAY BY THEMSELVES** (开完自动收票; the save key stays `auto_wins`, which saves
+  already have): a loser now goes to the discard pile by itself too, after
+  `TicketFlow.LOSE_SHOW_TIME` (0.5 s); a winner after `WIN_SHOW_TIME` (1.2 s) as before. A
+  click sends either at once; both wait while the menu, a run card, the phone or the
+  picker is up. The new label fits the menu as it is (the key's text 262 px of the 364 px
+  it gets; the menu stays 400 wide). No new Chinese characters, so the fonts are as they were.
+- **Tests**: `test_item_tray` (a click box per token with its id, rays onto a token and onto
+  the floor, a NOW token against the phone's USE, PEEK's token to the machine aimed, tokens
+  that cannot be used changing nothing and saying why, the tip); `test_one_click` (a loser
+  goes after LOSE_SHOW_TIME with the setting on, stays with it off, waits for a card).
+  `tools/drive_run.gd` clicks the tray's floor for the picker, then points at LUCKY COIN's
+  token and clicks it (not run here: it opens a window).
