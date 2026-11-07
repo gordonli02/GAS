@@ -1,9 +1,10 @@
 class_name Phone
 extends CanvasLayer
 ## The player's phone, screen cracked (G's to-do list, item 10): the LOAN app in both
-## modes; in the run also the SHOP (the perk tree to look at, the items held and today's
-## shelf; perks are bought from the offers after each day) and CONTACTS (calling the
-## people in it; who they are and what they sell comes in M12, this is the shell).
+## modes; in the run also the SHOP (three pages: SHELF, the shelf's perks for sale and
+## the build held; TODAY, the day's perk offers and item shelf; ITEMS, the items held)
+## and CONTACTS (calling the people in it; who they are and what they sell comes in
+## M12, this is the shell).
 ## Opened by the PHONE key, P, the phone on the table or the PHONE key on the run's card.
 ##
 ## Like the run's card it shows what the game hands it (show_state) and reports what was
@@ -11,7 +12,9 @@ extends CanvasLayer
 ## translated, except the phone's own words (tr here). While it is up nothing reaches
 ## the table, the machine or the card behind it.
 
-signal acted(action: String, id: String)   ## loan, buy_item, reroll_shelf, use_item, buy_service
+## loan, buy_perk, buy_offer, offer_free, reroll_offers, skip_offers, buy_item,
+## reroll_shelf, use_item, buy_service
+signal acted(action: String, id: String)
 signal closed
 
 const SCREEN := Vector2(380, 640)
@@ -28,9 +31,7 @@ const APPS := {"loan": ["LOAN", GOLD], "shop": ["SHOP", GREEN], "contacts": ["CO
 const RING_TIME := 1.6          ## seconds of ringing before someone picks up (or nobody does)
 
 var page := "home"               ## home, loan, shop, contacts, call
-var shop_tab := "perks"          ## perks, items
-var branch_sel := ""             ## the branch of the tree shown
-var perk_sel := ""               ## the perk shown under the tree
+var shop_tab := "shelf"          ## shelf, today, items
 var calling := ""                ## the contact being called
 var call_state := ""             ## "ringing", "talking", "no_answer"
 var _call_t := 0.0
@@ -43,6 +44,7 @@ var _back: Button
 var _page: VBoxContainer
 var _scroll: ScrollContainer
 var _buttons := {}
+var _rows := {}                  ## tools: the cards on the page by id (shelf_<perk>, build_<perk>, offer_<k>)
 var _shade := ColorRect.new()
 
 
@@ -189,10 +191,14 @@ func key(id: String) -> Button:
 	return b if is_instance_valid(b) else null
 
 
+## Tools: a card on the page (shelf_<perk id>, build_<perk id>, offer_<k>), or null.
+func row(id: String) -> Control:
+	var c = _rows.get(id)
+	return c if is_instance_valid(c) else null
+
+
 func go(app: String) -> void:
 	page = app
-	if app == "shop" and perk_sel == "":
-		perk_sel = _first_perk()
 	_draw_page()
 
 
@@ -205,6 +211,7 @@ func _draw_page() -> void:
 	for k in _buttons.keys():
 		if k != "home":
 			_buttons.erase(k)
+	_rows.clear()
 	_status_left.text = str(_st.get("status", ""))
 	_status_right.text = str(_st.get("cash", ""))
 	_back.visible = page != "home"
@@ -285,7 +292,7 @@ func _loan_page() -> void:
 func _shop_page() -> void:
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
-	for t in [["perks", "PERKS"], ["items", "ITEMS"]]:
+	for t in [["shelf", "SHELF"], ["today", "TODAY"], ["items", "ITEMS"]]:
 		var on: bool = shop_tab == t[0]
 		var b := _button(tr(t[1]), GREEN if on else PANEL, Color("#08200f") if on else TEXT, 22)
 		b.custom_minimum_size = Vector2(0, 40)
@@ -294,134 +301,92 @@ func _shop_page() -> void:
 		tabs.add_child(b)
 		_buttons["tab_" + t[0]] = b
 	_page.add_child(tabs)
-	if shop_tab == "items":
-		_items_tab()
-	else:
-		_perks_tab()
+	match shop_tab:
+		"items":
+			_items_tab()
+		"today":
+			_today_tab()
+		_:
+			_shelf_tab()
 
 
-## The tree, one branch at a time (G: the perks come as offers after each day, so the
-## tree is to look at, not a shelf): the branch's perks as nodes (level, rarity; locked
-## ones dim), the one picked shown in full underneath with what it needs.
-func _perks_tab() -> void:
-	var branches: Array = _st.get("branches", [])
-	if branches.is_empty():
+## SHELF: every perk of the shelf, in the catalog's order, each with its level, what it
+## does now and next, its price, what it needs and a BUY key; then the build held (the
+## dealt perks bought so far), to look at.
+func _shelf_tab() -> void:
+	for p in _st.get("shelf_perks", []):
+		var v := _card("shelf_" + str(p.id), str(p.name), "%d/%d" % [int(p.level), int(p.max)],
+			GREEN if int(p.level) > 0 else DIM)
+		for line in p.get("lines", []):
+			var l := _label(str(line[0]) if line is Array else str(line), 20, DIM if line is Array else TEXT)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			v.add_child(l)
+		var buy: Dictionary = p.get("buy", {})
+		if not buy.is_empty():
+			var b := _button(str(buy.text), GREEN.darkened(0.55) if buy.ok else PANEL, TEXT if buy.ok else DIM, 20)
+			b.custom_minimum_size = Vector2(0, 42)
+			b.disabled = not buy.ok
+			var id: String = p.id
+			b.pressed.connect(func(): _tap(); acted.emit("buy_perk", id))
+			v.add_child(b)
+			_buttons["buy_perk_" + id] = b
+	var build: Array = _st.get("build", [])
+	if build.is_empty():
 		return
-	if branch_sel == "" or not branches.any(func(b): return b.id == branch_sel):
-		branch_sel = branches[0].id
-	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 4)
-	var shown: Dictionary = branches[0]
-	for br in branches:
-		var on: bool = br.id == branch_sel
-		if on:
-			shown = br
-		var b := _button(str(br.name), PANEL.lightened(0.15) if on else PANEL, GREEN if on else DIM, 16)
-		b.custom_minimum_size = Vector2(0, 34)
+	_gap(4)
+	_page.add_child(_label(str(_st.get("build_line", "")), 20, DIM))
+	for p in build:
+		var v := _card("build_" + str(p.id), str(p.name), str(p.get("kind", "")), _tint(str(p.get("rarity_id", ""))))
+		for line in p.get("lines", []):
+			var l := _label(str(line[0]) if line is Array else str(line), 20, DIM if line is Array else TEXT)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			v.add_child(l)
+
+
+## TODAY: the day's perk offers (the morning's card, buyable until the day ends: BUY,
+## FREE with a CHEAT SHEET, REROLL, SKIP FOR AN ITEM while nothing was bought), then
+## today's item shelf (BUY, NEW SHELF).
+func _today_tab() -> void:
+	_page.add_child(_label(str(_st.get("offers_line", "")), 20, DIM))
+	for o in _st.get("offers", []):
+		var k := int(o.k)
+		# The rarity is not written (G): the name is in its colour.
+		var v := _card("offer_%d" % k, str(o.name), str(o.kind), _tint(str(o.get("rarity_id", ""))))
+		var desc := _label(str(o.desc), 20, DIM)
+		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(desc)
+		var keys := HBoxContainer.new()
+		keys.add_theme_constant_override("separation", 8)
+		var b := _button(str(o.buy_text), GREEN, Color("#08200f"), 20)
+		b.custom_minimum_size = Vector2(0, 40)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var id: String = br.id
-		b.pressed.connect(func(): _tap(); branch_sel = id; perk_sel = ""; _draw_page())
-		tabs.add_child(b)
-		_buttons["branch_" + id] = b
-	_page.add_child(tabs)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 6)
-	grid.add_theme_constant_override("v_separation", 6)
-	_page.add_child(grid)
-	var picked := {}
-	for p in shown.perks:
-		if perk_sel == "":
-			perk_sel = p.id
-		if p.id == perk_sel:
-			picked = p
-		grid.add_child(_perk_node(p))
-	if picked.is_empty():
-		return
-	var card := PanelContainer.new()
-	var cs := _flat(PANEL, 12)
-	cs.set_content_margin_all(12)
-	card.add_theme_stylebox_override("panel", cs)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 4)
-	card.add_child(v)
-	var top := HBoxContainer.new()
-	var name := _label(str(picked.name), 26, TEXT, LcdStyle.FONT_COND)
-	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(name)
-	top.add_child(_label(str(picked.get("rarity", "")), 18, _rarity_color(str(picked.get("rarity_id", "")))))
-	v.add_child(top)
-	for line in picked.get("lines", []):
-		var l := _label(str(line[0]) if line is Array else str(line), 20, DIM if line is Array else TEXT)
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		v.add_child(l)
-	# A perk on the shelf is bought here (the others come as offers).
-	var buy: Dictionary = picked.get("buy", {})
-	if not buy.is_empty():
-		var b := _button(str(buy.text), GREEN.darkened(0.55) if buy.ok else PANEL, TEXT if buy.ok else DIM, 20)
-		b.custom_minimum_size = Vector2(0, 44)
-		b.disabled = not buy.ok
-		var id: String = picked.id
-		b.pressed.connect(func(): _tap(); acted.emit("buy_perk", id))
-		v.add_child(b)
-		_buttons["buy_perk"] = b
-	_page.add_child(card)
-
-
-func _perk_node(p: Dictionary) -> Button:
-	var sel: bool = p.id == perk_sel
-	var fill := PANEL.lightened(0.12) if sel else PANEL
-	var b := _button("", fill, TEXT, 18)
-	b.custom_minimum_size = Vector2(0, 64)
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var st := _flat(fill, 10)
-	st.border_color = GREEN if sel else (_rarity_color(str(p.get("rarity_id", ""))).darkened(0.3) if not p.locked else Color("#3a2a2a"))
-	st.set_border_width_all(2)
-	b.add_theme_stylebox_override("normal", st)
-	b.add_theme_stylebox_override("hover", st)
-	b.add_theme_stylebox_override("pressed", st)
-	var v := VBoxContainer.new()
-	v.set_anchors_preset(Control.PRESET_FULL_RECT)
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.add_theme_constant_override("separation", 0)
-	var name := _label(str(p.name), 17, DIM if p.locked else TEXT, LcdStyle.FONT_COND)
-	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(name)
-	var row := _label("%d/%d" % [int(p.level), int(p.max)], 18, GREEN if int(p.level) > 0 else DIM)
-	row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(row)
-	b.add_child(v)
-	var id: String = p.id
-	b.pressed.connect(func(): _tap(); perk_sel = id; _draw_page())
-	_buttons["perk_" + id] = b
-	return b
-
-
-func _rarity_color(r: String) -> Color:
-	return rarity_color(r)
-
-
-## A rarity's colour (the phone's tree, the card of offers): gold, blue, or the dim
-## text for common.
-static func rarity_color(r: String) -> Color:
-	match r:
-		"legendary":
-			return GOLD
-		"rare":
-			return BLUE
-	return DIM
-
-
-## Items: what is held (with USE where it is used by hand), then today's shelf (BUY),
-## and a key for another shelf.
-func _items_tab() -> void:
-	_page.add_child(_label(str(_st.get("held_line", "")), 20, DIM))
-	for it in _st.get("held", []):
-		_page.add_child(_item_card(it, true))
+		b.disabled = not o.can_buy
+		b.pressed.connect(func(): _tap(); acted.emit("buy_offer", str(k)))
+		keys.add_child(b)
+		_buttons["buy_offer_%d" % k] = b
+		if str(o.get("free_text", "")) != "":
+			var f := _button(str(o.free_text), BLUE, TEXT, 20)
+			f.custom_minimum_size = Vector2(84, 40)
+			f.pressed.connect(func(): _tap(); acted.emit("offer_free", str(k)))
+			keys.add_child(f)
+			_buttons["offer_free_%d" % k] = f
+		v.add_child(keys)
+	var ends := HBoxContainer.new()
+	ends.add_theme_constant_override("separation", 8)
+	for a in [["reroll_offers", PANEL.lightened(0.1)], ["skip_offers", PANEL.lightened(0.1)]]:
+		var d: Dictionary = _st.get(a[0], {})
+		if d.is_empty():
+			continue
+		var b := _button(str(d.text), a[1], TEXT, 20)
+		b.custom_minimum_size = Vector2(0, 42)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.disabled = not d.get("ok", false)
+		var action: String = a[0]
+		b.pressed.connect(func(): _tap(); acted.emit(action, ""))
+		ends.add_child(b)
+		_buttons[action] = b
+	if ends.get_child_count() > 0:
+		_page.add_child(ends)
 	_gap(4)
 	_page.add_child(_label(str(_st.get("shelf_line", "")), 20, DIM))
 	for it in _st.get("shelf", []):
@@ -434,6 +399,55 @@ func _items_tab() -> void:
 		b.pressed.connect(func(): acted.emit("reroll_shelf", ""))
 		_page.add_child(b)
 		_buttons["reroll_shelf"] = b
+
+
+## A card on the page with its name and a note at the top right; returns the column the
+## rest goes in.
+func _card(id: String, head: String, note: String, note_color: Color) -> VBoxContainer:
+	var card := PanelContainer.new()
+	var cs := _flat(PANEL, 12)
+	cs.set_content_margin_all(10)
+	card.add_theme_stylebox_override("panel", cs)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	card.add_child(v)
+	var top := HBoxContainer.new()
+	var n := _label(head, 24, TEXT, LcdStyle.FONT_COND)
+	n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	top.add_child(n)
+	top.add_child(_label(note, 18, note_color))
+	v.add_child(top)
+	_page.add_child(card)
+	_rows[id] = card
+	return v
+
+
+## A perk's kind in its rarity's colour; common in the plain text colour.
+func _tint(r: String) -> Color:
+	return TEXT if r == "common" or r == "" else rarity_color(r)
+
+
+func _rarity_color(r: String) -> Color:
+	return rarity_color(r)
+
+
+## A rarity's colour (the phone's shop, the card of offers): gold, blue, or the dim
+## text for common.
+static func rarity_color(r: String) -> Color:
+	match r:
+		"legendary":
+			return GOLD
+		"rare":
+			return BLUE
+	return DIM
+
+
+## ITEMS: what is held, with USE where it is used by hand (today's shelf is on TODAY).
+func _items_tab() -> void:
+	_page.add_child(_label(str(_st.get("held_line", "")), 20, DIM))
+	for it in _st.get("held", []):
+		_page.add_child(_item_card(it, true))
 
 
 func _item_card(it: Dictionary, held: bool) -> PanelContainer:
@@ -592,14 +606,6 @@ func _contact(id: String) -> Dictionary:
 		if c.id == id:
 			return c
 	return {}
-
-
-func _first_perk() -> String:
-	for br in _st.get("branches", []):
-		if branch_sel == "" or br.id == branch_sel:
-			for p in br.perks:
-				return p.id
-	return ""
 
 
 func _tap() -> void:

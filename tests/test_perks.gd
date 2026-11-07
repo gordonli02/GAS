@@ -410,6 +410,18 @@ func test_twist_perks() -> void:
 		eq(found.cursor, hot.cursor, "where it stood")
 		eq(found.form.stake, 5, "at the new layer's stake")
 		eq(found.tickets.map(func(t): return int(t.prize)), hot.tickets.map(func(t): return int(t.prize) * 5), "the same tickets, prizes x5")
+	# SEAL, the player's choice (the PAY key's card): the column chosen comes along, hot or not.
+	var rs := _run()
+	var es := rs.new_economy()
+	rs.perks = {"seal": 1}
+	var ms := rs.new_machine(pack.forms, true)
+	eq(rs.seal_choices(ms).size(), ms.boxes.size(), "every column with tickets left can be chosen")
+	var cold := (BoxReading.hottest(ms.boxes) + 1) % ms.boxes.size()
+	var chosen: TicketBox = ms.boxes[cold]
+	es.bonus(rs.due())
+	check(rs.pay(es, ms, [cold]), "paid, a column chosen")
+	eq(rs.sealed.size(), 1, "one box sealed")
+	eq([str(rs.sealed[0].form), str(rs.sealed[0].seed)], [chosen.form.uid(), chosen.seed], "the one chosen, not the hottest")
 	# PICKY: NEW BOX may put another of the layer's forms in the column.
 	var res6 := _rich(10000)
 	var r6: RunState = res6[0]
@@ -659,10 +671,11 @@ func test_offers_are_dealt_each_day() -> void:
 	eq(r.level(id), 1, "the perk is held")
 	eq(cash - e.cash, price, "for its price")
 	eq(r.offers.size(), Catalog.OFFERS - 1, "it leaves the offers")
-	eq(r.close_offers(), "", "something bought: no gift for skipping")
+	check(not r.can_skip_offers(), "something bought: no skipping for an item")
+	eq(r.close_offers(true), "", "something bought: no gift for skipping")
 	check(not r.offers_open, "closed")
+	eq(r.offers.size(), Catalog.OFFERS - 1, "the rest stay for the day")
 	# Rerolls cost double each time.
-	r.close_offers()
 	r.play(e)
 	r.end_day(e)
 	check(r.offers_open and r.day == 2, "new offers after the day")
@@ -670,7 +683,7 @@ func test_offers_are_dealt_each_day() -> void:
 	check(r.reroll_offers(e), "reroll")
 	eq(r.reroll_price(), p1 * 2, "the next costs double")
 	# Skipping a whole round gives an item.
-	var gift := r.close_offers()
+	var gift := r.close_offers(true)
 	check(gift != "" and r.held(gift) == 1, "skipped: an item for it (%s)" % gift)
 	eq(r.stats.skipped_offers, 1, "counted")
 	check(e.balanced(), "ledger balanced")
@@ -681,6 +694,47 @@ func test_offers_are_dealt_each_day() -> void:
 	r2.pay(e2)
 	check(r2.layer == 1 and r2.offers_open, "offers for the new layer")
 	eq(r2.perk_price(r2.offers[0]), int(r2.catalog.perk(r2.offers[0]).levels[0].price) * 5, "at stake 5")
+
+
+## G: "当天有效，钱够随时买": the card put away (LATER), the offers stay buyable and
+## rerollable until the day ends; SKIP FOR AN ITEM gives them up; a new day deals anew.
+func test_offers_last_the_day() -> void:
+	var res := _rich(100000)
+	var r: RunState = res[0]
+	var e: Economy = res[1]
+	var dealt := r.offers.duplicate()
+	eq(r.close_offers(), "", "LATER: no item")
+	check(not r.offers_open, "the card is put away")
+	eq(r.offers, dealt, "the offers wait")
+	check(r.can_skip_offers(), "still skippable for an item")
+	check(r.play(e), "the day goes on")
+	check(r.can_buy_offer(0, e), "an offer is still for sale at the machine")
+	var id: String = r.offers[1]
+	check(r.buy_offer(1, e), "and bought")
+	eq(r.level(id), 1, "held")
+	check(not r.can_skip_offers() and r.close_offers(true) == "", "something bought: no item for skipping")
+	eq(r.offers.size(), dealt.size() - 1, "the others stay")
+	check(r.reroll_offers(e), "a reroll after the card was put away")
+	check(not r.offers.is_empty(), "a new deal")
+	# The next day's offers replace them.
+	r.end_day(e)
+	check(r.offers_open and r.day == 2, "a new day: a new round, the card up")
+	check(r.can_skip_offers(), "nothing bought from it yet")
+	var held := r.items_held()
+	r.close_offers()
+	check(r.play(e), "LATER, then a day of play")
+	var gift := r.close_offers(true)
+	check(gift != "" and r.items_held() == held + 1, "SKIP from the phone: an item (%s)" % gift)
+	check(r.offers.is_empty() and not r.can_skip_offers(), "the offers are gone")
+	eq(r.close_offers(true), "", "and only one item a round")
+	check(not r.buy_offer(0, e) and not r.reroll_offers(e), "nothing left to buy or reroll")
+	r.end_day(e)
+	eq(r.offers.size(), Catalog.OFFERS, "the next morning deals again")
+	# Saved and loaded with the card away: the offers stay.
+	r.close_offers()
+	var back := RunState.from_dict(r.to_dict(), r.config)
+	check(not back.offers_open and back.offers == r.offers, "a save keeps the day's offers with the card away")
+	check(back.can_skip_offers(), "and SKIP with them")
 
 
 func test_offers_only_what_is_open() -> void:

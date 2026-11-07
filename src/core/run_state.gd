@@ -371,14 +371,15 @@ func can_pay(e: Economy) -> bool:
 
 ## Pays the layer in full and moves on at once: the next layer starts on a new day,
 ## or the run is cleared. Days left over are counted as spared. With SEAL and the
-## machine given, its hottest boxes come along (new_machine puts them in).
-func pay(e: Economy, m: MachineLogic = null) -> bool:
+## machine given, the boxes the player chose (`keep`: column indices) come along, or
+## the hottest when none were chosen (new_machine puts them in).
+func pay(e: Economy, m: MachineLogic = null, keep: Array = []) -> bool:
 	if not can_pay(e):
 		return false
 	e.cash_out()
 	_settle_day(e)
 	if m != null and effect("seal") > 0:
-		_seal(m)
+		_seal(m, keep)
 	var amount := due()
 	e.pay(amount)
 	stats.repaid += amount
@@ -407,15 +408,26 @@ func pay(e: Economy, m: MachineLogic = null) -> bool:
 	return true
 
 
-## SEAL: the boxes with the most prize money left per ticket, up to the perk's count,
-## are kept (form, seed, where they stand and their log) for the next layer's machine.
-func _seal(m: MachineLogic) -> void:
+## The columns SEAL could carry along (tickets left in the box).
+func seal_choices(m: MachineLogic) -> Array:
+	var cols := []
+	for i in m.boxes.size():
+		var box: TicketBox = m.boxes[i]
+		if box.cursor < box.size:
+			cols.append(i)
+	return cols
+
+
+## SEAL: up to the perk's count of boxes with tickets left are kept (form, seed, where
+## they stand and their log) for the next layer's machine: the columns in `keep` first
+## (the player's choice), then the ones with the most prize money left per ticket.
+func _seal(m: MachineLogic, keep: Array = []) -> void:
 	var ranked := []
 	for i in m.boxes.size():
 		var box: TicketBox = m.boxes[i]
 		if box.cursor < box.size:
-			ranked.append({"i": i, "heat": float(BoxReading.read(box).heat)})
-	ranked.sort_custom(func(a, b): return a.heat > b.heat)
+			ranked.append({"i": i, "heat": float(BoxReading.read(box).heat), "kept": keep.has(i)})
+	ranked.sort_custom(func(a, b): return a.kept and not b.kept or a.kept == b.kept and a.heat > b.heat)
 	sealed = []
 	for k in mini(effect("seal"), ranked.size()):
 		var box: TicketBox = m.boxes[ranked[k].i]
@@ -917,13 +929,15 @@ func _level_up(perk_id: String) -> void:
 	stats.perks += 1
 
 
+## The day's offers last until the day ends (G: "当天有效，钱够随时买"): the card put
+## away, they wait on the phone's TODAY page.
 func can_buy_offer(k: int, e: Economy) -> bool:
-	return offers_open and k >= 0 and k < offers.size() and can_buy_perk(str(offers[k]), e)
+	return k >= 0 and k < offers.size() and can_buy_perk(str(offers[k]), e)
 
 
 ## Offer `k` bought, from cash, or for free with a CHEAT SHEET. It leaves the offers.
 func buy_offer(k: int, e: Economy, free := false) -> bool:
-	if not offers_open or k < 0 or k >= offers.size():
+	if not playing() or k < 0 or k >= offers.size():
 		return false
 	var id := str(offers[k])
 	if free:
@@ -945,7 +959,7 @@ func reroll_price() -> int:
 
 func reroll_offers(e: Economy) -> bool:
 	var price := reroll_price()
-	if not playing() or not offers_open or not e.pay(price):
+	if not playing() or offers.is_empty() or not e.pay(price):
 		return false
 	stats.shop += price
 	offer_rerolls += 1
@@ -954,24 +968,30 @@ func reroll_offers(e: Economy) -> bool:
 	return true
 
 
-## Done with this round's offers. A round left without buying anything gives an item
-## for skipping it (if there is room). Returns that item's id, or "".
-func close_offers() -> String:
-	if not offers_open:
-		return ""
+## Can the round still be skipped for an item: nothing bought from it, offers left.
+func can_skip_offers() -> bool:
+	return playing() and not offer_bought and not offers.is_empty()
+
+
+## The offers card put away. Without `take_item` (LATER, DONE) the offers stay for the
+## day, buyable from the phone. With it (SKIP FOR AN ITEM) and nothing bought, the round
+## is given up for an item (if there is room) and the offers go. Returns that item's id,
+## or "".
+func close_offers(take_item := false) -> String:
 	offers_open = false
+	if not take_item or not can_skip_offers():
+		return ""
 	var gift := ""
-	if not offer_bought and playing():
-		stats.skipped_offers += 1
-		if room() > 0:
-			var r := SeededRng.new("%s|skip|%d|%d" % [seed, layer, day])
-			var pool := []
-			for it in catalog.items:
-				if it.use != "offer":
-					pool.append({"id": it.id, "w": float(Catalog.ITEM_WEIGHT.get(it.rarity, 1))})
-			if not pool.is_empty():
-				gift = pool[_draw(pool, r)].id
-				items[gift] = held(gift) + 1
+	stats.skipped_offers += 1
+	if room() > 0:
+		var r := SeededRng.new("%s|skip|%d|%d" % [seed, layer, day])
+		var pool := []
+		for it in catalog.items:
+			if it.use != "offer":
+				pool.append({"id": it.id, "w": float(Catalog.ITEM_WEIGHT.get(it.rarity, 1))})
+		if not pool.is_empty():
+			gift = pool[_draw(pool, r)].id
+			items[gift] = held(gift) + 1
 	offers = []
 	return gift
 

@@ -39,6 +39,13 @@ func test_core_pack_loads() -> void:
 	check(pack.form("catch").tiers[0].symbol_large.ends_with("art/walleye_large.png"), "walleye large symbol path")
 	eq(pack.form("catch").colors.edge, Color.html("#0033cc"), "catch edge colour")
 	eq(pack.tear_clips.size(), 8, "tear clips")
+	# Form tags (G, perk_research section 6): the form says what it is.
+	var tags := {"catch": ["JACKPOT FORM"], "kabawk": ["ALL OR NOTHING"], "plate": ["SMALL PRIZES FORM", "BY GROUP"],
+		"nugget": ["SMALL PRIZES FORM", "BY GROUP"], "spur": ["MIDDLE PRIZES FORM", "BY GROUP"], "order": [], "flock": [], "peckeye": []}
+	for id in tags:
+		eq(pack.form(id).tags, tags[id], id + " tags")
+		check(not pack.form(id).tags.has("BY GROUP") or pack.form(id).wins_by_group(), id + ": BY GROUP only on a form that wins by group")
+	eq(pack.form("plate").scaled(5).tags, ["SMALL PRIZES FORM", "BY GROUP"], "a copy at a stake keeps the tags")
 	var marks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://packs/core/audio/tear_marks.json"))
 	for c in pack.tear_clips:
 		eq(c.marks.size(), marks[c.path.get_file()].size(), c.path.get_file() + " marks")
@@ -85,6 +92,10 @@ func test_rejects_bad_fields() -> void:
 		"shape_prize_tops": {"shape": {"prizes": {"a": 1000}}},
 		"shape_prize_multiple": {"shape": {"prizes": {"d": 30}}},
 		"shape_prize_zero": {"shape": {"prizes": {"c": 0}}},
+		"tags_list": {"tags": "JACKPOT FORM"},
+		"tags_unknown": {"tags": ["JACKPOT FORM", "LUCKY FORM"]},
+		"tags_type": {"tags": [3]},
+		"tags_by_group": {"tags": ["BY GROUP"]},
 	}
 	for k in cases:
 		var res := PackLoader.load_dir(_make_pack("bad_" + k, cases[k]))
@@ -98,6 +109,10 @@ func test_accepts_minimal_valid_pack() -> void:
 		var box := BoxGenerator.build(res.pack.forms[0], "S-1")
 		check(box.tickets.size() == box.size, "generator runs on a user form")
 		check(res.pack.forms[0].shape.is_empty(), "no shape unless the form gives one")
+		check(res.pack.forms[0].tags.is_empty(), "no tags unless the form gives them")
+	var tagged := PackLoader.load_dir(_make_pack("tagged", {"tags": ["JACKPOT FORM", "ALL OR NOTHING"]}))
+	if check(tagged.ok(), "tags are accepted: " + "; ".join(tagged.errors)):
+		eq(tagged.pack.forms[0].tags, ["JACKPOT FORM", "ALL OR NOTHING"], "the tags as loaded")
 	var shaped := PackLoader.load_dir(_make_pack("shaped", {"shape": {"top": [0.5, 1], "prizes": {"a": 1000, "b": 1000, "d": 50}}}))
 	if check(shaped.ok(), "a shape is accepted: " + "; ".join(shaped.errors)):
 		var f: FormDef = shaped.pack.forms[0]

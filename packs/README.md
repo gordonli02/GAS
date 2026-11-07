@@ -24,6 +24,7 @@ Where packs come from (`Platform.pack_dirs()`): `res://packs/core`, then each fo
 | `name` | yes | text, or `{"en": "...", "zh": "..."}` (English required) |
 | `author` | no | free text |
 | `forms` | yes | list of form files |
+| `tags` | optional: what the form is, shown on the machine in story mode; any of `JACKPOT FORM`, `ALL OR NOTHING`, `SMALL PRIZES FORM`, `MIDDLE PRIZES FORM`, `BY GROUP` (only with `win_display` `each_group`) |
 | `tear_sounds` | no | `{"marks": "<json>", "clips": ["<wav/ogg>", ...]}`; marks file maps clip file name → rising crackle start times in seconds |
 
 ## Form file

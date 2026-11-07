@@ -640,3 +640,56 @@ M9.5; this is how they landed. The weights are placeholders.
   with `form` (a form's uid) is offerable only when `offerable(forms)` /
   `deal_offers(forms)` is given that uid. Nobody passes the machine's forms yet, so such
   a perk would never be dealt until the callers do.
+
+## Milestone 9.5, step 4: the shop's pages, form tags, the leftover UI
+The draft is `docs/perk_research.md` section 5 (parts 1, 2, 6 and 12); this is how the
+phone's shop, the tags and the UI step 2 left behind landed.
+- **The SHOP app has three pages** (`Phone.shop_tab`: `shelf`, `today`, `items`; keys
+  `tab_shelf`, `tab_today`, `tab_items`). SHELF lists every shelf perk in the catalog's
+  order as a card (`shelf_<perk id>`, `Phone.row()` finds a card for the tools): level,
+  what it does now and next, its price here, what it needs (requirements show here
+  only, G), and a BUY key (`buy_perk_<perk id>`, greyed when it cannot be bought).
+  Under it YOUR BUILD: the dealt perks held (`build_<perk id>`), level, kind in the
+  rarity's colour, what they do; nothing to buy. TODAY is the morning's card again:
+  each offer (`offer_<k>`: name and level, kind in the rarity's colour, the text with a
+  risk perk's cost; BUY `buy_offer_<k>`, FREE `offer_free_<k>` with a CHEAT SHEET),
+  then REROLL (`reroll_offers`) and SKIP FOR AN ITEM (`skip_offers`, only while nothing
+  was bought), then the day's item shelf (`buy_<item id>`, NEW SHELF `reroll_shelf`).
+  ITEMS is what is held, with USE. The per-branch tree is gone; so are the branch and
+  perk selection of the old page.
+- **The offers last the day** (G: "当天有效，钱够随时买"). `close_offers(take_item := false)`
+  only puts the card away; with `take_item` and nothing bought (`can_skip_offers()`)
+  the round is given up for an item and the offers go. `buy_offer` and `reroll_offers`
+  ask for offers, not for the card (`offers_open` is only "the morning's card is up"
+  now); `_new_day` deals anew. The morning card gained LATER (chrome), shown only while
+  SKIP is the other way out: once something is bought, DONE does the same thing. The
+  sim's bots call `close_offers(true)`, so a bot that bought nothing still gets its
+  item and the numbers did not move.
+- **Form tags** (G, section 6): `FormDef.tags`, translation keys from the form's json
+  (`"tags": [...]`), out of `FormDef.TAGS` (JACKPOT FORM, ALL OR NOTHING, SMALL PRIZES
+  FORM, MIDDLE PRIZES FORM, BY GROUP). `PackLoader` rejects a non-list, an unknown tag,
+  and BY GROUP on a form that does not win by group (`win_display` other than
+  `each_group`), so the tag cannot lie. Big Catch is a jackpot form, Ka-Bawk! all or
+  nothing, Hot Plate and Nugget Rush small prizes by group, Lucky Spur middle prizes by
+  group; Pecking Order, One Flock and Peckeye have none until their signature rules (M9.6's
+  second layer). They show on the LCD's third line after the column's name and price,
+  joined by " · ", in the run only; nowhere else yet (the codex is M13).
+- **PICKY**: with NEW BOX armed, a column press puts up "WHICH TICKET GOES IN?" (a key
+  per form the layer sells, `pick_<form id>`, rows of four, `pick_back`); the fee is
+  checked first, the box changes with the form and the machine view is rebuilt.
+- **SEAL**: the PAY key, when SEAL is held and more columns have tickets left than it
+  keeps, puts up "WHICH BOX COMES ALONG?" (`seal_<machine column>`: COLUMN n · FORM ·
+  k LEFT, `seal_back`), one box a card until the perk's count is chosen, then pays.
+  `RunState.pay(e, m, keep)` seals the columns in `keep` first, the hottest for the
+  rest (an empty `keep` is the old rule); `seal_choices(m)` lists the columns.
+- **MOONLIGHTING**: the SHIFT DONE card has TO THE MACHINE (`machine`, greyed when the
+  cap is used up). The machine sells with the cap on (`_moonlight`, `_selling()`; the
+  card's keys now `run.apply` the machine after the day is chosen, so the cap comes on
+  with the shift and goes with the next day of play), the LCD says NOTHING MORE TODAY
+  at the cap, and the tickets wait in the tray: `_take_ticket` refuses to deal and QUICK
+  HANDS refuses to open while `not run.can_open()` ("OPEN THEM TOMORROW"), and the
+  machine does not walk back to the table after a sale. LEAVE goes back to the SHIFT
+  DONE card. The visit is not saved: a reload puts the SHIFT DONE card up again.
+- **HOUSE ACCOUNT**: the LCD's first line is "$ x CREDIT · TAB $y" while the tab holds
+  something (the tab alone when the credit is 0); the LEAVE card says ON THE TAB and
+  that it is settled when you leave.

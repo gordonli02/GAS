@@ -7,6 +7,7 @@
   ],
   "code": "HP-1S",
   "price": 1,
+  "tags": ["SMALL PRIZES FORM", "BY GROUP"],
   "colors": {
     "edge": "#d4001f",
     "head": "#ffe14a",

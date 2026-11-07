@@ -86,6 +86,10 @@ var _trashing := false              ## the card asking before tickets go in the 
 var _card_busy := false             ## run: a card key is being carried out
 var _day := {}                      ## run: the ledger when today's play began {spent, won}
 var aim := ""                       ## run: an item used on a column (PEEK, BOX REPORT) waits for a column press
+var _picking := -1                  ## run, PICKY: the machine column whose new box waits for a form (the card is up)
+var _sealing := false               ## run, SEAL: the card asking which boxes come along is up
+var _seal_keep: Array = []          ## run, SEAL: the machine columns chosen so far
+var _moonlight := false             ## run, MOONLIGHTING: at the machine after the shift (tickets for tomorrow)
 var _msg_args := []
 
 
@@ -200,7 +204,7 @@ func _ready() -> void:
 ## A machine button: a column, or PLAY ALL (the index after the last column). The number
 ## keys and Space press the same buttons.
 func press_machine(i: int) -> void:
-	if (run != null and run.today != "play") or i < 0 or i > columns.size():
+	if (run != null and not _selling()) or i < 0 or i > columns.size():
 		return
 	var play_all := i == columns.size()
 	Sfx.play("button")
@@ -252,6 +256,14 @@ func press_machine(i: int) -> void:
 		# NEW BOX is armed: a column press changes that column's box; PLAY ALL lets it go.
 		if play_all:
 			machine.change_armed = false
+		elif run.can_pick_form():
+			# PICKY: a card asks which of the layer's forms goes in first.
+			machine.change_armed = false
+			if economy.cash < run.change_fee():
+				say("NO CASH")
+				return
+			_picking = columns[i]
+			_show_run_card()
 		elif run.change_box(economy, machine, columns[i]):
 			Sfx.play("toss")
 			say("NEW BOX")
@@ -269,6 +281,48 @@ func press_machine(i: int) -> void:
 ## The red PLAY ALL button.
 func press_play_all() -> void:
 	press_machine(columns.size())
+
+
+## Run: the machine sells today: a day of play, or MOONLIGHTING's visit after the shift.
+func _selling() -> bool:
+	return run != null and (run.today == "play" or (_moonlight and run.today == "work"))
+
+
+## Run, PICKY: the card of the forms the layer sells, one key each, for the column's new box.
+func _pick_card() -> void:
+	var rows := []
+	var row := []
+	for f: FormDef in run.stage_forms(_room_forms(run.scene())):
+		row.append({"id": "pick_" + f.id, "text": f.name.to_upper()})
+		if row.size() == 4:
+			rows.append(row)
+			row = []
+	if not row.is_empty():
+		rows.append(row)
+	rows.append([{"id": "pick_back", "text": tr("BACK"), "kind": "chrome"}])
+	var col := columns.find(_picking) + 1
+	run_card.show_card(tr("WHICH TICKET GOES IN?"), [tr("NEW BOX IN COLUMN %d") % col,
+		[tr("CASH %s") % Hud._money(economy.cash), "dim"]], rows)
+
+
+## A key on the PICKY card: the form goes into the column (a new box, for the fee), or BACK.
+func _on_pick(id: String) -> void:
+	var col := _picking
+	_picking = -1
+	Sfx.play("button")
+	var form: FormDef = null
+	for f: FormDef in run.stage_forms(_room_forms(run.scene())):
+		if "pick_" + f.id == id:
+			form = f
+	if form != null and col >= 0:
+		if run.change_box(economy, machine, col, form):
+			await _refresh_machine_view()
+			Sfx.play("toss")
+			say("NEW BOX")
+			_store_session()
+		else:
+			say("NO CASH")
+	_show_run_card()
 
 
 func insert_bill(value: int) -> void:
@@ -357,6 +411,9 @@ func open_many() -> void:
 	elif flow.state != TicketFlow.State.IDLE or flow.dealing():
 		return
 	if tray.is_empty():
+		return
+	if not run.can_open():
+		hud.set_status("OPEN THEM TOMORROW")
 		return
 	var entries := tray.take_many(run.batch_size())
 	var got := run.open_batch(economy, entries)
@@ -588,6 +645,10 @@ func _clear_table() -> void:
 	_go_machine = false
 	_leaving = false
 	_trashing = false
+	_picking = -1
+	_sealing = false
+	_seal_keep = []
+	_moonlight = false
 	tray.clear()
 	pile.clear()
 	win_pile.clear()
@@ -637,13 +698,17 @@ func column_forms() -> Array:
 ## Run: the LEAVE key puts the LEAVE card up: the day so far, and how many tickets
 ## would be thrown away. Nothing is lost until the player confirms there (NEXT DAY or PAY).
 func leave_day() -> void:
-	if run == null or run_card.visible or run.today != "play" or _switching:
+	if run == null or run_card.visible or not _selling() or _switching:
 		return
 	Sfx.play("button")
 	machine.queue.clear()   # nothing more is sold while the card is up
 	machine.armed = false
 	machine.change_armed = false
 	_leaving = true
+	if _moonlight:
+		# MOONLIGHTING: back to the SHIFT DONE card; the tickets wait for tomorrow.
+		_moonlight = false
+		_walk_out()
 	_show_run_card()
 
 
@@ -714,6 +779,12 @@ func _on_card(id: String) -> void:
 	if id.begins_with("offer_"):
 		_on_offer(id)
 		return
+	if id.begins_with("pick_"):
+		_on_pick(id)
+		return
+	if id.begins_with("seal_"):
+		_on_seal(id)
+		return
 	_card_busy = true
 	Sfx.play("button")
 	match id:
@@ -724,20 +795,23 @@ func _on_card(id: String) -> void:
 				_day = {"spent": economy.spent, "won": economy.won}
 		"work":
 			run.work(economy)
+		"machine":
+			# MOONLIGHTING: to the machine after the shift, for tomorrow's tickets.
+			if run.today == "work" and run.effect("work_tickets") > 0:
+				_moonlight = true
+				_leaving = false
+				open_machine()
 		"loan":
 			take_loan()
 		"back":
 			_leaving = false
 		"pay":
-			var layer := run.layer
-			if _leaving and run.can_pay(economy):
-				_walk_out()
-			if run.pay(economy, machine):
-				Sfx.play_win(50)
-				_leaving = false
-				_layer_ended()
-				if run.playing() and run.layer != layer:
-					await _next_layer()
+			if _seal_choice():
+				# SEAL: which boxes come along is asked first (_on_seal pays).
+				_sealing = true
+				_seal_keep = []
+			else:
+				await _pay([])
 		"next":
 			var layer := run.layer
 			if _leaving:
@@ -757,20 +831,86 @@ func _on_card(id: String) -> void:
 			await set_mode("free")
 			Save.set_run({})   # the run was over: free play leaves nothing of it behind
 			return
+	if run.today != "work":
+		_moonlight = false
+	if run.playing():
+		run.apply(machine)   # the day chosen: MOONLIGHTING's cap on a day of work, none on a day of play
+	_card_busy = false
+	_store_session()
+	_show_run_card()
+
+
+## Pays the layer (the PAY key): with SEAL, the machine columns in `keep` come along.
+func _pay(keep: Array) -> void:
+	var layer := run.layer
+	if _leaving and run.can_pay(economy):
+		_walk_out()
+	if run.pay(economy, machine, keep):
+		Sfx.play_win(50)
+		_leaving = false
+		_moonlight = false
+		_layer_ended()
+		if run.playing() and run.layer != layer:
+			await _next_layer()
+
+
+## SEAL: the player picks the boxes that come along when there are more with tickets
+## left than the perk keeps (otherwise every one of them comes, no question).
+func _seal_choice() -> bool:
+	return run.effect("seal") > 0 and run.can_pay(economy) and run.seal_choices(machine).size() > run.effect("seal")
+
+
+## The SEAL card: a key for each column with tickets left and not chosen yet, one box
+## at a time, up to the perk's count.
+func _seal_card() -> void:
+	var lines := [[tr("%d OF %d CHOSEN") % [_seal_keep.size(), run.effect("seal")], "dim"]]
+	var rows := []
+	for i in run.seal_choices(machine):
+		if _seal_keep.has(i) or not columns.has(i):
+			continue
+		var box: TicketBox = machine.boxes[i]
+		rows.append([{"id": "seal_%d" % i, "text": tr("COLUMN %d · %s · %d LEFT") % [columns.find(i) + 1,
+			machine.forms[i].name.to_upper(), box.size - box.cursor]}])
+	rows.append([{"id": "seal_back", "text": tr("BACK"), "kind": "chrome"}])
+	run_card.show_card(tr("WHICH BOX COMES ALONG?"), lines, rows)
+
+
+## A key on the SEAL card: a box chosen (the layer is paid once the perk's count is
+## chosen), or BACK.
+func _on_seal(id: String) -> void:
+	Sfx.play("button")
+	if id == "seal_back" or not _seal_choice():
+		_sealing = false
+		_seal_keep = []
+		_show_run_card()
+		return
+	var i := int(id.trim_prefix("seal_"))
+	if run.seal_choices(machine).has(i) and not _seal_keep.has(i):
+		_seal_keep.append(i)
+	if _seal_keep.size() < run.effect("seal"):
+		_show_run_card()
+		return
+	_sealing = false
+	_card_busy = true
+	await _pay(_seal_keep)
+	_seal_keep = []
 	_card_busy = false
 	_store_session()
 	_show_run_card()
 
 
 ## A key on the card of perk offers: buy one (or take it free with a CHEAT SHEET),
-## reroll them, or be done (skipping them all gives an item).
+## reroll them, put them away for later (they wait on the phone's TODAY page until
+## the day ends), or be done (skipping them all gives an item).
 func _on_offer(id: String) -> void:
 	Sfx.play("button")
 	var ok := false
 	if id == "offer_reroll":
 		ok = run.reroll_offers(economy)
+	elif id == "offer_later":
+		run.close_offers()
 	elif id == "offer_done":
-		var gift := run.close_offers()
+		var gift := run.close_offers(true)
 		if gift != "":
 			hud.set_status("GOT %s", [tr(run.catalog.item(gift).name)])
 	elif id.begins_with("offer_free_"):
@@ -787,7 +927,8 @@ func _on_offer(id: String) -> void:
 ## The card of perk offers: each offer, its level and kind, in its rarity's colour (G:
 ## no word for it, the colour says it), and what it does (a risk perk's cost after it,
 ## _perk_text), a key to buy each (and to take one free with a CHEAT SHEET), reroll,
-## done. No requirements here: those are the shelf's (G).
+## LATER (they stay for the day, on the phone), done or skip for an item. No
+## requirements here: those are the shelf's (G).
 func _offer_card() -> void:
 	var lines := [[tr("CASH %s") % Hud._money(economy.cash), "dim"]]
 	var buy := []
@@ -809,9 +950,13 @@ func _offer_card() -> void:
 		rows.append(buy)
 	if not free.is_empty():
 		rows.append(free)
-	rows.append([{"id": "offer_reroll", "text": tr("REROLL %s") % Hud._money(run.reroll_price()), "kind": "chrome",
-			"disabled": economy.cash < run.reroll_price() or run.offerable().is_empty()},
-		{"id": "offer_done", "text": tr("DONE") if run.offer_bought or run.offers.is_empty() else tr("SKIP FOR AN ITEM")}])
+	var ends := [{"id": "offer_reroll", "text": tr("REROLL %s") % Hud._money(run.reroll_price()), "kind": "chrome",
+			"disabled": economy.cash < run.reroll_price() or run.offerable().is_empty() or run.offers.is_empty()}]
+	# LATER only while SKIP is the other way out (once something is bought, DONE is the same).
+	if run.can_skip_offers():
+		ends.append({"id": "offer_later", "text": tr("LATER"), "kind": "chrome"})
+	ends.append({"id": "offer_done", "text": tr("SKIP FOR AN ITEM") if run.can_skip_offers() else tr("DONE")})
+	rows.append(ends)
 	rows.append([{"id": "phone", "text": tr("PHONE"), "kind": "chrome"}])
 	run_card.show_card(tr("PERK OFFERS"), lines, rows)
 
@@ -836,6 +981,12 @@ func _show_run_card() -> void:
 		return
 	if run == null:
 		run_card.hide_card()
+		return
+	if _picking >= 0 and run.playing():
+		_pick_card()
+		return
+	if _sealing and run.playing():
+		_seal_card()
 		return
 	var due := Hud._money(run.due())
 	var cash := Hud._money(economy.cash + economy.credit)
@@ -892,15 +1043,23 @@ func _show_run_card() -> void:
 		run_card.show_card(day_line, [[tr("DUE %s") % due, "big"], tr("CASH %s") % cash,
 			tr("WAGE TODAY %s") % Hud._money(run.wage())] + kept + last + line,
 			[[{"id": "play", "text": tr("PLAY")}, {"id": "work", "text": tr("WORK"), "disabled": not run.can_work()}], money_row])
-	elif run.today == "work":
+	elif run.today == "work" and not _moonlight:
+		# MOONLIGHTING: the machine after the shift, a few tickets for tomorrow.
+		var day_row := [{"id": "next", "text": next_text}]
+		if run.effect("work_tickets") > 0:
+			day_row.append({"id": "machine", "text": tr("TO THE MACHINE"), "kind": "chrome",
+				"disabled": run.sale_cap() <= 0})
 		run_card.show_card(tr("SHIFT DONE"), [[tr("WAGE +%s") % Hud._money(run.last_wage()), "big"],
 			tr("CASH %s") % cash, tr("DUE %s") % due, [day_line, "dim"]] + kept + last + line,
-			[[{"id": "next", "text": next_text}], money_row])
+			[day_row, money_row])
 	elif _leaving:
 		var spent: int = economy.spent - int(_day.get("spent", economy.spent))
 		var won: int = economy.won - int(_day.get("won", economy.won))
+		# HOUSE ACCOUNT: what is on the tab is settled as the day ends.
+		var tab := [[tr("ON THE TAB %s") % Hud._money(economy.tab), "big"], [tr("THE TAB IS SETTLED WHEN YOU LEAVE"), "dim"]] \
+			if economy.tab != 0 else []
 		run_card.show_card(tr("LEAVE FOR TODAY?"), [[day_line, "dim"], tr("SPENT TODAY %s") % Hud._money(spent),
-			tr("WON TODAY %s") % Hud._money(won), tr("CASH %s") % cash, [tr("DUE %s") % due, "big"]] + kept + last + line,
+			tr("WON TODAY %s") % Hud._money(won), tr("CASH %s") % cash, [tr("DUE %s") % due, "big"]] + tab + kept + last + line,
 			[[{"id": "next", "text": next_text}, {"id": "back", "text": tr("BACK"), "kind": "chrome"}], money_row])
 	else:
 		run_card.hide_card()
@@ -1035,13 +1194,35 @@ func phone_state() -> Dictionary:
 		"lines": [tr("ONE PRESS LENDS %s") % m.call(run.loan_step()),
 			tr("INTEREST %d%% A DAY ON WHAT IS OWED") % run.interest(),
 			tr("BORROWED %s") % m.call(run.borrowed), tr("DUE %s") % m.call(run.due())]}
-	var branches := []
-	for b in run.catalog.branches:
-		var perks := []
-		for p in run.catalog.branch_perks(b.id):
-			perks.append(_perk_state(p))
-		branches.append({"id": b.id, "name": tr(b.name), "perks": perks})
-	st.branches = branches
+	# SHELF: every shelf perk, then the dealt perks held (the build so far).
+	var shelf_perks := []
+	for id in run.shelf_perks():
+		shelf_perks.append(_perk_state(run.catalog.perk(id)))
+	st.shelf_perks = shelf_perks
+	var build := []
+	for p in run.catalog.dealt():
+		var lv := run.level(p.id)
+		if lv > 0:
+			build.append({"id": p.id, "name": tr(p.name), "rarity_id": p.rarity,
+				"kind": tr(Catalog.KIND_NAMES[Catalog.kind(p)]),
+				"lines": [[tr("LEVEL %d OF %d") % [lv, p.levels.size()]], _perk_text(p, lv)]})
+	st.build = build
+	st.build_line = tr("YOUR BUILD")
+	# TODAY: the day's offers (as on the morning's card), buyable until the day ends.
+	var offers := []
+	for k in run.offers.size():
+		var p := run.catalog.perk(str(run.offers[k]))
+		var lv := run.level(p.id) + 1
+		offers.append({"k": k, "name": "%s %d" % [tr(p.name), lv], "kind": tr(Catalog.KIND_NAMES[Catalog.kind(p)]),
+			"rarity_id": p.rarity, "desc": _perk_text(p, lv), "buy_text": tr("BUY %s") % m.call(run.perk_price(p.id)),
+			"can_buy": run.can_buy_offer(k, economy), "free_text": tr("FREE") if run.held("cheat") > 0 else ""})
+	st.offers = offers
+	st.offers_line = tr("PERK OFFERS") if not offers.is_empty() else tr("NOTHING MORE TODAY")
+	if run.playing() and not offers.is_empty():
+		st.reroll_offers = {"text": tr("REROLL %s") % m.call(run.reroll_price()),
+			"ok": economy.cash >= run.reroll_price() and not run.offerable().is_empty()}
+	if run.can_skip_offers():
+		st.skip_offers = {"text": tr("SKIP FOR AN ITEM"), "ok": true}
 	var held := []
 	for it in run.catalog.items:
 		var n := run.held(it.id)
@@ -1076,6 +1257,8 @@ func phone_state() -> Dictionary:
 	return st
 
 
+## A shelf perk on the phone's SHELF page: its level, what it does now and next, its
+## price here, what it needs (the shelf is where requirements show, G), a BUY key.
 func _perk_state(p: Dictionary) -> Dictionary:
 	var lv := run.level(p.id)
 	var top: int = p.levels.size()
@@ -1095,10 +1278,7 @@ func _perk_state(p: Dictionary) -> Dictionary:
 	var st := {"id": p.id, "name": tr(p.name), "level": lv, "max": top, "locked": not miss.is_empty(),
 		"rarity": tr(str(p.rarity).to_upper()), "rarity_id": p.rarity, "lines": lines}
 	if lv < top:
-		if Catalog.kind(p) == "shelf":
-			st.buy = {"text": tr("BUY %s") % Hud._money(price), "ok": run.can_buy_perk(p.id, economy)}
-		else:
-			lines.append([tr("COMES AS AN OFFER AFTER A DAY")])
+		st.buy = {"text": tr("BUY %s") % Hud._money(price), "ok": run.can_buy_perk(p.id, economy)}
 	return st
 
 
@@ -1151,6 +1331,19 @@ func _on_phone(action: String, id: String) -> void:
 				hud.set_cash(economy.cash)
 		"reroll_shelf":
 			ok = run != null and run.reroll_shelf(economy)
+		"buy_offer", "offer_free":
+			ok = run != null and run.buy_offer(int(id), economy, action == "offer_free")
+			if ok:
+				run.apply(machine)
+				hud.set_cash(economy.cash)
+		"reroll_offers":
+			ok = run != null and run.reroll_offers(economy)
+		"skip_offers":
+			if run != null:
+				var gift := run.close_offers(true)
+				ok = gift != ""
+				if ok:
+					hud.set_status("GOT %s", [tr(run.catalog.item(gift).name)])
 		"buy_service":
 			ok = run != null and run.buy_service(id, economy)
 		"use_item":
@@ -1522,6 +1715,10 @@ func dev_sound_volume(slot: String, linear: float) -> void:
 func _take_ticket() -> Dictionary:
 	if tray.is_empty():
 		return {}
+	if run != null and not run.can_open():
+		# MOONLIGHTING: bought after the shift, opened tomorrow.
+		hud.set_status("OPEN THEM TOMORROW")
+		return {}
 	current = tray.take()
 	return current
 
@@ -1600,7 +1797,8 @@ func _process(dt: float) -> void:
 		say("LAST SALE")
 	if m.stopped:
 		Sfx.play("dispense_stop")
-	if at_machine and machine.return_at > 0.0 and _time > machine.return_at and not tray.is_empty():
+	if at_machine and machine.return_at > 0.0 and _time > machine.return_at and not tray.is_empty() \
+			and (run == null or run.can_open()):
 		toggle_view()
 	# PLAY ALL blinks only while you stand at the machine; from the table it stays lit.
 	machine_view.set_blink(not at_machine or sin(_time * 4.0) > 0.0)
@@ -1639,16 +1837,25 @@ func _refresh_ui() -> void:
 		else (tr("NEW BOX?") if blink else "") if machine.change_armed \
 		else (tr("PICK A COLUMN") if blink else "") if aim != "" \
 		else msg if _time < _msg_until \
+		else tr("NOTHING MORE TODAY") if _moonlight and run != null and not machine.may_sell() \
 		else str(reading[0]) if not reading.is_empty() \
 		else tr("SELECT A TICKET") if economy.can_buy(machine.min_price()) else tr("INSERT BILL")
 	var info := ""
 	if named >= 0 and named < columns.size():
 		var f: FormDef = machine.forms[columns[named]]
 		info = "%d %s $%d" % [named + 1, f.name.to_upper(), machine.price(columns[named])]
+		# The form's tags (G: the form says what it is; the perks never name forms).
+		if run != null and not f.tags.is_empty():
+			info += " · " + " · ".join(f.tags.map(func(t): return tr(t)))
 		# A full reading takes turns with the name on the third line.
 		if reading.size() > 1 and fmod(_time, 4.0) >= 2.0:
 			info = str(reading[1])
-	machine_view.set_lcd("$ %7.2f %s" % [economy.credit, tr("CREDIT")], sub, info)
+	var top := "$ %7.2f %s" % [economy.credit, tr("CREDIT")]
+	if economy.tab_on and economy.tab > 0:
+		# HOUSE ACCOUNT: what is on the tab, after the credit (or alone when there is none).
+		var tab := tr("TAB %s") % Hud._money(economy.tab)
+		top = "$ %d %s · %s" % [economy.credit, tr("CREDIT"), tab] if economy.credit > 0 else tab
+	machine_view.set_lcd(top, sub, info)
 	var shares := []
 	for i in columns:
 		shares.append(float(machine.stock_left(i)) / machine.boxes[i].size)
@@ -1674,7 +1881,7 @@ func _refresh_ui() -> void:
 		var at_once := mini(run.batch_size(), _unopened())
 		hud.set_open(tr("OPEN %d AT ONCE") % at_once if at_once > 0 and not at_machine and run.today == "play" else "")
 		if run.playing():
-			hud.set_run(tr("DUE %s · DAY %d/%d") % [Hud._money(run.due()), run.day, run.days()], run.today == "play")
+			hud.set_run(tr("DUE %s · DAY %d/%d") % [Hud._money(run.due()), run.day, run.days()], _selling())
 		else:
 			hud.set_run(tr("DEBT CLEARED") if run.status == RunState.CLEARED else tr("RUN OVER"))
 	else:

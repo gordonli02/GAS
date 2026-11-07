@@ -4,6 +4,9 @@ extends RefCounted
 
 const ROLES := ["top", "mid", "low"]
 const WIN_DISPLAYS := ["whole", "one_group", "each_group"]
+## The tags a form may carry (translation keys; G, perk_research section 6: a perk's
+## card never names forms, the form says what it is).
+const TAGS := ["JACKPOT FORM", "ALL OR NOTHING", "SMALL PRIZES FORM", "MIDDLE PRIZES FORM", "BY GROUP"]
 
 var pack_id := ""
 var id := ""                 ## unique inside its pack
@@ -25,6 +28,7 @@ var win_display := "whole"
 ## prize money is set by its type either way, so every form pays back the same on
 ## average; the shape only says whether it comes as one jackpot or many small prizes.
 var shape := {}
+var tags: Array = []          ## TAGS the form says it is (the machine's LCD shows them in the run)
 var shaped_prizes := false   ## the run's prizes are on (shaped()); the print differs, so the art does
 var layout := {}             ## presentation; see packs/README.md
 var tear_clips: Array = []    ## optional per-form rips; empty means use the pack or core rips
@@ -91,7 +95,7 @@ func scaled(times: int) -> FormDef:
 ## A copy with its own tier dictionaries (the rest is shared, it is never changed).
 func _copy() -> FormDef:
 	var f := FormDef.new()
-	for k in ["pack_id", "id", "name", "title", "code", "colors", "digit_groups", "win_display", "shape",
+	for k in ["pack_id", "id", "name", "title", "code", "colors", "digit_groups", "win_display", "shape", "tags",
 			"shaped_prizes", "layout", "tear_clips", "source_dir", "stake", "price"]:
 		f.set(k, get(k))
 	for t in tiers:

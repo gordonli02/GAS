@@ -60,7 +60,7 @@ static func play(bot: String, base_forms: Array, seed_text: String, config: RunC
 		elif bot == "build":
 			_build(run, e, m)
 		elif bot == "skip":
-			run.close_offers()
+			run.close_offers(true)
 		elif bot == "work":
 			_save(run, e)
 		var price := m.min_price()
@@ -148,7 +148,7 @@ static func _shop(run: RunState, e: Economy, m: MachineLogic) -> void:
 		if best < 0 or not run.buy_offer(best, e):
 			break
 		run.apply(m)
-	run.close_offers()
+	run.close_offers(true)
 	run.bet = 1
 	for b in run.bets():
 		if e.cash >= int(b) * m.forms[0].price * 100:
@@ -181,7 +181,7 @@ static func _build(run: RunState, e: Economy, m: MachineLogic) -> void:
 		if best < 0 or not run.buy_offer(best, e):
 			break
 		run.apply(m)
-	run.close_offers()
+	run.close_offers(true)
 
 
 ## Moves cash into credit through the bill slot until `want` is there or no bill fits.

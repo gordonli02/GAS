@@ -6,6 +6,7 @@
   ],
   "code": "KB-1S",
   "price": 1,
+  "tags": ["ALL OR NOTHING"],
   "colors": {
     "edge": "#17171d",
     "head": "#2743c9",

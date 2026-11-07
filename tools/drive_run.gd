@@ -80,6 +80,7 @@ func _run() -> void:
 	# The perk offers come first, at the start of the run and after every day.
 	_expect(run.story == "" and game.run_card.visible and game.run_card.key("offer_done") != null, "then the perk offers")
 	_expect(game.run_card.key("offer_0") != null and run.offers.size() == Catalog.OFFERS, "three offers, a key each")
+	_expect(game.run_card.key("offer_later") != null, "LATER while nothing is bought")
 	await _shot("02b_offers")
 	game.set_language("zh")
 	await _wait(0.3)
@@ -101,9 +102,11 @@ func _run() -> void:
 	await _wait(0.3)
 	_expect(e.cash == cash - reroll and run.offers.size() == Catalog.OFFERS and run.reroll_price() == reroll * 2, "REROLL: three new offers for %s, the next costs double" % Hud._money(reroll))
 	await _shot("02d_offers_rerolled")
+	_expect(game.run_card.key("offer_later") == null, "something bought: DONE, no LATER")
 	_card("offer_done")
 	await _wait(0.3)
 	_expect(not run.offers_open and run.items_held() == 0, "DONE: closed, no item (something was bought)")
+	_expect(run.offers.size() == Catalog.OFFERS - 1, "the other offers wait for the day (the phone's TODAY page)")
 	# The checks that follow count on a run without perks and the first day's money.
 	run.perks = {}
 	run.apply(game.machine)
@@ -197,25 +200,28 @@ func _run() -> void:
 	_key(KEY_SPACE)
 	await _wait(1.0)
 
-	# The shop: the perk tree to look at, one branch at a time (perks come as offers);
-	# today's shelf of items.
+	# The shop: SHELF (the shelf's perks for sale, the build held), TODAY (the day's
+	# offers, still for sale, and the item shelf), ITEMS (what is held).
 	e.bonus(3000)
 	cash = e.cash
 	_key(KEY_P)
 	await _wait(0.3)
 	_phone("app_shop")
 	await _wait(0.3)
-	_expect(_pkey("branch_shelf") != null and _pkey("perk_read1") != null and _pkey("buy_perk") != null, "the tree: the shelf first, its perks for sale")
+	_expect(_pkey("tab_shelf") != null and game.phone.row("shelf_read1") != null and _pkey("buy_perk_savings") != null, "SHELF: the shelf's perks, each for sale")
 	await _shot("07a_shop_shelf")
-	_phone("branch_luck")
+	_phone("tab_today")
 	await _wait(0.2)
-	_phone("perk_prizes")
+	_expect(game.phone.row("offer_0") != null and _pkey("buy_offer_0") != null and _pkey("reroll_offers") != null, "TODAY: the day's offers, still for sale")
+	_expect(_pkey("skip_offers") == null, "something was bought: no SKIP")
+	await _shot("07b_shop_today")
+	var left := run.offers.size()
+	cash = e.cash
+	var offer_price := run.perk_price(str(run.offers[0]))
+	_phone("buy_offer_0")
 	await _wait(0.2)
-	_expect(_pkey("perk_prizes") != null and _pkey("perk_read1") == null and _pkey("buy_perk") == null, "a build line: its perks, nothing to buy (they come as offers)")
-	await _shot("07b_tree_luck")
-	_phone("branch_risk")
-	await _wait(0.2)
-	await _shot("07b2_tree_risk")
+	_expect(run.offers.size() == left - 1 and e.cash == cash - offer_price, "an offer bought from the phone at the machine")
+	cash = e.cash
 	# Perks for the checks below (the offers are random): LUCKY STREAK, REGULAR, CLOSER
 	# and the reading chain to HOT OR COLD.
 	for id in ["luck", "regular", "closer", "read1", "read2", "read3"]:
@@ -225,7 +231,10 @@ func _run() -> void:
 	run.shelf = ["peek", "coin", "magnifier", "skip"]
 	game.phone.show_state(game.phone_state())
 	await _wait(0.2)
-	_phone("tab_items")
+	_phone("tab_shelf")
+	await _wait(0.2)
+	_expect(game.phone.row("build_closer") != null and game.phone.row("build_luck") != null, "YOUR BUILD: the dealt perks held")
+	_phone("tab_today")
 	await _wait(0.2)
 	_expect(_pkey("buy_peek") != null and _pkey("reroll_shelf") != null, "today's shelf, and a key for another")
 	_phone("buy_peek")
@@ -234,6 +243,9 @@ func _run() -> void:
 	await _wait(0.2)
 	_expect(run.held("peek") == 1 and run.held("coin") == 1 and not run.shelf.has("peek"), "PEEK and a LUCKY COIN in hand, gone from the shelf")
 	_expect(e.cash == cash - 60 and e.balanced(), "$60 from cash")
+	_phone("tab_items")
+	await _wait(0.2)
+	_expect(_pkey("use_peek") != null and _pkey("buy_magnifier") == null, "ITEMS: what is held, nothing to buy")
 	await _shot("07d_shop_items")
 	# PEEK: used on a column at the machine.
 	_phone("use_peek")

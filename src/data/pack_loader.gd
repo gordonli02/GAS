@@ -199,6 +199,19 @@ static func _load_form(ctx: _Ctx, pack: PackDef, path: String) -> FormDef:
 						f.shape["prizes"] = prizes
 						_check_prize_roles(ctx, f.shaped(), path + " shape.prizes")
 
+	if d.has("tags"):
+		var tags = d.tags
+		if not tags is Array:
+			ctx.err(path + ": tags must be a list of " + ", ".join(FormDef.TAGS))
+		else:
+			for t in tags:
+				if not t is String or not FormDef.TAGS.has(t):
+					ctx.err(path + ": tag '" + str(t) + "' is not one of " + ", ".join(FormDef.TAGS))
+				elif t == "BY GROUP" and not f.wins_by_group():
+					ctx.err(path + ": tag 'BY GROUP' needs win_display each_group")
+				elif not f.tags.has(t):
+					f.tags.append(t)
+
 	if d.has("tear_sounds"):
 		f.tear_clips = _load_tear_sounds(ctx, d.tear_sounds, path)
 	return f
