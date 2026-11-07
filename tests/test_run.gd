@@ -245,7 +245,7 @@ func test_stage_machine() -> void:
 	var box := m.boxes[0]
 	box.cursor = box.size - 2
 	m.armed = true
-	m.press(0, e.credit)
+	m.press(0, e)
 	m.queue[0].n = 2
 	var last := []
 	var t := 0.0
@@ -268,9 +268,12 @@ func test_stage_machine() -> void:
 	eq(pack.forms[0].price, 1, "the pack's form is untouched")
 	check(pack.forms[0].scaled(1) == pack.forms[0], "stake 1 is the form itself")
 	eq(m2.min_price(), 5, "cheapest ticket")
-	eq(m2.press(0, 4), "insert_bill", "$4 buys nothing at $5")
+	var e4 := Economy.new()
+	e4.credit = 4
+	eq(m2.press(0, e4), "insert_bill", "$4 buys nothing at $5")
 	m2.armed = true
-	eq(m2.press(0, 23), "", "PLAY ALL with $23")
+	e4.credit = 23
+	eq(m2.press(0, e4), "", "PLAY ALL with $23")
 	eq(m2.queue[0].n, 4, "buys four")
 
 
@@ -382,10 +385,10 @@ func test_invariant_random_run() -> void:
 					e.insert(e.bills[rng.randi() % e.bills.size()])
 			1, 2, 3:
 				if r.today == "play":
-					m.press(rng.randi() % 3, e.credit)
+					m.press(rng.randi() % 3, e)
 			4:
 				if r.today == "play":
-					m.press_play_all(e.credit)
+					m.press_play_all(e)
 			5, 6:
 				if not tray.is_empty():
 					e.open_ticket(tray.take().ticket.prize)

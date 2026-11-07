@@ -16,13 +16,15 @@ extends RefCounted
 ##           bets the most it can while it holds a hundred tickets' worth of cash
 ##   skip    as blind, but never buys a perk: every round of offers is skipped for its
 ##           item (which it never uses)
-##   build   as perks, but it only takes the money and luck engines of BUILD (the first
-##           of them offered that costs at most 60% of its cash) and skips the rest
+##   build   as perks, but it only takes the engines of BUILD (the first of them
+##           offered that costs at most 60% of its cash) and skips the rest; QUICK
+##           HANDS it buys off the shelf by the same rule
+## A bot that cannot work (NO WAY BACK bought) plays instead.
 
 const BOTS := ["work", "blind", "borrow", "mixed", "perks", "skip", "build"]
-## The build bot's perks, best first.
-const BUILD := ["snowball", "bigfish", "prizes", "closer", "combo", "again", "multi", "stacker", "luck", "fortune",
-	"firstpull", "pity", "scrap", "assembly", "regular"]
+## The build bot's perks, best first (dealt ones; the shelf's QUICK HANDS apart).
+const BUILD := ["snowball", "bigfish", "prizes", "closer", "combo", "again", "stacker", "penny", "luck", "fortune",
+	"firstpull", "pity", "scrap", "assembly", "middle"]
 ## Perk levels whose return tools/sim_runs prints (box_return), one build per line.
 const EV_SETS := [
 	{}, {"prizes": 1}, {"prizes": 3}, {"scrap": 2}, {"luck": 3}, {"luck": 3, "fortune": 1},
@@ -69,8 +71,8 @@ static func play(bot: String, base_forms: Array, seed_text: String, config: RunC
 		if wants_play and e.cash + e.credit >= price:
 			run.play(e)
 			_play_day(run, e, m, rng, bot == "borrow")
-		else:
-			run.work(e)
+		elif not run.work(e) and run.play(e):
+			_play_day(run, e, m, rng, bot == "borrow")
 		if run.playing() and run.layer == layer:
 			run.end_day(e)
 		if run.playing() and run.layer != layer:
@@ -89,7 +91,7 @@ static func _play_day(run: RunState, e: Economy, m: MachineLogic, rng: RandomNum
 	var layer := run.layer
 	while bought < DAY_CAP:
 		if run.can_pay(e):
-			run.pay(e)
+			run.pay(e, m)
 			return
 		_feed(e, price * BATCH)
 		if e.credit < price:
@@ -110,7 +112,7 @@ static func _play_day(run: RunState, e: Economy, m: MachineLogic, rng: RandomNum
 				run.cleared_box(m)
 			held.append({"form": m.forms[col], "ticket": sold.ticket, "box": sold.box, "bet": m.bet})
 		_open(run, e, held)
-		run.count_sales(sales, last)
+		run.count_sales(sales, last, m.forms[col].uid())
 		bought += sales
 		if run.layer != layer:
 			return
@@ -165,6 +167,9 @@ static func _save(run: RunState, e: Economy) -> void:
 ## again and again; then the offers are closed (an item if nothing was bought).
 static func _build(run: RunState, e: Economy, m: MachineLogic) -> void:
 	var guard := 0
+	var hands := run.perk_price("multi")
+	if hands > 0 and hands <= e.cash * 0.6 and run.buy_perk("multi", e):
+		run.apply(m)
 	while run.offers_open and guard < 10:
 		guard += 1
 		var best := -1

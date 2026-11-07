@@ -85,13 +85,13 @@ func test_single_press_sells_one() -> void:
 	var e := Economy.new()
 	var tray := TicketTray.new()
 	e.credit = 5
-	eq(m.press(0, e.credit), "", "press")
+	eq(m.press(0, e), "", "press")
 	_run(m, e, tray, 2.0)
 	eq(tray.size(), 1, "one ticket")
 	eq(e.credit, 4, "$1 of credit")
 	eq(m.return_at, 0.0, "credit left: the camera stays")
 	var broke := Economy.new()
-	eq(m.press(1, broke.credit), "insert_bill", "no credit: INSERT BILL")
+	eq(m.press(1, broke), "insert_bill", "no credit: INSERT BILL")
 
 
 func test_play_all() -> void:
@@ -99,9 +99,9 @@ func test_play_all() -> void:
 	var e := Economy.new()
 	var tray := TicketTray.new()
 	e.credit = 150
-	m.press_play_all(e.credit)
+	m.press_play_all(e)
 	check(m.armed, "armed")
-	m.press(1, e.credit)
+	m.press(1, e)
 	check(not m.armed, "disarms on the column press")
 	var t := _run(m, e, tray, 20.0)
 	eq(tray.size(), 100, "sells min(100, credit)")
@@ -111,12 +111,12 @@ func test_play_all() -> void:
 	var e2 := Economy.new()
 	var tray2 := TicketTray.new()
 	e2.credit = 7
-	m2.press_play_all(e2.credit)
-	m2.press(2, e2.credit)
+	m2.press_play_all(e2)
+	m2.press(2, e2)
 	_run(m2, e2, tray2, 5.0)
 	eq(tray2.size(), 7, "PLAY ALL with $7: 7 tickets")
 	check(m2.return_at > 0.0, "credit gone: camera returns after dispensing")
-	m2.press_play_all(0)
+	m2.press_play_all(e2)
 	check(not m2.armed, "PLAY ALL needs credit")
 
 
@@ -126,7 +126,7 @@ func test_mixed_forms_open_in_purchase_order() -> void:
 	var tray := TicketTray.new()
 	e.credit = 10
 	for i in [2, 0, 1, 0]:
-		m.press(i, e.credit)
+		m.press(i, e)
 	_run(m, e, tray, 3.0)
 	var order := []
 	while not tray.is_empty():
@@ -141,8 +141,8 @@ func test_sold_out_restocks_and_sales_wait() -> void:
 	var box := m.boxes[0]
 	box.cursor = box.size - 2
 	e.credit = 50
-	m.press_play_all(e.credit)
-	m.press(0, e.credit)   # 50 tickets, only 2 left in the box
+	m.press_play_all(e)
+	m.press(0, e)   # 50 tickets, only 2 left in the box
 	var t := 0.0
 	var sold_at_two := -1.0
 	while t < 10.0 and tray.size() < 50:
@@ -164,7 +164,7 @@ func test_queue_clears_without_credit() -> void:
 	var tray := TicketTray.new()
 	e.credit = 2
 	for i in 4:
-		m.press(0, e.credit)
+		m.press(0, e)
 	_run(m, e, tray, 3.0)
 	eq(tray.size(), 2, "only what the credit pays for")
 	check(not m.busy(), "rest of the queue dropped")
@@ -192,9 +192,9 @@ func test_invariant_random_session() -> void:
 				var v: int = Economy.BILLS[rng.randi() % 5]
 				e.insert(v)
 			1, 2:
-				m.press(rng.randi() % 3, e.credit)
+				m.press(rng.randi() % 3, e)
 			3:
-				m.press_play_all(e.credit)
+				m.press_play_all(e)
 			4:
 				if not tray.is_empty():
 					var it := tray.take()

@@ -98,7 +98,7 @@ func _find(forms: Array) -> Callable:
 ## Buys `n` tickets of column `i` the way the machine does.
 func _buy(m: MachineLogic, e: Economy, tray: TicketTray, i: int, n: int) -> void:
 	m.armed = n > 1
-	m.press(i, e.credit)
+	m.press(i, e)
 	if n > 1:
 		m.queue[0].n = n
 	var t := 0.0

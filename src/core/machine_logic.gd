@@ -2,6 +2,11 @@ class_name MachineLogic
 extends RefCounted
 ## The pull-tab machine: one box per form, column presses, PLAY ALL, dispensing
 ## and restocking. Pure logic. Numbers from MIGRATION.md "Machine" and the web build.
+##
+## The run's perks reach the machine through a few fields RunState.apply sets (luck,
+## the bet, the last sale, MAGNET, a sale cap on a day of work) and one callable
+## (`sure_next`), asked before every ticket is taken whether this one has to win; the
+## box then moves a winner of its own forward (TicketBox.pull_winner).
 
 const RATE := 16.35            ## tickets per second while dispensing
 const RESTOCK := 18.0          ## tickets per second while a new box loads
@@ -21,6 +26,15 @@ var luck := 0.0
 var luck_tries := 1                   ## FORTUNE: losing boxes passed over again, up to this many
 var flow_line := false                ## ASSEMBLY LINE: a box loaded after a sell-out never loses
 var bet := 1                          ## HIGH ROLLER: tickets cost and pay this many times more
+## MAGNET: in every window of this many tickets of a box (counted from its first) one
+## wins at least: when the window's last ticket is sold and none of it won, the next
+## small prize of the box is moved onto it. 0: off.
+var magnet := 0
+## Asked with the box before a ticket is taken: whether this one has to win (a sure
+## win is a winner of the box moved onto it). The run's rule (STAKEOUT, INSURANCE).
+var sure_next: Callable
+## Tickets the machine may still sell today (MOONLIGHTING on a day of work); -1: no cap.
+var sale_cap := -1
 var boxes: Array[TicketBox] = []
 var loaded: PackedFloat32Array = []   ## tickets loaded in each box (restocking boxes fill up)
 var queue: Array = []                 ## [{form: index, n: tickets left}]
@@ -95,21 +109,33 @@ func stock_left(i: int) -> int:
 	return maxi(0, int(floor(loaded[i])) - boxes[i].cursor)
 
 
-## A column button (or key 1-3). Sells 1, or with PLAY ALL armed min(100, what credit buys).
-## Returns "insert_bill" when there is no credit, else "".
-func press(i: int, credit: int) -> String:
+## Whether the machine may sell anything now (the day's cap, MOONLIGHTING).
+func may_sell() -> bool:
+	return sale_cap != 0
+
+
+## A column button (or key 1-3). Sells 1, or with PLAY ALL armed min(100, what the
+## money buys, the day's cap). Returns "insert_bill" when the money is short, "no_more"
+## when the day's cap is reached, else "".
+func press(i: int, e: Economy) -> String:
 	var p := price(i)
-	if credit < p:
+	if not may_sell():
+		return "no_more"
+	if not e.can_buy(p):
 		return "insert_bill"
-	var n := mini(PLAY_ALL_MAX, credit / p) if armed else 1
+	var n := mini(PLAY_ALL_MAX, e.power() / p) if armed else 1
+	if sale_cap > 0:
+		n = mini(n, sale_cap)
 	armed = false
 	queue.append({"form": i, "n": n})
 	return ""
 
 
 ## The red PLAY ALL button: arms (or disarms) the next column press.
-func press_play_all(credit: int) -> String:
-	if credit < min_price():
+func press_play_all(e: Economy) -> String:
+	if not may_sell():
+		return "no_more"
+	if not e.can_buy(min_price()):
 		return "insert_bill"
 	armed = not armed
 	return ""
@@ -122,10 +148,12 @@ func press_change() -> void:
 
 
 ## Takes column `i`'s box away and loads the next seed's, which restocks as after a
-## sell-out. Tickets already bought from the old box keep it. What it costs is the
-## caller's rule.
-func change_box(i: int) -> void:
+## sell-out. With `new_form` (PICKY) the column sells that form from now on. Tickets
+## already bought from the old box keep it. What it costs is the caller's rule.
+func change_box(i: int, new_form: FormDef = null) -> void:
 	change_armed = false
+	if new_form != null:
+		forms[i] = new_form
 	boxes[i] = _load(forms[i], next_seed(boxes[i].seed))
 	loaded[i] = 0.0
 	var kept: Array = []
@@ -133,6 +161,47 @@ func change_box(i: int) -> void:
 		if job.form != i:
 			kept.append(job)
 	queue = kept
+
+
+## MOVER: columns `i` and `j` trade boxes (form, box and stock). Nothing queued after.
+func swap_columns(i: int, j: int) -> void:
+	if i == j or i < 0 or j < 0 or i >= boxes.size() or j >= boxes.size():
+		return
+	var f := forms[i]
+	forms[i] = forms[j]
+	forms[j] = f
+	var b := boxes[i]
+	boxes[i] = boxes[j]
+	boxes[j] = b
+	var l := loaded[i]
+	loaded[i] = loaded[j]
+	loaded[j] = l
+	queue.clear()
+	armed = false
+	change_armed = false
+
+
+## The next ticket of column `i` leaves the box, paid for: the run's sure win and
+## MAGNET act on it first. The day's cap counts it.
+func _take(i: int, economy: Economy) -> Dictionary:
+	var box := boxes[i]
+	var at := box.cursor
+	if sure_next.is_valid() and not box.wins(at):
+		sure_next.call(box)
+	if magnet > 0 and (at + 1) % magnet == 0 and not box.wins(at):
+		var dry := true
+		for k in range(at - magnet + 1, at):
+			if box.wins(k):
+				dry = false
+				break
+		if dry:
+			box.pull_winner(at, "small")
+	var t: Dictionary = box.tickets[at]
+	box.cursor += 1
+	economy.buy(price(i))
+	if sale_cap > 0:
+		sale_cap -= 1
+	return t
 
 
 ## One frame. Buys tickets through `economy` and puts them in `tray`.
@@ -148,7 +217,7 @@ func step(dt: float, now: float, economy: Economy, tray: TicketTray) -> Dictiona
 			# Sold out: the next seed's box loads and restocks.
 			boxes[i] = _load(forms[i], next_seed(box.seed), true)
 			loaded[i] = 0.0
-	if not queue.is_empty() and economy.credit < price(queue[0].form):
+	if not queue.is_empty() and (not economy.can_buy(price(queue[0].form)) or not may_sell()):
 		queue.clear()
 	var running := not queue.is_empty() and stock_left(queue[0].form) > 0
 	ev.motor = running
@@ -158,13 +227,11 @@ func step(dt: float, now: float, economy: Economy, tray: TicketTray) -> Dictiona
 		while _acc >= 1.0 and not queue.is_empty():
 			var job: Dictionary = queue[0]
 			var i: int = job.form
-			if economy.credit < price(i) or stock_left(i) <= 0:
+			if not economy.can_buy(price(i)) or stock_left(i) <= 0 or not may_sell():
 				break
 			_acc -= 1.0
 			var box := boxes[i]
-			var t: Dictionary = box.tickets[box.cursor]
-			box.cursor += 1
-			economy.buy(price(i))
+			var t := _take(i, economy)
 			tray.add(forms[i], t, box, bet)
 			ev.sold.append({"form": i, "delay": k * FEED_GAP})
 			if last_sale > 0 and box.cursor >= box.size:
@@ -178,22 +245,22 @@ func step(dt: float, now: float, economy: Economy, tray: TicketTray) -> Dictiona
 	if _sold and queue.is_empty():
 		_sold = false
 		ev.stopped = true
-		if economy.credit < min_price():
+		if not economy.can_buy(min_price()):
 			return_at = now + RETURN_DELAY
 	return ev
 
 
 ## Sells one ticket of column `i` right now: no motor, no waiting for stock, no tray.
-## For simulations. Returns {"ticket", "box", "last_sale": bool}, or {} when the credit is short.
+## For simulations. Returns {"ticket", "box", "last_sale": bool}, or {} when the credit
+## is short or the day's cap is reached.
 func sell_now(i: int, economy: Economy) -> Dictionary:
 	if boxes[i].cursor >= boxes[i].size:
 		boxes[i] = _load(forms[i], next_seed(boxes[i].seed), true)
 	var box := boxes[i]
 	loaded[i] = box.size
-	if not economy.buy(price(i)):
+	if not may_sell() or not economy.can_buy(price(i)):
 		return {}
-	var t: Dictionary = box.tickets[box.cursor]
-	box.cursor += 1
+	var t := _take(i, economy)
 	var last := last_sale > 0 and box.cursor >= box.size
 	if last:
 		economy.bonus(last_sale)
@@ -224,8 +291,10 @@ static func next_seed(s: String) -> String:
 
 
 ## Restores boxes saved with to_dict(). box_for(form uid, seed) returns that box
-## (generated once and shared with the tray), or null if the form is gone.
-## Forms not in the save keep the box they have. Nothing is queued or armed after.
+## (generated once and shared with the tray), or null if the form is gone. A save
+## made with columns (PICKY, MOVER) is read column by column: a column takes the
+## form of the box saved for it; without columns, forms are matched by uid. Forms
+## not in the save keep the box they have. Nothing is queued or armed after.
 func load_boxes(saved: Array, box_for: Callable) -> void:
 	queue.clear()
 	armed = false
@@ -233,23 +302,34 @@ func load_boxes(saved: Array, box_for: Callable) -> void:
 	return_at = 0.0
 	_acc = 0.0
 	_sold = false
-	for d in saved:
+	for k in saved.size():
+		var d = saved[k]
 		if typeof(d) != TYPE_DICTIONARY:
 			continue
 		var i := -1
-		for k in forms.size():
-			if forms[k].uid() == str(d.get("form", "")):
-				i = k
+		if d.has("column"):
+			i = int(d.column) if int(d.column) >= 0 and int(d.column) < forms.size() else -1
+		else:
+			for c in forms.size():
+				if forms[c].uid() == str(d.get("form", "")):
+					i = c
 		if i < 0:
 			continue
-		var box: TicketBox = box_for.call(forms[i].uid(), str(d.get("seed", "")))
+		var box: TicketBox = box_for.call(str(d.get("form", "")), str(d.get("seed", "")))
 		if box == null:
 			continue
-		var sh = d.get("shuffles", [])
-		if typeof(sh) == TYPE_ARRAY:
-			for at in sh:
-				box.cursor = clampi(int(at), 0, box.size)
-				box.shuffle_rest()
+		if box.form != null and box.form.uid() != forms[i].uid():
+			forms[i] = box.form
+		var ops = d.get("ops", null)
+		if typeof(ops) == TYPE_ARRAY:
+			box.replay(ops)
+		else:
+			var sh = d.get("shuffles", [])   # saves before M9.5
+			if typeof(sh) == TYPE_ARRAY:
+				var old := []
+				for at in sh:
+					old.append({"s": int(at)})
+				box.replay(old)
 		box.cursor = clampi(int(d.get("cursor", 0)), 0, box.size)
 		box.opened = clampi(int(d.get("opened", 0)), 0, box.size)
 		boxes[i] = box
@@ -259,9 +339,9 @@ func load_boxes(saved: Array, box_for: Callable) -> void:
 func to_dict() -> Dictionary:
 	var out := []
 	for i in boxes.size():
-		var d := {"form": forms[i].uid(), "seed": boxes[i].seed, "cursor": boxes[i].cursor,
+		var d := {"column": i, "form": forms[i].uid(), "seed": boxes[i].seed, "cursor": boxes[i].cursor,
 			"opened": boxes[i].opened, "loaded": loaded[i]}
-		if not boxes[i].shuffles.is_empty():
-			d.shuffles = boxes[i].shuffles.duplicate()
+		if not boxes[i].ops.is_empty():
+			d.ops = boxes[i].ops.duplicate(true)
 		out.append(d)
 	return {"boxes": out}

@@ -8,6 +8,10 @@ extends RefCounted
 ## A run (RunState) adds its own lines: a starting cash of its own, wages and other
 ## income (`earned`), repayments, fees and purchases (`paid`), and bills at the stage's
 ## stake. The invariant then reads start + loans + won + earned - spent - paid.
+## HOUSE ACCOUNT (a run perk) opens a tab: tickets are sold on it when the credit is
+## short, up to the cash in hand plus `tab_limit` (what the house would lend), and it
+## is settled when the day ends (RunState.settle_tab). What is on the tab is spent
+## already, so the invariant reads cash + credit + bill - tab on the left.
 
 const START_CASH := 200
 const LOAN := 200
@@ -29,6 +33,9 @@ var earned := 0      ## wages and other income that is not a prize
 var paid := 0        ## repayments, fees, purchases: cash spent on anything but tickets
 var opened := 0      ## tickets opened
 var wins := 0        ## winning tickets opened
+var tab := 0         ## owed to the machine for tickets sold on the house account today
+var tab_on := false  ## the house account is open (HOUSE ACCOUNT, on a day of play)
+var tab_limit := 0   ## how far the tab may go past the cash in hand (the house line left)
 var bill := 0        ## value of the bill being fed, 0 when none
 var bill_t := 0.0    ## 0..1 progress of the bill
 var _bill_heard := false
@@ -39,7 +46,17 @@ func net() -> int:
 
 
 func balanced() -> bool:
-	return cash + credit + bill == start_cash + loans + won + earned - spent - paid
+	return cash + credit + bill - tab == start_cash + loans + won + earned - spent - paid
+
+
+## What the machine can take now: the credit, and the tab's room when it is open.
+func power() -> int:
+	return credit + (maxi(0, cash + tab_limit - tab) if tab_on else 0)
+
+
+## Whether a ticket at `price` can be sold now (from credit, or on the tab).
+func can_buy(price: int) -> bool:
+	return power() >= price
 
 
 func can_insert(value: int) -> bool:
@@ -74,13 +91,36 @@ func step_bill(dt: float) -> Dictionary:
 	return ev
 
 
-## Pays for a ticket. Spending is recorded at purchase, so unopened tickets count.
+## Pays for a ticket, from credit or else on the tab. Spending is recorded at
+## purchase, so unopened tickets count.
 func buy(price: int) -> bool:
-	if credit < price:
+	if credit >= price:
+		credit -= price
+		spent += price
+		return true
+	if not can_buy(price):
 		return false
-	credit -= price
+	tab += price
 	spent += price
 	return true
+
+
+## The tab is paid off from cash as far as it goes; what is left is returned (the
+## run borrows it: the house account's day was interest free).
+func settle_tab() -> int:
+	var from_cash := mini(cash, tab)
+	cash -= from_cash
+	var short := tab - from_cash
+	tab = 0
+	tab_on = false
+	return short
+
+
+## Tickets given back for `amount` of what they cost (RETURNS, a RETURN SLIP): the
+## money comes back to cash and is no longer spent.
+func refund(amount: int) -> void:
+	spent -= amount
+	cash += amount
 
 
 ## Tickets paid from credit first, then cash (the run's ALL IN buys a box out at once).
@@ -157,11 +197,13 @@ func add_loan(amount: int) -> void:
 
 func to_dict() -> Dictionary:
 	return {"cash": cash, "credit": credit, "loans": loans, "spent": spent, "won": won,
-		"opened": opened, "wins": wins, "start_cash": start_cash, "earned": earned, "paid": paid}
+		"opened": opened, "wins": wins, "start_cash": start_cash, "earned": earned, "paid": paid,
+		"tab": tab, "tab_on": tab_on, "tab_limit": tab_limit}
 
 
 func from_dict(d: Dictionary) -> void:
-	for k in ["cash", "credit", "loans", "spent", "won", "opened", "wins", "start_cash", "earned", "paid"]:
+	for k in ["cash", "credit", "loans", "spent", "won", "opened", "wins", "start_cash", "earned", "paid", "tab", "tab_limit"]:
 		set(k, int(d.get(k, get(k))))
+	tab_on = bool(d.get("tab_on", false))
 	bill = 0
 	bill_t = 0.0

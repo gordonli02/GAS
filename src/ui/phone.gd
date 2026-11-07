@@ -355,6 +355,16 @@ func _perks_tab() -> void:
 		var l := _label(str(line[0]) if line is Array else str(line), 20, DIM if line is Array else TEXT)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(l)
+	# A perk on the shelf is bought here (the others come as offers).
+	var buy: Dictionary = picked.get("buy", {})
+	if not buy.is_empty():
+		var b := _button(str(buy.text), GREEN.darkened(0.55) if buy.ok else PANEL, TEXT if buy.ok else DIM, 20)
+		b.custom_minimum_size = Vector2(0, 44)
+		b.disabled = not buy.ok
+		var id: String = picked.id
+		b.pressed.connect(func(): _tap(); acted.emit("buy_perk", id))
+		v.add_child(b)
+		_buttons["buy_perk"] = b
 	_page.add_child(card)
 
 

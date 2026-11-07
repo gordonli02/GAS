@@ -531,3 +531,81 @@ exactly enough. How it landed:
   on (1 / 2 / 4 with the placeholders), `problems()` insists the first is day 1, `line_text()`
   says it in words and `tools/sim_runs` prints it. Buying later than the checkpoint grows less,
   and the line falls short.
+
+## Milestone 9.5, step 2: the catalog as the tree draft v2, and every hook
+The plan is `docs/roadmap.md` (M9.5, in Chinese) and the draft `docs/perk_research.md`
+section 5; this is how it landed in code. Every number is a placeholder.
+- **The catalog is the mixed tree** (`Catalog.STANDARD`). Sixteen perks carry `shelf: true`
+  and sit in the `shelf` branch: the reading chain, INFORMANT (two levels: PEEK sees 50 /
+  100, the second a free PEEK a day, HOUSE FRIEND merged in), GOOD CREDIT, LOW RATE,
+  SAVINGS, REGULAR (-50 / -75%, never free), HAGGLER (-25%), BIG POCKETS and HIGH ROLLER
+  (no requirement, G), QUICK HANDS, PICKY and HOUSE ACCOUNT. Everything else is dealt,
+  and has a kind (`Catalog.kind`): `build` (six lines, each a branch: clearing, jackpot,
+  small, batch, money, luck), `risk` (two levels, a `cost` key on each: LOAN SHARK,
+  BORROWED LUCK, SHORT WEEK, FLARE ONLY, DOUBLE DOWN, NO WAY BACK), `twist` (two levels:
+  MOONLIGHTING, RETURNS, SEAL, LOYAL, VARIETY, MAGNET) and `sure` (INSURANCE, STAKEOUT,
+  MARKED). A level may carry `extra`, more effects put on at that level (SHORT WEEK's day
+  cut, FLARE ONLY's zeroed prizes, LOAN SHARK's interest); `requires_any` is an "or"
+  (READ THE FLARE needs CLOSER or REGULAR). `problems()` checks the kinds' rules.
+  Gone: HOUSE FRIEND (into INFORMANT 2), the BOX KEY (a $25 coupon). Dealt perks hang off
+  shelf perks where the draft says (JACKPOT HUNTER off READ THE FLARE, NET WORTH off
+  SAVINGS, MARKED off INFORMANT, CHAIN and ENCORE off QUICK HANDS); `offerable()` deals
+  only what is off the shelf, `buy_perk` sells the shelf. The form perks of section 6b
+  wait for the signature rules (M9.6's second layer).
+- **Two hooks, one for each slot**: `effect(name)` sums (the "+" effects, `extra` included)
+  and `effect_x(name)` multiplies (the "x" ones: `top_x`, `mid_x`, `low_x`, `stack_x`,
+  `first_x`, `last_sale_x`, `loan_x`, `rate_x`), so BIG FISH 2 and FLARE ONLY 2 together
+  are x20 on a top prize. PENNY JAR and MIDDLE CUT multiply the small and middle tiers
+  by the tier's role.
+- **The risk perks' prices**: SHORT WEEK takes `day_cut` off `days()` (never below the day it
+  is, so bought on the last day it changes nothing); DOUBLE DOWN adds `offer_more` to
+  `offer_count()` and `debt_up` to `due()`; FLARE ONLY drops the zeroed tiers in
+  `pay_ticket` (a ticket left with none is a loser in every respect); LOAN SHARK multiplies
+  the line and the rate after LOW RATE's cut, so the two never reach zero; NO WAY BACK
+  makes `can_work()` false and counts `noback_days` at the end of every day of play;
+  BORROWED LUCK is `owe_pct()`: what is owed, interest included, as a share of the line,
+  times the level (100 / 200%), nothing once repaid (G: "as much as you owe"; the
+  half-the-line rule went).
+- **The twists**: RETURNS and the RETURN SLIP go through `refund_tickets` and
+  `Economy.refund` (cash back, no longer spent; the trash can's card says the share, and the
+  trash pays it); LOYAL and VARIETY read `forms_today`, filled by `count_sales` with the
+  form's uid (the game counts by form now), the higher of the two counts; MAGNET is the
+  machine's (`MachineLogic.magnet`): when the last ticket of a window of N from the box's
+  start is sold and none of the window won, the next small prize is moved onto it;
+  SEAL keeps the hottest boxes (by `BoxReading` heat) at `pay(e, m)` in `sealed` and
+  `new_machine` puts them in the next layer's machine from their seed (the same box at the
+  new stake, prizes scaled, the log replayed); PICKY lets `change_box` take a form, which
+  the machine's column sells from then on; HOUSE ACCOUNT is `Economy`'s tab
+  (`tab_on`, `tab_limit`: the house line left; `buy` falls back to the tab, `power()` and
+  `can_buy()` are what the machine asks instead of the credit), settled by `_settle_day`:
+  cash first, the rest borrowed as principal (the day was interest free); MOONLIGHTING is
+  `sale_cap` on the machine on a day of work (`work_tickets` less `day_tickets`) and
+  `can_open()` false that day.
+- **A sure win moves a prize of the box forward** (G, section 7), never makes one.
+  `TicketBox.swap` is the primitive, logged in `ops` with the shuffles (`{"s": cursor}` /
+  `{"m": [a, b]}`), `replay` rebuilds a saved box from its seed and the log (the machine's
+  save carries `ops` and the column each box is in; a save with `shuffles` from before
+  still loads). On it: `pull_winner(to, which)` (the next winner, the next small prize, the
+  biggest, or one at random from the seed and the log), `front_load` (MARKED: a PEEKed
+  column's next ten, winners first) and `scatter` (QUEUE JUMP: five winners into the next
+  twenty). The machine asks the run before every ticket through a callable (`sure_next`,
+  `RunState.claim_sure`): STAKEOUT's first ticket of the day, INSURANCE's ticket after the
+  losers in a row; one at a time (`sure_armed`) until a ticket is opened. The SURE items
+  (SURE THING, REEL IN, QUEUE JUMP) and the LUCKY COIN (now a column item: `coin_on`, the
+  form's next prize) are used on a column like PEEK; a SURE item with nothing left to
+  move is not used up.
+- **Items**: PEEK and FAST FORWARD do 50; OVERTIME (a shift paid twice: used before the day
+  is chosen, or after a shift, once); MOVER (a column's box and form trade places with the
+  next column's, `MachineLogic.swap_columns`; the view is rebuilt); the RETURN SLIP;
+  the three SURE items in a kind of their own. The BOX KEY is gone.
+- **What the game wires now and what waits for the phone's pages (M9.5 task 4)**: the
+  shelf is bought from the tree page (a BUY key on a shelf perk's card); RETURNS and the
+  slip go through the trash can and the phone; the column items say what they did. Not
+  wired yet: PICKY's choice of form at NEW BOX (the logic takes a form, the machine has no
+  picker), SEAL picks the hottest boxes itself (G's draft lets the player choose),
+  MOONLIGHTING's day of work does not go to the machine yet (the flow ends the day after
+  the shift), HOUSE ACCOUNT's tab has no line on the LCD. The developer panel's "every
+  perk" leaves the risk perks out (their prices would close the run's doors).
+- **The simulator** keeps its bots; `build` buys QUICK HANDS off the shelf by its own rule
+  and its list is the dealt perks of the draft; a bot that cannot work (NO WAY BACK) plays
+  instead. Task 5 remakes the bots (gamble, the build lines, the exploit checks).

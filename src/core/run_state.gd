@@ -11,12 +11,15 @@ extends RefCounted
 ## Rules: docs/roadmap.md "一局的结构"; numbers: RunConfig.
 ##
 ## Perks, items and contacts' services are data (Catalog); what they do is here, in the
-## effect hooks: effect(name) sums the levels of every perk on that effect, and the
-## rules ask it. Perks are offered, not shelved (G, the perk-tree talk): at the start of
-## the run and after every day the run deals a few (deal_offers) and the player buys any
-## they can pay for; the items on the phone's shelf change every day (deal_shelf).
+## effect hooks: effect(name) sums the levels of every perk on that effect (effect_x
+## multiplies the "x" ones), and the rules ask it. The tree is mixed (G, M9.5): the
+## shelf's perks are always for sale (buy_perk), the others are dealt (deal_offers) at
+## the start of the run and after every day, and the player buys any they can pay for;
+## the items on the phone's shelf change every day (deal_shelf).
 ## Everything is bought from cash at the layer's stake, and counted in the ledger as paid.
 ## Every prize goes through pay_ticket, which is the one formula of Catalog's header.
+## A sure win (STAKEOUT, INSURANCE, the SURE items) is never a new prize: a winner of
+## the box is moved forward (TicketBox.pull_winner), so reading the box stays true.
 
 const PLAYING := "playing"
 const CLEARED := "cleared"
@@ -46,6 +49,13 @@ var shelf: Array = []      ## item ids on the phone's shelf today (bought ones l
 var shelf_rerolls := 0
 var last_item := ""        ## the item bought last (COPIER copies it)
 var bet := 1               ## the machine's bet (HIGH ROLLER), 1 .. bet_max()
+var day_tickets := 0       ## tickets bought today (STAKEOUT's first, MOONLIGHTING's cap)
+var forms_today := {}      ## form uid -> true, forms bought today (LOYAL, VARIETY)
+var noback_days := 0       ## days of play since NO WAY BACK was bought
+var sure_armed := false    ## a sure win is in the tray, not opened yet (no second one until it is)
+var coin_on := {}          ## LUCKY COIN: form uid -> coins waiting on that column's next prize
+var overtime := false      ## OVERTIME: today's shift pays double
+var sealed: Array = []     ## SEAL: boxes carried into the next layer, until its machine is made
 ## What the effects count: losers in a row (DUE A WIN), boxes cleared under SNOWBALL,
 ## losers and top prizes opened in this layer (TRASH KING, JACKPOT HUNTER).
 var dry := 0
@@ -67,7 +77,8 @@ var stats := {"days": 0, "play_days": 0, "shifts": 0, "tickets": 0, "wages": 0, 
 	"interest": 0, "repaid": 0, "box_changes": 0, "fees": 0, "last_sales": 0, "days_spared": 0,
 	"layers_cleared": 0, "discarded": 0,   ## discarded: tickets bought and thrown away unopened
 	"shop": 0, "perks": 0, "items": 0, "services": 0, "bonus": 0,   ## shop: money spent there; bonus: prize money from perks and coins
-	"rerolls": 0, "skipped_offers": 0, "savings": 0, "insured": 0, "boxes_cleared": 0, "all_ins": 0, "best_prize": 0}
+	"rerolls": 0, "skipped_offers": 0, "savings": 0, "insured": 0, "boxes_cleared": 0, "all_ins": 0, "best_prize": 0,
+	"sure_wins": 0, "refunded": 0, "sealed": 0}   ## sure_wins: prizes moved forward; refunded: tickets given back
 
 
 static func start(run_config: RunConfig, seed_text: String, layer_scenes: Array) -> RunState:
@@ -93,18 +104,63 @@ func new_economy() -> Economy:
 func new_machine(base_forms: Array, light := false) -> MachineLogic:
 	var m := MachineLogic.new(stage_forms(base_forms), "%s-L%d-0001" % [seed, layer + 1], config.box_model(layer), light, luck(),
 		Catalog.FORTUNE_TRIES if effect("fortune") > 0 else 1)
+	# SEAL: the boxes brought along from the layer paid, as they were (the same seed
+	# gives the same box at the new stake: the prizes are scaled, the order kept).
+	for s in sealed:
+		for i in m.forms.size():
+			if m.forms[i].uid() == str(s.get("form", "")):
+				var box := BoxGenerator.build(m.forms[i], str(s.get("seed", "")), m.model, light)
+				box.replay(s.get("ops", []))
+				box.cursor = clampi(int(s.get("cursor", 0)), 0, box.size)
+				box.opened = clampi(int(s.get("opened", 0)), 0, box.size)
+				m.boxes[i] = box
+				m.loaded[i] = box.size
+	sealed = []
 	apply(m)
 	return m
 
 
-## Puts the perks that act on the machine into it (after one is bought, or a box cleared).
+## Puts the perks that act on the machine into it (after one is bought, or a box
+## cleared, or the day chosen).
 func apply(m: MachineLogic) -> void:
 	m.last_sale = last_sale_prize()
 	m.luck = luck()
 	m.luck_tries = Catalog.FORTUNE_TRIES if effect("fortune") > 0 else 1
 	m.flow_line = effect("flow_line") > 0
+	m.magnet = effect("magnet")
+	m.sure_next = claim_sure if effect("stakeout") > 0 or effect("insure") > 0 else Callable()
+	m.sale_cap = sale_cap()
 	bet = clampi(bet, 1, bet_max())
 	m.bet = bet
+
+
+## Tickets the machine may still sell today: on a day of work MOONLIGHTING's (opened
+## tomorrow), else no cap (-1).
+func sale_cap() -> int:
+	if today == "work":
+		return maxi(0, effect("work_tickets") - day_tickets)
+	return -1
+
+
+## Whether tickets can be opened today (not on a day of work: MOONLIGHTING's wait).
+func can_open() -> bool:
+	return playing() and today == "play"
+
+
+## Asked by the machine before a ticket is taken (MachineLogic.sure_next): the first
+## ticket of a day under STAKEOUT, or the next after INSURANCE's losers in a row, has
+## to win, so a winner of the box is moved onto it. One at a time: not again until a
+## ticket is opened. Returns whether a prize was moved.
+func claim_sure(box: TicketBox) -> bool:
+	if sure_armed:
+		return false
+	var due_now := (effect("stakeout") > 0 and day_tickets == 0) \
+		or (effect("insure") > 0 and dry >= effect("insure"))
+	if not due_now or not box.pull_winner(box.cursor, "next"):
+		return false
+	sure_armed = true
+	stats.sure_wins += 1
+	return true
 
 
 ## The forms the layer's machine sells, one column each, at the layer's stake: the
@@ -139,8 +195,10 @@ func scene() -> String:
 	return str(scenes[clampi(layer, 0, scenes.size() - 1)]) if not scenes.is_empty() else ""
 
 
+## The layer's days: its own, a bought day on top, SHORT WEEK's taken off (never
+## fewer than the day it is: bought on the last day, that stays the last).
 func days() -> int:
-	return int(stage().days) + extra_days
+	return maxi(day, int(stage().days) + extra_days - effect("day_cut"))
 
 
 func last_day() -> bool:
@@ -151,9 +209,10 @@ func playing() -> bool:
 	return status == PLAYING
 
 
-## Everything owed in this layer: the debt, and what was borrowed with its interest.
+## Everything owed in this layer: the debt (DOUBLE DOWN's share on top), and what was
+## borrowed with its interest.
 func due() -> int:
-	return int(stage().debt) + loan_due
+	return int(stage().debt) * (100 + effect("debt_up")) / 100 + loan_due
 
 
 ## Pay for a shift: the same every day of the layer (G, 2026-11-06: no hidden raises;
@@ -182,14 +241,22 @@ func play(e: Economy = null) -> bool:
 		day_won = e.won
 	if effect("free_peek") > 0 and room() > 0:
 		items.peek = held("peek") + 1
+	if e != null:
+		_sync_tab(e)
 	return true
 
 
-## Spends the day at work: the wage now, no tickets today.
+## Whether a day of work is still open to this run (NO WAY BACK closes it).
+func can_work() -> bool:
+	return can_choose() and effect("no_work") <= 0
+
+
+## Spends the day at work: the wage now (twice it under OVERTIME), no tickets today
+## (MOONLIGHTING buys a few, for tomorrow).
 func work(e: Economy) -> bool:
-	if not can_choose():
+	if not can_work():
 		return false
-	var w := wage()
+	var w := wage() * (2 if overtime else 1)
 	e.earn(w)
 	today = "work"
 	shifts += 1
@@ -198,13 +265,20 @@ func work(e: Economy) -> bool:
 	return true
 
 
+## HOUSE ACCOUNT: the tab is open on a day of play, as far as the cash and the house
+## line go.
+func _sync_tab(e: Economy) -> void:
+	e.tab_on = effect("tab") > 0 and today == "play" and playing()
+	e.tab_limit = loan_left() if e.tab_on else 0
+
+
 func loan_step() -> int:
 	return int(stage().loan_step)
 
 
-## The layer's house line, GOOD CREDIT's share on top of it.
+## The layer's house line, GOOD CREDIT's share on top of it, LOAN SHARK's times.
 func loan_limit() -> int:
-	return int(stage().loan) * (100 + effect("loan_pct")) / 100 + loan_bonus
+	return (int(stage().loan) * (100 + effect("loan_pct")) / 100 + loan_bonus) * effect_x("loan_x")
 
 
 func loan_left() -> int:
@@ -215,12 +289,13 @@ func can_borrow() -> bool:
 	return playing() and loan_left() >= loan_step()
 
 
-## The loan interest in percent a day, LOW RATE's cut taken off. It compounds each
-## morning on everything owed (G, 2026-11-06: compound interest, like SAVINGS, so a
-## loan is never free money against SAVINGS' first level, and BORROWED LUCK keeps
-## growing while the loan is kept).
+## The loan interest in percent a day, LOW RATE's cut taken off, LOAN SHARK's times
+## on what is left (so the two never cancel to nothing). It compounds each morning on
+## everything owed (G, 2026-11-06: compound interest, like SAVINGS, so a loan is never
+## free money against SAVINGS' first level, and BORROWED LUCK keeps growing while the
+## loan is kept).
 func interest() -> int:
-	return maxi(0, config.loan_interest - effect("rate_cut"))
+	return maxi(0, config.loan_interest - effect("rate_cut")) * effect_x("rate_x")
 
 
 ## One press of LOAN: cash now, the same on top of what is due; the interest comes
@@ -233,6 +308,7 @@ func borrow(e: Economy) -> bool:
 	borrowed += amount
 	loan_due += amount
 	stats.borrowed += amount
+	_sync_tab(e)
 	return true
 
 
@@ -243,31 +319,39 @@ func accrue() -> void:
 	stats.interest += cost
 
 
-## What NEW BOX costs now: the stage's fee less the perk's cut, nothing with a BOX KEY.
+## What NEW BOX costs now: the stage's fee less the perk's cut.
 func change_fee() -> int:
-	if held("key") > 0:
-		return 0
 	return int(stage().get("change_fee", 0)) * (100 - mini(100, effect("fee_cut"))) / 100
 
 
-## A new box in column `i`, for the fee (or a BOX KEY).
-func change_box(e: Economy, machine: MachineLogic, i: int) -> bool:
+## Whether the column's form may be picked at NEW BOX (PICKY).
+func can_pick_form() -> bool:
+	return effect("pick_form") > 0
+
+
+## A new box in column `i`, for the fee; with PICKY and `form` (one of the layer's,
+## stage_forms), the column sells that form from now on.
+func change_box(e: Economy, machine: MachineLogic, i: int, form: FormDef = null) -> bool:
 	var fee := change_fee()
+	if form != null and not can_pick_form():
+		return false
 	if not playing() or not e.pay(fee):
 		return false
-	if held("key") > 0:
-		_use_up("key")
-	machine.change_box(i)
 	reports.erase(machine.forms[i].uid())
+	machine.change_box(i, form)
 	stats.box_changes += 1
 	stats.fees += fee
 	return true
 
 
-## The machine sold `n` tickets, `last_sales` of them the last of their box.
-func count_sales(n: int, last_sales := 0) -> void:
+## The machine sold `n` tickets of the form `form_uid` (LOYAL and VARIETY count the
+## forms of the day), `last_sales` of them the last of their box.
+func count_sales(n: int, last_sales := 0, form_uid := "") -> void:
 	stats.tickets += n
 	stats.last_sales += last_sales
+	day_tickets += n
+	if form_uid != "" and n > 0:
+		forms_today[form_uid] = true
 
 
 ## The last ticket of a box was bought (its prize is paid): SNOWBALL counts it, and the
@@ -279,18 +363,22 @@ func cleared_box(m: MachineLogic) -> void:
 	apply(m)
 
 
-## Cash and machine credit cover what is due (a bill being fed has to land first).
+## Cash and machine credit, less the tab, cover what is due (a bill being fed has to
+## land first).
 func can_pay(e: Economy) -> bool:
-	return playing() and e.bill == 0 and e.cash + e.credit >= due()
+	return playing() and e.bill == 0 and e.cash + e.credit - e.tab >= due()
 
 
 ## Pays the layer in full and moves on at once: the next layer starts on a new day,
-## or the run is cleared. Days left over are counted as spared.
-func pay(e: Economy) -> bool:
+## or the run is cleared. Days left over are counted as spared. With SEAL and the
+## machine given, its hottest boxes come along (new_machine puts them in).
+func pay(e: Economy, m: MachineLogic = null) -> bool:
 	if not can_pay(e):
 		return false
 	e.cash_out()
 	_settle_day(e)
+	if m != null and effect("seal") > 0:
+		_seal(m)
 	var amount := due()
 	e.pay(amount)
 	stats.repaid += amount
@@ -319,6 +407,23 @@ func pay(e: Economy) -> bool:
 	return true
 
 
+## SEAL: the boxes with the most prize money left per ticket, up to the perk's count,
+## are kept (form, seed, where they stand and their log) for the next layer's machine.
+func _seal(m: MachineLogic) -> void:
+	var ranked := []
+	for i in m.boxes.size():
+		var box: TicketBox = m.boxes[i]
+		if box.cursor < box.size:
+			ranked.append({"i": i, "heat": float(BoxReading.read(box).heat)})
+	ranked.sort_custom(func(a, b): return a.heat > b.heat)
+	sealed = []
+	for k in mini(effect("seal"), ranked.size()):
+		var box: TicketBox = m.boxes[ranked[k].i]
+		sealed.append({"form": box.form.uid(), "seed": box.seed, "cursor": box.cursor, "opened": box.opened,
+			"ops": box.ops.duplicate(true)})
+	stats.sealed += sealed.size()
+
+
 ## The player leaves for the day (or has worked the shift). On the last day of a layer
 ## this settles it: paid if the money is there, otherwise the run is over.
 func end_day(e: Economy) -> void:
@@ -334,6 +439,8 @@ func end_day(e: Economy) -> void:
 			_close_shop()
 		return
 	stats.days += 1
+	if played and effect("noback_pct") > 0:
+		noback_days += 1
 	day += 1
 	today = ""
 	# A morning: the loan's interest, then SAVINGS on the cash (every morning of a layer
@@ -347,7 +454,9 @@ func end_day(e: Economy) -> void:
 	_new_day()
 
 
-## The end of a day of play: a SAFETY NET gives back its share of the day's loss.
+## The end of a day of play: a SAFETY NET gives back its share of the day's loss, and
+## the tab is settled: from cash, the rest borrowed (the day on the tab was interest
+## free; the mornings' interest takes it from here).
 func _settle_day(e: Economy) -> void:
 	if today == "play" and safety:
 		var loss := (e.spent - day_spent) - (e.won - day_won)
@@ -355,6 +464,15 @@ func _settle_day(e: Economy) -> void:
 		if back > 0:
 			e.earn(back)
 			stats.insured += back
+	var short := e.settle_tab()
+	if short > 0:
+		# Borrowed straight to the machine: the loan's cash pays the tab, none is in hand.
+		e.add_loan(short)
+		e.cash -= short
+		borrowed += short
+		loan_due += short
+		stats.borrowed += short
+	e.tab_limit = 0
 	safety = false
 	happy = false
 
@@ -364,6 +482,10 @@ func _new_day() -> void:
 	happy = false
 	safety = false
 	all_in_used = false
+	overtime = false
+	sure_armed = false
+	day_tickets = 0
+	forms_today = {}
 	offer_rerolls = 0
 	offer_bought = false
 	offers = deal_offers()
@@ -388,14 +510,33 @@ func held(item_id: String) -> int:
 	return int(items.get(item_id, 0))
 
 
-## The effect hook: what every perk on `effect_name` adds up to at its level.
+## The effect hook: what every perk on `effect_name` adds up to at its level (a
+## level's `extra` effects count too).
 func effect(effect_name: String) -> int:
 	var sum := 0
 	for p in catalog.perks:
 		var lv := level(p.id)
-		if p.effect == effect_name and lv > 0:
-			sum += int(p.levels[mini(lv, p.levels.size()) - 1].value)
+		if lv <= 0:
+			continue
+		var l: Dictionary = p.levels[mini(lv, p.levels.size()) - 1]
+		if p.effect == effect_name:
+			sum += int(l.value)
+		sum += int(l.get("extra", {}).get(effect_name, 0))
 	return sum
+
+
+## The "x" hook: what every perk on `effect_name` multiplies up to (1 with none).
+func effect_x(effect_name: String) -> int:
+	var x := 1
+	for p in catalog.perks:
+		var lv := level(p.id)
+		if lv <= 0:
+			continue
+		var l: Dictionary = p.levels[mini(lv, p.levels.size()) - 1]
+		if p.effect == effect_name:
+			x *= maxi(1, int(l.value))
+		x *= maxi(1, int(l.get("extra", {}).get(effect_name, 1)))
+	return x
 
 
 ## LUCKY STREAK as a chance (0..1).
@@ -433,21 +574,23 @@ func snow_x() -> float:
 
 
 func last_sale_prize() -> int:
-	return roundi(int(stage().get("last_sale", 0)) * maxi(1, effect("last_sale_x")) * snow_x())
+	return roundi(int(stage().get("last_sale", 0)) * effect_x("last_sale_x") * snow_x())
 
 
-## BORROWED LUCK works while the principal owed is half the line or more (G: so that a
-## token loan does not buy it).
-func debt_on() -> bool:
-	return effect("debt_pct") > 0 and borrowed > 0 and borrowed * 2 >= loan_limit()
+## BORROWED LUCK: what is owed (interest included, so it grows while the loan is
+## kept) as a percentage of the house line, times the perk's share. G: "as much as
+## you owe"; nothing once it is repaid.
+func owe_pct() -> int:
+	if effect("owe_pct") <= 0 or loan_due <= 0:
+		return 0
+	return effect("owe_pct") * loan_due / maxi(1, loan_limit())
 
 
 ## Every "+%" on the next prize, in percent. `cash`: what NET WORTH counts (-1: the
 ## ledger's cash now).
 func prize_pct(e: Economy, cash := -1) -> int:
 	var pct := effect("prize_pct")
-	if debt_on():
-		pct += effect("debt_pct")
+	pct += owe_pct()
 	if cash < 0 and e != null:
 		cash = e.cash
 	if effect("worth_pct") > 0 and cash > 0:
@@ -455,6 +598,10 @@ func prize_pct(e: Economy, cash := -1) -> int:
 	pct += effect("pity_pct") * dry
 	pct += effect("trash_pct") * (layer_losers / 100)
 	pct += effect("hunter_pct") * layer_tops
+	pct += effect("noback_pct") * noback_days
+	# LOYAL and VARIETY: the higher of the two (they are opposites).
+	var loyal := effect("loyal_pct") if forms_today.size() == 1 else 0
+	pct += maxi(loyal, effect("variety_pct") * forms_today.size())
 	if happy:
 		pct += int(catalog.item("happy").get("value", 50))
 	return pct
@@ -467,6 +614,7 @@ func prize_pct(e: Economy, cash := -1) -> int:
 ## `cash`: what NET WORTH counts (an opening counts the cash it started with, so the
 ## prizes of one opening do not feed each other). Returns the money paid.
 func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 1.0, again := false, cash := -1) -> int:
+	sure_armed = false
 	var won_tiers := []
 	if int(t.prize) > 0:
 		for tier in t.get("wins", [t.tier]):
@@ -475,6 +623,15 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 	elif held("whiteout") > 0:
 		_use_up("whiteout")
 		won_tiers = [smallest_tier(form)]
+	# FLARE ONLY: the small (and middle) prizes pay nothing; a ticket left with none
+	# is a loser in every respect.
+	if effect("zero_low") > 0 or effect("zero_mid") > 0:
+		var kept := []
+		for tier in won_tiers:
+			var role := str(form.tiers[tier].role)
+			if not ((role == "low" and effect("zero_low") > 0) or (role == "mid" and effect("zero_mid") > 0)):
+				kept.append(tier)
+		won_tiers = kept
 	if won_tiers.is_empty():
 		e.open_ticket(0)
 		dry += 1
@@ -488,21 +645,29 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 			stats.bonus += back
 		return back
 	var base := 0.0
-	var top_x := maxi(1, effect("top_x"))
 	var tops := 0
 	for tier in won_tiers:
 		var p := float(form.tiers[tier].prize)
-		if form.tiers[tier].role == "top":
-			p *= top_x
-			tops += 1
+		match str(form.tiers[tier].role):
+			"top":
+				p *= effect_x("top_x")
+				tops += 1
+			"mid":
+				p *= effect_x("mid_x")
+			"low":
+				p *= effect_x("low_x")
 		base += p
 	var mult := x * snow_x()
 	if won_tiers.size() >= 2:
-		mult *= maxi(1, effect("stack_x"))
+		mult *= effect_x("stack_x")
 	if int(t.get("no", 0)) <= Catalog.FIRST_TICKETS:
-		mult *= maxi(1, effect("first_x"))
-	if held("coin") > 0:
-		_use_up("coin")
+		mult *= effect_x("first_x")
+	# A LUCKY COIN waits on its column: the next prize of that form.
+	var uid := form.uid()
+	if int(coin_on.get(uid, 0)) > 0:
+		coin_on[uid] = int(coin_on[uid]) - 1
+		if int(coin_on[uid]) <= 0:
+			coin_on.erase(uid)
 		mult *= 2.0
 	var total := roundi(base * ticket_bet * (1.0 + prize_pct(e, cash) / 100.0) * mult)
 	if again:
@@ -604,27 +769,47 @@ func all_in(e: Economy, m: MachineLogic, i: int) -> Dictionary:
 
 # --- perk offers -----------------------------------------------------------------------
 
-## Offers dealt each time.
+## Offers dealt each time (DOUBLE DOWN and a bonus from outside the run add to it).
 func offer_count() -> int:
-	return Catalog.OFFERS + offer_bonus
+	return Catalog.OFFERS + offer_bonus + effect("offer_more")
 
 
-## A perk's requirements (perk id -> level) that are not met yet.
+## A perk's requirements (perk id -> level) that are not met yet: every one of
+## `requires`, and, when none of `requires_any` is met, all of those.
 func missing(perk_id: String) -> Dictionary:
 	var out := {}
-	var need: Dictionary = catalog.perk(perk_id).get("requires", {})
+	var p := catalog.perk(perk_id)
+	var need: Dictionary = p.get("requires", {})
 	for id in need:
 		if level(id) < int(need[id]):
 			out[id] = int(need[id])
+	var any: Dictionary = p.get("requires_any", {})
+	if not any.is_empty():
+		var met := false
+		for id in any:
+			if level(id) >= int(any[id]):
+				met = true
+		if not met:
+			for id in any:
+				out[id] = int(any[id])
 	return out
 
 
-## Perks that can be offered: requirements met, not at the top level.
+## Perks that can be offered: off the shelf, requirements met, not at the top level.
 func offerable() -> Array:
 	var out := []
-	for p in catalog.perks:
+	for p in catalog.dealt():
 		if level(p.id) < p.levels.size() and missing(p.id).is_empty():
 			out.append(p.id)
+	return out
+
+
+## The shelf: its perks in the catalog's order, bought with buy_perk (any whose
+## requirements are met and the cash covers).
+func shelf_perks() -> Array:
+	var out := []
+	for p in catalog.perks_of("shelf"):
+		out.append(p.id)
 	return out
 
 
@@ -686,15 +871,23 @@ func can_buy_perk(perk_id: String, e: Economy) -> bool:
 	return playing() and price > 0 and missing(perk_id).is_empty() and e.cash >= price
 
 
-## Buys the next level of a perk from cash. The caller puts it into the machine (apply).
-## The game sells perks only through the offers (buy_offer); this is their rule.
+## Buys the next level of a shelf perk from cash (the dealt ones come through
+## buy_offer). The caller puts it into the machine (apply).
 func buy_perk(perk_id: String, e: Economy) -> bool:
+	if Catalog.kind(catalog.perk(perk_id)) != "shelf":
+		return false
+	return _buy_level(perk_id, e)
+
+
+## The purchase itself, shelf or offer.
+func _buy_level(perk_id: String, e: Economy) -> bool:
 	if not can_buy_perk(perk_id, e):
 		return false
 	var price := perk_price(perk_id)
 	e.pay(price)
 	_level_up(perk_id)
 	stats.shop += price
+	_sync_tab(e)
 	return true
 
 
@@ -717,7 +910,7 @@ func buy_offer(k: int, e: Economy, free := false) -> bool:
 			return false
 		_use_up("cheat")
 		_level_up(id)
-	elif not buy_perk(id, e):
+	elif not _buy_level(id, e):
 		return false
 	offers.remove_at(k)
 	offer_bought = true
@@ -809,6 +1002,24 @@ func reroll_shelf(e: Economy) -> bool:
 	return true
 
 
+## RETURNS and a RETURN SLIP: tray entries ({form, ticket, bet}) given back to the
+## machine for `pct` of what they cost. The money comes back to cash (no longer
+## spent). Returns the money back. The caller takes the tickets off the table.
+func refund_tickets(e: Economy, entries: Array, pct: int) -> int:
+	var total := 0
+	for en in entries:
+		total += int(en.form.price) * int(en.get("bet", 1)) * pct / 100
+	if total > 0:
+		e.refund(total)
+		stats.refunded += total
+	return total
+
+
+## What an untorn ticket comes back for, in percent of its price (RETURNS), 0 without.
+func refund_pct() -> int:
+	return mini(100, effect("refund_pct"))
+
+
 ## An item's price at the layer's stake, HAGGLER's cut taken off.
 func item_price(item_id: String) -> int:
 	var p := int(catalog.item(item_id).get("price", 0)) * stake()
@@ -846,9 +1057,12 @@ func peek_n() -> int:
 
 
 ## Uses up one item that is used on a column on column `i` of the machine. Returns what
-## it found: PEEK {winners, of}; MAGNIFIER {wins}; BOX REPORT the reading (that box then
-## reads at level 4 until it leaves); FAST FORWARD {skipped}; SHUFFLE {shuffled};
-## {} if none is held.
+## it found: PEEK {winners, of} (under MARKED the winners of the next few come first);
+## MAGNIFIER {wins}; BOX REPORT the reading (that box then reads at level 4 until it
+## leaves); FAST FORWARD {skipped}; SHUFFLE {shuffled}; LUCKY COIN {on}; MOVER
+## {with: the other column}; SURE THING and REEL IN {moved: whether a prize was moved,
+## wins: true}; QUEUE JUMP {moved: how many}; {} if none is held (a SURE item with no
+## prize left to move is not used up).
 func use_item(item_id: String, machine: MachineLogic, i: int) -> Dictionary:
 	if not playing() or held(item_id) <= 0 or i < 0 or i >= machine.boxes.size():
 		return {}
@@ -856,6 +1070,8 @@ func use_item(item_id: String, machine: MachineLogic, i: int) -> Dictionary:
 	var out := {}
 	match item_id:
 		"peek":
+			if effect("marked") > 0:
+				box.front_load(box.cursor, Catalog.MARKED_WINDOW)
 			out = {"winners": BoxReading.winners_next(box, peek_n()), "of": peek_n()}
 		"magnifier":
 			out = {"wins": BoxReading.winners_next(box, 1) > 0}
@@ -867,32 +1083,62 @@ func use_item(item_id: String, machine: MachineLogic, i: int) -> Dictionary:
 		"shuffle":
 			machine.shuffle(i)
 			out = {"shuffled": box.size - box.cursor}
+		"coin":
+			var uid := box.form.uid()
+			coin_on[uid] = int(coin_on.get(uid, 0)) + 1
+			out = {"on": true}
+		"mover":
+			if machine.boxes.size() < 2:
+				return {}
+			var j := (i + 1) % machine.boxes.size()
+			machine.swap_columns(i, j)
+			out = {"with": j}
+		"sure", "reel":
+			if box.cursor >= box.size:
+				return {}
+			var before := box.ops.size()
+			if not box.pull_winner(box.cursor, "random" if item_id == "sure" else "biggest"):
+				return {}
+			out = {"moved": box.ops.size() > before, "wins": true}
+			if out.moved:
+				stats.sure_wins += 1
+		"queue":
+			var n := box.scatter(box.cursor, Catalog.QUEUE_WINDOW, Catalog.QUEUE_MOVES)
+			if n <= 0:
+				return {}
+			stats.sure_wins += n
+			out = {"moved": n}
 		_:
 			return {}
 	_use_up(item_id)
 	return out
 
 
-## Can an item used from the phone be used now (TIP-OFF at the machine on a day of play,
-## HAPPY HOUR and SAFETY NET on a day of play, COPIER with something to copy and room)?
+## Can an item used from the phone be used now (TIP-OFF, HAPPY HOUR, SAFETY NET and a
+## RETURN SLIP on a day of play; OVERTIME before the day is chosen or after a shift,
+## once; COPIER with something to copy and room)?
 func can_use_now(item_id: String) -> bool:
 	if not playing() or held(item_id) <= 0:
 		return false
 	match item_id:
-		"tip":
+		"tip", "slip":
 			return today == "play"
 		"happy":
 			return today == "play" and not happy
 		"safety":
 			return today == "play" and not safety
+		"overtime":
+			return today != "play" and not overtime and effect("no_work") <= 0
 		"copy":
 			return last_item != "" and room() > 0
 	return false
 
 
 ## Uses an item from the phone. TIP-OFF returns {column: machine index of the hottest
-## box}; COPIER {copied: item id}; the others {on: true}. {} when it cannot.
-func use_now(item_id: String, machine: MachineLogic = null) -> Dictionary:
+## box}; COPIER {copied: item id}; a RETURN SLIP {on: true} (the caller then gives the
+## tray back with refund_tickets at 100); OVERTIME {on: true} (a shift already worked is
+## paid again now, so `e` is needed then); the others {on: true}. {} when it cannot.
+func use_now(item_id: String, machine: MachineLogic = null, e: Economy = null) -> Dictionary:
 	if not can_use_now(item_id):
 		return {}
 	var out := {}
@@ -906,6 +1152,16 @@ func use_now(item_id: String, machine: MachineLogic = null) -> Dictionary:
 			out = {"on": true}
 		"safety":
 			safety = true
+			out = {"on": true}
+		"slip":
+			out = {"on": true}
+		"overtime":
+			if today == "work":
+				if e == null:
+					return {}
+				e.earn(wage())
+				stats.wages += wage()
+			overtime = true
 			out = {"on": true}
 		"copy":
 			items[last_item] = held(last_item) + 1
@@ -953,15 +1209,17 @@ func buy_service(service_id: String, e: Economy) -> bool:
 # --- save ------------------------------------------------------------------------------
 
 const _INTS := ["layer", "day", "shifts", "borrowed", "loan_due", "loan_bonus", "extra_days", "offer_bonus",
-	"offer_rerolls", "shelf_rerolls", "bet", "dry", "snow", "layer_losers", "layer_tops", "day_spent", "day_won"]
-const _BOOLS := ["offers_open", "offer_bought", "happy", "safety", "all_in_used"]
+	"offer_rerolls", "shelf_rerolls", "bet", "dry", "snow", "layer_losers", "layer_tops", "day_spent", "day_won",
+	"day_tickets", "noback_days"]
+const _BOOLS := ["offers_open", "offer_bought", "happy", "safety", "all_in_used", "sure_armed", "overtime"]
 
 
 func to_dict() -> Dictionary:
 	var d := {"seed": seed, "scenes": scenes.duplicate(), "today": today, "status": status, "story": story, "scrap": scrap,
 		"stats": stats.duplicate(), "perks": perks.duplicate(), "items": items.duplicate(),
 		"services": services.duplicate(), "reports": reports.duplicate(), "offers": offers.duplicate(),
-		"shelf": shelf.duplicate(), "last_item": last_item}
+		"shelf": shelf.duplicate(), "last_item": last_item, "forms_today": forms_today.duplicate(),
+		"coin_on": coin_on.duplicate(), "sealed": sealed.duplicate(true)}
 	for k in _INTS + _BOOLS:
 		d[k] = get(k)
 	return d
@@ -982,6 +1240,18 @@ static func from_dict(d: Dictionary, run_config: RunConfig) -> RunState:
 	r.perks = _counts(d.get("perks"))
 	r.items = _counts(d.get("items"))
 	r.services = _counts(d.get("services"))
+	r.coin_on = _counts(d.get("coin_on"))
+	var ft = d.get("forms_today", {})
+	if typeof(ft) == TYPE_DICTIONARY:
+		for k in ft:
+			r.forms_today[str(k)] = true
+	var sl = d.get("sealed", [])
+	if typeof(sl) == TYPE_ARRAY:
+		for sb in sl:
+			if typeof(sb) == TYPE_DICTIONARY and sb.has("form") and sb.has("seed"):
+				var ops = sb.get("ops", [])
+				r.sealed.append({"form": str(sb.form), "seed": str(sb.seed), "cursor": int(sb.get("cursor", 0)),
+					"opened": int(sb.get("opened", 0)), "ops": ops if typeof(ops) == TYPE_ARRAY else []})
 	var rep = d.get("reports", {})
 	if typeof(rep) == TYPE_DICTIONARY:
 		for k in rep:
@@ -1009,7 +1279,9 @@ static func from_dict(d: Dictionary, run_config: RunConfig) -> RunState:
 	if typeof(st) == TYPE_DICTIONARY:
 		for k in r.stats:
 			r.stats[k] = int(st.get(k, 0))
-	if r.seed == "" or r.layer < 0 or r.layer >= run_config.layers.size() or r.day < 1 or r.day > r.days() \
+	# The day within the layer's own days (and bought ones): days() would stretch to it.
+	if r.seed == "" or r.layer < 0 or r.layer >= run_config.layers.size() or r.day < 1 \
+			or r.day > int(run_config.layer(r.layer).days) + r.extra_days \
 			or not ["", "play", "work"].has(r.today) or not [PLAYING, CLEARED, FAILED].has(r.status) \
 			or r.shifts < 0 or r.borrowed < 0 or r.loan_due < r.borrowed or r.extra_days < 0:
 		return null
