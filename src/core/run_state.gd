@@ -233,7 +233,8 @@ func due() -> int:
 
 
 ## Pay for a shift: the same every day of the layer (G, 2026-11-06: no hidden raises;
-## SAVINGS is what makes working alone fall short, RunConfig).
+## SAVINGS is what makes working alone fall short). Derived from the layer's debt by
+## RunConfig (the work line; M9.7 item 11), not set on its own.
 func wage() -> int:
 	return int(stage().wage)
 

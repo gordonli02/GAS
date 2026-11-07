@@ -1,27 +1,34 @@
 extends "res://tests/test_case.gd"
 ## The run (story mode): layers, days, work, the house line, paying, and the rule
 ## that working every day, spending nothing on tickets and buying SAVINGS along the
-## way clears every layer to the dollar (docs/roadmap.md "一局的结构"; G, 2026-11-06).
+## way clears every layer on its last day, with the wage derived from the configured
+## debt (docs/roadmap.md "一局的结构"; G, 2026-11-06 and M9.7 item 11, 2026-11-07).
 
 const DT := 1.0 / 60.0
 
 
-func _run() -> RunState:
-	return RunState.start(RunConfig.standard(), "T-1", ["diner", "bar", "bingo"])
+func _run(config: RunConfig = null) -> RunState:
+	return RunState.start(config if config != null else RunConfig.standard(), "T-1", ["diner", "bar", "bingo"])
 
 
 ## Works every day except the days listed (counted from 0 across the run), which are
 ## spent at the machine buying nothing, and buys SAVINGS as the work line does (unless
-## `saves` is false). Returns [run, economy].
-func _work_through(idle_days: Array, before := Callable(), saves := true) -> Array:
-	var r := _run()
+## `saves` is false; in layer `late_layer` a day after the line would). Returns [run,
+## economy].
+func _work_through(idle_days: Array, before := Callable(), saves := true, late_layer := -1,
+		config: RunConfig = null) -> Array:
+	var r := _run(config)
 	var e := r.new_economy()
 	if before.is_valid():
 		before.call(r, e)
 	var n := 0
+	var waited := false
 	while r.playing() and n < 100:
 		if saves and RunConfig.line_buys(r.level(RunConfig.SAVINGS) + 1, r.layer):
-			r.buy_perk(RunConfig.SAVINGS, e)
+			if r.layer == late_layer and not waited and r.can_buy_perk(RunConfig.SAVINGS, e):
+				waited = true
+			else:
+				r.buy_perk(RunConfig.SAVINGS, e)
 		if idle_days.has(n):
 			r.play()
 		else:
@@ -52,28 +59,66 @@ func test_config_holds_together() -> void:
 	var c := RunConfig.standard()
 	eq(c.problems(), PackedStringArray(), "standard numbers")
 	eq(c.layers.size(), 3, "three layers")
-	var bad := RunConfig.from_dict(RunConfig.STANDARD)
-	bad.layers[1].debt += 1
-	check(not bad.problems().is_empty(), "a debt the work line does not meet is reported")
 	var line := c.work_line()
 	for i in 3:
-		eq(int(line[i].debt), int(c.layer(i).debt), "layer %d: the debt is the work line's" % (i + 1))
 		check(int(line[i].wages) < int(line[i].debt), "layer %d: wages alone fall short" % (i + 1))
 		eq(int(line[i].level), i + 1, "layer %d: one level of SAVINGS a layer" % (i + 1))
-	var poor := RunConfig.from_dict(RunConfig.STANDARD)
-	poor.layers[2].wage = 1
-	poor.layers[2].erase("debt")
-	poor = RunConfig.from_dict({"start_cash": poor.start_cash, "loan_interest": poor.loan_interest, "layers": poor.layers})
-	check(not poor.problems().is_empty(), "a wage that leaves the top of SAVINGS unaffordable is reported")
+	# A wage a dollar over the line's is pinned: the line has room, which is reported.
+	var d: Dictionary = RunConfig.STANDARD.duplicate(true)
+	d.layers[1]["wage"] = int(line[1].wage) + 1
+	var loose := RunConfig.from_dict(d)
+	check(loose.wage_pinned(1) and not loose.wage_pinned(0), "a wage in the dict is pinned, the others derived")
+	check(not loose.problems().is_empty(), "a pinned wage with room on the line is reported")
+	d.layers[1]["wage"] = int(line[1].wage) - 1
+	check(not RunConfig.from_dict(d).problems().is_empty(), "a pinned wage the line falls short with is reported")
+	# A debt the line meets without working (the start cash and SAVINGS cover it).
+	var small: Dictionary = RunConfig.STANDARD.duplicate(true)
+	small.layers[0]["debt"] = 150
+	var tiny := RunConfig.from_dict(small)
+	eq(int(tiny.layer(0).wage), 0, "no wage needed for a debt of $150")
+	check(not tiny.problems().is_empty(), "a debt met without a wage is reported")
+	var poor: Dictionary = RunConfig.STANDARD.duplicate(true)
+	poor.layers[2]["wage"] = 1
+	check(not RunConfig.from_dict(poor).problems().is_empty(), "a wage that leaves the top of SAVINGS unaffordable is reported")
 	eq(int(c.layer(0).savings_day), 1, "the line buys SAVINGS on the first day of the run (G)")
 	for i in 3:
 		check(int(c.layer(i).savings_day) >= 1, "layer %d: a checkpoint to buy SAVINGS on" % (i + 1))
-	check(c.line_text().begins_with("layer 1: debt $"), "the line in words")
+	check(c.line_text().begins_with("layer 1: debt $700, wage $"), "the line in words")
 
 
-func test_work_and_savings_clear_to_the_dollar() -> void:
+## G, 2026-11-07 (M9.7 item 11): the debt is the config's, the wage is derived from it:
+## the smallest whole dollar the work line pays the debt with.
+func test_debt_from_config_wage_from_debt() -> void:
+	var c := RunConfig.standard()
+	var line := c.work_line()
+	for i in 3:
+		eq(int(c.layer(i).debt), int(RunConfig.STANDARD.layers[i].debt), "layer %d: the debt is the config's" % (i + 1))
+		check(not RunConfig.STANDARD.layers[i].has("wage"), "layer %d: no wage in the config" % (i + 1))
+		eq(int(c.layer(i).wage), int(line[i].wage), "layer %d: the wage is the line's" % (i + 1))
+		check(int(line[i].wage) > 0, "layer %d: a wage" % (i + 1))
+		check(int(line[i].cash) >= int(line[i].debt), "layer %d: the line pays the debt" % (i + 1))
+		var less := c.walk_layer(i, int(line[i].cash_in), int(line[i].level_in), int(line[i].wage) - 1)
+		check(int(less.cash) < int(line[i].debt), "layer %d: a dollar a day less does not" % (i + 1))
+		check(int(line[i].spare) >= 0 and int(line[i].spare) < int(line[i].wage), "layer %d: a few dollars over ($%d)" % [i + 1, int(line[i].spare)])
+	var d: Dictionary = RunConfig.STANDARD.duplicate(true)
+	d.layers[0]["debt"] = 900
+	var raised := RunConfig.from_dict(d)
+	check(int(raised.layer(0).wage) > int(c.layer(0).wage), "a bigger debt, a bigger wage")
+	eq(int(raised.layer(0).debt), 900, "and the debt as set")
+	var r := _run(raised)
+	eq(r.due(), 900, "the run owes the config's debt")
+	eq(r.wage(), int(raised.layer(0).wage), "and pays the derived wage")
+	eq(raised.problems(), PackedStringArray(), "the line still holds")
+	# Fed back through from_dict, the derived wages are derived again (not pinned).
+	var again := RunConfig.from_dict({"start_cash": c.start_cash, "loan_interest": c.loan_interest, "layers": c.layers})
+	check(not again.wage_pinned(0), "a derived wage fed back stays derived")
+	eq(int(again.layer(2).wage), int(c.layer(2).wage), "and comes out the same")
+
+
+func test_work_and_savings_clear_on_the_last_day() -> void:
 	var r := _run()
 	var e := r.new_economy()
+	var line := r.config.work_line()
 	var total_days := 0
 	for l in r.config.layers.size():
 		eq(r.layer, l, "in layer %d" % (l + 1))
@@ -85,12 +130,12 @@ func test_work_and_savings_clear_to_the_dollar() -> void:
 			if d < r.days() - 1:
 				check(e.cash < r.due(), "layer %d day %d: not enough yet (%d of %d)" % [l + 1, d + 1, e.cash, r.due()])
 			else:
-				eq(e.cash, r.due(), "layer %d: exactly the debt on the last day" % (l + 1))
+				eq(e.cash - r.due(), int(line[l].spare), "layer %d: the debt on the last day, and the line's few dollars over" % (l + 1))
 			r.end_day(e)
 			total_days += 1
 			check(e.balanced(), "ledger balanced")
 	eq(r.status, RunState.CLEARED, "cleared")
-	eq(e.cash, 0, "nothing to spare")
+	eq(e.cash, int(line[2].spare), "only the last layer's few dollars to spare")
 	eq(r.stats.tickets, 0, "without a single ticket")
 	eq(r.stats.days_spared, 0, "and not a day early")
 	eq(r.stats.days, total_days, "days counted")
@@ -106,9 +151,20 @@ func test_work_line_fails_when_off_by_anything() -> void:
 	for k in total:
 		var res := _work_through([k])
 		eq(res[0].status, RunState.FAILED, "one day off work (day %d) and the line is not enough" % (k + 1))
-	var spent := _work_through([], func(_r: RunState, e: Economy): e.pay(1))
-	eq(spent[0].status, RunState.FAILED, "one dollar spent")
+	# The wage is whole dollars, so the line ends a layer a few dollars over; a dollar
+	# more than that spent and it falls short.
+	var over := int(RunConfig.standard().work_line()[0].spare)
+	var spent := _work_through([], func(_r: RunState, e: Economy): e.pay(over + 1))
+	eq(spent[0].status, RunState.FAILED, "$%d spent, a dollar over the line's spare" % (over + 1))
 	eq(spent[0].layer, 0, "fails in the first layer")
+	var late := _work_through([], Callable(), true, 0)
+	eq(late[0].status, RunState.FAILED, "SAVINGS bought a day late in the first layer (G's checkpoint: day 1)")
+	eq(late[0].layer, 0, "fails there")
+	var d: Dictionary = RunConfig.STANDARD.duplicate(true)
+	d.layers[0]["wage"] = int(RunConfig.standard().layer(0).wage) - 1
+	var short := _work_through([], Callable(), true, -1, RunConfig.from_dict(d))
+	eq(short[0].status, RunState.FAILED, "a wage a dollar under the derived one")
+	eq(short[0].layer, 0, "fails in the first layer")
 	# The interest compounds daily above SAVINGS' first level (G), so a loan on the
 	# first day grows faster than the cash it brought.
 	var loan := _work_through([], func(r: RunState, e: Economy): r.borrow(e))
@@ -171,7 +227,7 @@ func test_a_day_is_work_or_play() -> void:
 	r.end_day(e)
 	eq(r.day, 2, "next day")
 	check(r.work(e), "work")
-	eq(e.cash, 200 + 150, "the wage at once")
+	eq(e.cash, 200 + r.wage(), "the wage at once")
 	check(not r.play() and not r.work(e), "one choice a day")
 	eq(r.today, "work", "worked today")
 
@@ -241,6 +297,7 @@ func test_house_line() -> void:
 	eq(e.cash, 300, "cash now")
 	eq(e.loans, 100, "a loan in the ledger")
 	var debt: int = r.config.layer(0).debt
+	var wage := r.wage()
 	eq(r.due(), debt + 100, "the loan on top of the debt, no interest yet")
 	eq(r.interest(), 15, "15% a day")
 	r.work(e)
@@ -256,7 +313,7 @@ func test_house_line() -> void:
 	check(e.balanced(), "balanced")
 	e.bonus(2000)
 	r.pay(e)
-	eq(e.cash, 200 + 150 + 300 + 2000 - (debt + 315), "repaid with the layer")
+	eq(e.cash, 200 + wage + 300 + 2000 - (debt + 315), "repaid with the layer")
 	eq(r.due(), r.config.layer(1).debt, "the next layer starts clean")
 	eq(r.loan_left(), 1000 + 100, "with a higher base line")
 	eq(r.loan_step(), 500, "and a bigger step")

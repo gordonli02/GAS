@@ -6,13 +6,13 @@ extends "res://tests/test_case.gd"
 ## what the roadmap's bots table is measured by.
 
 
-func test_work_bot_clears_with_nothing_left() -> void:
+func test_work_bot_clears_on_the_last_day() -> void:
 	var pack := core_pack()
 	if pack == null:
 		return
 	var r := RunSim.play("work", pack.forms, "W-1")
 	eq(r.status, RunState.CLEARED, "works every day: cleared")
-	eq(r.cash, 0, "to the dollar")
+	eq(r.cash, int(RunConfig.standard().work_line()[2].spare), "with the line's few dollars over (whole-dollar wages)")
 	eq(r.tickets, 0, "no tickets")
 	eq(r.days, 18, "every day of the three layers")
 

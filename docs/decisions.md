@@ -490,6 +490,7 @@ The plan is `docs/roadmap.md` (M9.6, in Chinese); this is the first layer of it 
   `docs/m9.6/`: the $1,000, $10 and $5 fit the layouts' boxes as they are.
 
 ## Milestone 9.5, step 1: wages and SAVINGS (the work line)
+(Inverted by M9.7 item 11: the debts are in the config now and the wages derived from them.)
 G, 2026-11-06: no more hidden raises; working alone is not enough, working and buying SAVINGS is
 exactly enough. How it landed:
 - **A layer has one `wage`** (`RunConfig.STANDARD`), the same every day; `RunState.wage` reads
@@ -1266,3 +1267,40 @@ bought out, the last sale included) should pay back about 0.78 on every form; it
   debts are the work line's (layer 1 $1136 against $950 of wages and the $200 start), set
   when a blind dollar paid back about 1.0-1.2; at 0.78 a day at the machine forgoes a
   $150 wage to lose money, and layer 1 stops nearly every gambling bot. Open for G.
+
+## M9.7 item 11: debts set, wages derived
+
+G, 2026-11-07: "债务不能从打工线定，打工线要从债务定，你搞反了。纯打工线是理论上不会有人碰的
+route，除了成就，它可以是最低优先级。" The gist: the debts are the balance lever and
+belong in the config; the work line follows from them, not the other way round, and it
+ranks last among the things the numbers must serve.
+
+- **Debts in the config.** Each layer of `RunConfig.STANDARD` has a `"debt"`:
+  placeholders $700 / $3500 / $15000 (the derived ones were $1136 / $5250 / $21883 at
+  wages $150 / $700 / $2500; at the 0.78 blind payout layer 1 was a wall). They are to
+  be tuned against the gambling bots' clear rates (roadmap "通关率目标").
+- **Wages derived.** `RunConfig.line_wage` finds, layer by layer, the smallest
+  whole-dollar wage with which the work line (every day worked, nothing on tickets,
+  SAVINGS bought at the line's checkpoints) has the debt on the layer's last day, by
+  bisection between no wage and a wage of the whole debt. Whole dollars rather than a
+  rounder step, so the line stays as tight as an integer wage allows. The few dollars
+  over are carried into the next layer, as a run carries them (the line used to end
+  every layer at exactly 0). At the placeholders: $79 / $512 / $2064, SAVINGS on days
+  1 / 3 / 4, $2 / $0 / $2 over. `from_dict` writes the wage into the layer (with
+  `wage_derived`), so RunState, the HUD and the cards read it from `stage()` as before.
+  A config dict may still pin a `"wage"` (Workshop, dev); `problems()` holds a pinned
+  wage to the same line.
+- **What "exactly" means now, and what problems() checks**: the line pays each debt; a
+  dollar a day less does not; any one day off work does not; SAVINGS a day late in the
+  first layer does not (G's first-day checkpoint); wages alone without SAVINGS fall
+  short; a debt the line meets without any wage (the cash brought in and SAVINGS cover
+  it) is reported. The old "one dollar spent fails" became "spending more than the
+  layer's few dollars over fails". Not checked, and not true at the placeholders: in
+  layers 2 and 3 SAVINGS 2 and 3 cost more than they grow within the layer (layer 2
+  without buying level 2 ends at $3954 against $3500; layer 3 with level 3 a day late
+  at $17186 against $15000). The line still buys them; it is the achievement route.
+- **The simulator's header** (`tools/sim_runs`, `RunConfig.line_text`) prints per
+  layer the debt, the derived wage and its days, when SAVINGS is bought and the dollars
+  over.
+- **Saves**: neither the debt nor the wage is saved; both come from the config at load,
+  so no version bump (version 4 already dropped runs in progress today).

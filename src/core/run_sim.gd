@@ -6,7 +6,8 @@ extends RefCounted
 ##
 ## Bots (the targets for most of them are docs/roadmap.md's bots table):
 ##   work     works every day, never buys a ticket; buys SAVINGS as the work line does
-##            (RunConfig.line_buys), so it clears every layer to the dollar
+##            (RunConfig.line_buys), so it clears every layer on its last day (the wage
+##            is derived from the debt for that, RunConfig)
 ##   blind    plays whenever it can pay for a ticket, works when it cannot
 ##   borrow   as blind, but takes the whole house line before giving a day up
 ##   gamble   plays by default, works only when its cash cannot pay for a day's tickets
