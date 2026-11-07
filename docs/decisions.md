@@ -1149,3 +1149,40 @@ here is 300 runs, seeds SIM-0..SIM-299.
   0.0%. The order holds. small, on the old bot rule 6.7%, now clears above build: PENNY
   JAR 2 alone returns 2.53. ALL IN blind P 0.485 (Nugget Rush) to 0.543 (Peckeye).
   PACKED 2 + PENNY JAR 2 2.53, the same as PENNY JAR 2 alone; CRUMBS 2 + PENNY JAR 2 2.75.
+
+## M9.7 item 9: run boxes of 200, 300 and 500 tickets, chance-rounded prizes
+
+G (2026-11-07): the run's boxes hold 200 / 300 / 500 tickets (layers 1-3, each +-10%:
+180-220 step 2, 270-330 step 3, 450-550 step 5); free play keeps the web build's 900-1100.
+With prizes fixed per form, `floor(top money / top prize)` gave no top and no mid in
+nearly every small box (and already no top in 79% of Big Catch's 1000-ticket boxes: the
+floored money fell to the smallest prize). **G chose chance rounding**
+(`BoxModel.chance_round`, on in `RunConfig.box_model` only): a tier's money is kept as a
+float, the box holds floor(money / prize) of it and one more with the chance of the
+remainder; the mid money is a share of what the full top money leaves; the smallest
+prizes take the rest, rounded to the nearest prize. A box's expected prize money is its
+type's; a box that hits a top pays more than its type, one that misses less. Two new
+draws, right after the top share and the mid share; with the flag off every draw and
+number is the web build's (48 boxes compared before and after).
+
+- **Save version 3**: boxes are rebuilt from seed and ops, so a run in progress is
+  dropped; settings and the free-play session stay.
+- **SEAL**: a sealed box keeps the sizes of the layer it was built in (`TicketBox.model`,
+  a `sizes` key in the sealed list, the machine and the tray when they differ).
+- **Generator (3000 boxes a cell, layers 1 / 2 / 3)**: P(box has a top) Big Catch 0.15 /
+  0.22 / 0.38, Ka-Bawk! 0.35 / 0.51 / 0.75, Hot Plate 0.14 / 0.21 / 0.35, Nugget Rush 0.19
+  / 0.29 / 0.47, Pecking Order, One Flock, Peckeye 0.09-0.10 / 0.14-0.15 / 0.23-0.25,
+  Lucky Spur 0.06 / 0.09 / 0.15. Winners per 100 no longer depend on size: Big Catch 4.7,
+  Ka-Bawk! 2.6, Pecking Order and One Flock 10.5, Nugget Rush 12.2, Peckeye 12.5, Lucky
+  Spur 12.7, Hot Plate 13.5. Return matches the type within noise.
+- **ALL IN bars** re-measured (400 boxes a layer): Hot Plate 75, Lucky Spur 65, Pecking
+  Order, One Flock, Nugget Rush 60, Peckeye 80, default 65; blind P 0.48-0.51. **Big Catch
+  (0.33) and Ka-Bawk! (0.25) cannot reach half with any bar**: a window of ten prints
+  anything only 0.38 / 0.23 of the time. Left at 100 / 50; open for G (a rule change).
+- **Ideal data, new against main** (`--ev-boxes=40`): no perks 1.003 -> 1.216, because
+  the last-sale prize ($50 / $250 / $1000) is now a quarter of a layer-1 box (+0.25 a
+  dollar, +0.17, +0.10; it was about +0.05). CLOSER rows x2.1, FIRST PULL +41%, DUE A WIN
+  rows on the rare-win forms x2-3.5; the SNOWBALL chains, already 118-270, are about
+  1e12. PACKED and CRUMBS alone add nothing (PACKED cannot break $1000 into 199 fives);
+  MAGNET runs out of winners on Big Catch. Churn with fees stays under 1 (0.40-0.74).
+  No perk number changed; no bot changed (G: data first).
