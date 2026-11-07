@@ -44,7 +44,7 @@ const BOTS := ["work", "blind", "borrow", "gamble", "perks", "skip", "build",
 ## holds this many tickets of the machine's cheapest price (0 when missing); the forms
 ## (FormDef.id) the bot's column is picked among when the machine sells one of them
 ## (none: any column). `build` takes the perks that lift the return of any ticket,
-## cheapest and surest first (G, 2026-11-07: a sensible player who builds does not buy
+## cheapest and surest first (G, 2026-11-07, wants build to clear highest; a player who builds does not buy
 ## CLOSER or FIRST PULL in a layer whose boxes hold 900 tickets or more; `clearing`
 ## measures those), and keeps 100 tickets of cash.
 ## jackpot buys REGULAR for what it opens: READ THE FLARE needs CLOSER or REGULAR, and

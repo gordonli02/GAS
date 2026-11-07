@@ -1113,3 +1113,39 @@ G's decisions after item 3 (2026-11-07); the plan is `docs/roadmap.md` M9.7 item
   or sold (every layer, 30 rerolls) and still working when held, the save of the new
   window fields, CRUMBS on all eight forms at 5 / 20, PACKED's share per box and in all,
   its money, determinism and replay, and its pieces passed over by PENNY JAR and STACKER.
+
+## M9.7 item 7: why the build bot died, and the table after M9.7
+
+G (2026-11-07): the build line has to clear the most; find what to change. Every number
+here is 300 runs, seeds SIM-0..SIM-299.
+
+- **The cause was the bot, not the numbers.** `RunSim.play` let a bot "play" whenever
+  `cash + credit >= min_price()`, but the bill slot takes bills only, and the smallest is
+  five tickets' worth at the layer's stake ($5 / $25 / $100). A bot with $9 in layer 2
+  went to the machine every day, bought nothing and never worked; most deaths ended with
+  $2-24 in the pocket. A ticket reserve (20 / 50 / 100 tickets), buying perks again in the
+  evening, a larger share of cash and first-level price cuts (prizes 80, luck / scrap /
+  penny 70) each moved build by 0 to 3 points while the coins were stranded (6.0% at
+  7b6b99c, 9.0% with all of them).
+- **Kept (`run_sim.gd` only, no game number changed):** `_can_buy`: the line bots
+  (build, clearing, jackpot, small, batch, money, churn) work the day when their cash is
+  under the smallest bill and there is no credit for the ticket. `build` takes only the
+  perks that lift the return of any ticket (prizes, luck, scrap, penny, bigfish, streak,
+  stacker, fortune, pity, middle; CLOSER, FIRST PULL, ASSEMBLY and SNOWBALL are the
+  clearing bot's, and CLOSER was build's most-bought level-1 perk although it does
+  nothing in a layer of 900-ticket boxes). A new optional `reserve` on a line: a dealt
+  perk is bought only if the cash left holds that many tickets at the cheapest price;
+  build keeps 100 (150 or more blocks every level-1 perk and drops build to 11%).
+- **The price cuts were tried with the fix and dropped:** build 36%, and the perks bot,
+  fixed, 55%.
+- **Left on the old rule on purpose:** blind, borrow, perks and skip. The bands of the
+  roadmap's table were set against their stranded behaviour; fixed, they clear blind
+  13.7%, skip 12.3%, borrow 13.3%, perks 34.7% (build 33.0%, gamble 13.7%), so blind and
+  gamble become one strategy. Open for G: new bands or a harder game, and whether the
+  dead coins under a bill (also there for a player) need a hint or a coin slot.
+- **The table after M9.7** (`71fdb5b`): build 28.7% (L1 59.7 / L2 64.2 / L3 74.8),
+  gamble 13.7%, perks 4.7% (0.3 under its floor, within noise), borrow 5.0%, blind 1.3%,
+  skip 0.7%, small 37.3%, batch 19.3%, clearing 12.0%, jackpot 3.7%, money 3.0%, churn
+  0.0%. The order holds. small, on the old bot rule 6.7%, now clears above build: PENNY
+  JAR 2 alone returns 2.53. ALL IN blind P 0.485 (Nugget Rush) to 0.543 (Peckeye).
+  PACKED 2 + PENNY JAR 2 2.53, the same as PENNY JAR 2 alone; CRUMBS 2 + PENNY JAR 2 2.75.
