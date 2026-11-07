@@ -267,7 +267,7 @@ func _run() -> void:
 	await _shot("07g_reading")
 	# The top level: the notepad keeps a line for every box (developer panel: every perk at the top).
 	game.dev_run("perks")
-	run.perks.erase("doubleup")   # its card would stop the drive (tests/test_perks has DOUBLE UP)
+	run.perks.erase("allin")   # its card would stop the drive (tests/test_perks has ALL IN)
 	_key(KEY_B)
 	await _wait(1.4)
 	_expect(run.reading() == 5 and not game.at_machine, "every perk at the top; at the table")

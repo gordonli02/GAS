@@ -73,6 +73,7 @@
     4,
     3
   ],
+  "shape": { "prizes": { "uncle": 500, "liberty": 500, "bell": 100, "rocket": 5 } },
   "win_display": "each_group",
   "layout": "layouts/flock.json"
 }

@@ -33,7 +33,7 @@ extends RefCounted
 ## variety_pct, a HAPPY HOUR), times every "x" (top_x, mid_x and low_x on their prizes,
 ## stack_x on a ticket with two prizes or more, first_x on a box's first tickets, the
 ## snowball, a LUCKY COIN on its column, the opening's combo). An again_pct roll pays
-## it all twice. DOUBLE UP's x3 is paid on its own, when a window closes.
+## it all twice. ALL IN's x3 is paid on its own, when a window closes.
 ## "x" effects of two perks multiply (effect_x), "+" effects add (effect).
 ##
 ## Effects (value per level):
@@ -62,8 +62,9 @@ extends RefCounted
 ##   streak_pct   + % a window in a row with a winner (+ slot; STREAK; a window is
 ##                WINDOW tickets opened, the player's, across columns, today's)
 ##   streak_cap   STREAK's + % goes no higher than this
-##   double_up    a window that paid may be staked on the next: more printed prize
-##                money in it pays the stake x3 back, as much or less loses it (DOUBLE UP)
+##   all_in       a window that paid may be staked on the next: more printed prize
+##                money in it pays the stake x3 back, as much or less loses it (ALL IN;
+##                while it is held QUICK HANDS opens no further than the window's end)
 ##   loan_pct     the house line + % of the layer's own
 ##   loan_x       the house line times this (LOAN SHARK)
 ##   rate_x       the loan interest times this (LOAN SHARK's price; LOW RATE's cut is
@@ -110,7 +111,7 @@ const SHELF_REROLL := 10
 const FIRST_TICKETS := 20
 const FORTUNE_TRIES := 12
 const WORTH_STEP := 100
-const WINDOW := 10               ## STREAK and DOUBLE UP: a window is this many tickets opened (G)
+const WINDOW := 10               ## STREAK and ALL IN: a window is this many tickets opened (G)
 const MARKED_WINDOW := 10        ## MARKED: the PEEKed column's winners of this many come first
 const QUEUE_WINDOW := 20         ## QUEUE JUMP: winners moved into the next this many
 const QUEUE_MOVES := 5
@@ -215,14 +216,15 @@ const STANDARD := {
 			"effect": "combo_pct", "levels": [{"price": 400, "value": 50}, {"price": 1200, "value": 100}]},
 		{"id": "again", "branch": "batch", "rarity": "rare", "name": "ENCORE", "desc": "ONE OPENING: %d%% OF WINNERS PAY AGAIN", "requires": {"multi": 2},
 			"effect": "again_pct", "levels": [{"price": 300, "value": 15}, {"price": 900, "value": 30}]},
-		# On the window of WINDOW tickets (G, part 3: ALL IN's place). Neither needs QUICK
+		# On the window of WINDOW tickets (G, part 3). ALL IN is the old perk's name on the
+		# window stake (G renamed DOUBLE UP back, 2026-11-07). Neither needs QUICK
 		# HANDS (ten by hand is a window too); they are this line's because batches play them fast.
 		{"id": "streak", "branch": "batch", "rarity": "rare", "name": "STREAK", "effect": "streak_pct", "levels": [
 			{"price": 300, "value": 25, "extra": {"streak_cap": 100}, "desc": "EVERY 10 OPENED WITH A WINNER: PRIZES +25% MORE, UP TO +100%"},
 			{"price": 800, "value": 40, "extra": {"streak_cap": 160}, "desc": "EVERY 10 OPENED WITH A WINNER: PRIZES +40% MORE, UP TO +160%"}]},
-		{"id": "doubleup", "branch": "batch", "rarity": "legendary", "name": "DOUBLE UP",
+		{"id": "allin", "branch": "batch", "rarity": "legendary", "name": "ALL IN",
 			"desc": "10 OPENED PAID: STAKE IT ON THE NEXT 10. MORE PRINTED PRIZES: X3 BACK. LESS: GONE",
-			"requires": {"combo": 1}, "effect": "double_up", "levels": [{"price": 2000, "value": 1}]},
+			"requires": {"combo": 1}, "effect": "all_in", "levels": [{"price": 2000, "value": 1}]},
 		# Build: money that makes money (with SAVINGS off the shelf).
 		{"id": "worth", "branch": "money", "rarity": "legendary", "name": "NET WORTH", "desc": "PRIZES +2%% PER %s IN CASH", "money": true, "requires": {"savings": 1},
 			"effect": "worth_pct", "levels": [{"price": 1500, "value": 2, "show": 100}]},

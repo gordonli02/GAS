@@ -872,3 +872,27 @@ The plan is `docs/roadmap.md` (M9.5 tasks 6 and 7) and `docs/perk_research.md` s
   information row 0.61). The balance pass has to retune it (odds by form, or a lower
   bar); a player who pushes only on a PEEK or a reading will do better than these P.
   The combo table's 期望回报 column is filled from the `EV_SETS` rows.
+- **G's changes after this step (2026-11-07)**: G renamed DOUBLE UP back to ALL IN (梭哈;
+  id `allin`, effect `all_in`; 押上 / 不押 stay). Its card now asks after every window:
+  while ALL IN is held `batch_size()` stops at the window's end (OPEN 20 opens ten, the
+  card, then ten), `_close_window` sets `window_closed` and the game puts the card up
+  when `take_window_closed()` and `can_push` hold (the rule of an opening ending on a
+  window above is gone); the simulator's `PUSH_BUY` went with it. Held items on the
+  phone say under the card when they can be used (`why`) if USE is greyed or absent,
+  and the ITEMS page says how items are used when something is held.
+
+## After M9.5: the smallest prizes, for G's first game
+G played a run (2026-11-07): the forms felt hopeless, only Nugget Rush was fine, and the
+return must stay where it is. So the money is split into more, smaller prizes: the
+smallest prize of each form's run table (`shape.prizes`) went down (Big Catch $25 to $5,
+Ka-Bawk! $50 to $5, Hot Plate $10 to $5, Lucky Spur $25 to $2) and Pecking Order, One
+Flock and Peckeye got a prize-only shape ($500 / $500 / $100 / $5; their shares wait
+for their signature rules). The box's prize money is its type's as before, so every
+form pays back the same; a box of ten hundred $1 tickets now holds about fifteen
+winners in a hundred (Lucky Spur and Peckeye eighteen, Ka-Bawk! eight, Nugget Rush
+thirteen, unchanged) against three to eight before. A side effect: ALL IN's blind P
+(a window of ten beating the last) rose from 0.01-0.28 to 0.14-0.34, at the x3
+break-even, so its retune may not be needed. The pictures in `docs/m9.6/` still show
+the old smallest prizes. Box size was not touched: a smaller box cannot hold the
+$1,000 top at $1 a ticket (roadmap M9.7 has the two ways out). G's list after this
+game is `docs/roadmap.md` M9.7.

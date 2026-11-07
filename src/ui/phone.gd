@@ -443,9 +443,14 @@ static func rarity_color(r: String) -> Color:
 	return DIM
 
 
-## ITEMS: what is held, with USE where it is used by hand (today's shelf is on TODAY).
+## ITEMS: what is held, with USE where it is used by hand (today's shelf is on TODAY),
+## and under the count how items are used when something is held (G could not find it).
 func _items_tab() -> void:
 	_page.add_child(_label(str(_st.get("held_line", "")), 20, DIM))
+	if str(_st.get("use_line", "")) != "":
+		var how := _label(str(_st.use_line), 18, DIM)
+		how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_page.add_child(how)
 	for it in _st.get("held", []):
 		_page.add_child(_item_card(it, true))
 
@@ -489,6 +494,11 @@ func _item_card(it: Dictionary, held: bool) -> PanelContainer:
 		row.add_child(b)
 		_buttons["buy_" + id] = b
 	v.add_child(row)
+	# A held item that cannot be used now, or has no USE key: when and where it is (`why`).
+	if held and str(it.get("why", "")) != "" and (str(it.get("use_text", "")) == "" or not it.get("can_use", false)):
+		var why := _label(str(it.why), 18, DIM)
+		why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(why)
 	return card
 
 

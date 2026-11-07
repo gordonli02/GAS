@@ -25,9 +25,9 @@ extends RefCounted
 ##            `small`, `batch` and `money` one line each (docs/roadmap.md M9.5: a bot
 ##            per line). HIGH ROLLER is the bet (fixed): a level is bought only when
 ##            the cash left after it holds HIGH_ROLLER_CASH tickets at the new price.
-##            With DOUBLE UP they stake a window whenever they can while the stake is
-##            under half their cash (and buy PUSH_BUY tickets at a time, so that the
-##            openings end on a window)
+##            With ALL IN they stake a window whenever they can while the stake is
+##            under half their cash (QUICK HANDS opens no further than a window's end
+##            while ALL IN is held, RunState.batch_size, so every window can be staked)
 ##   churn    the exploit check for FIRST PULL x REGULAR (docs/perk_research.md 5.11):
 ##            buys both whenever it can pay for them, and at the machine buys CHURN
 ##            tickets of a column, then changes the box, again and again. Its return
@@ -49,14 +49,14 @@ const LINES := {
 	"jackpot": {"perks": ["bigfish", "pity", "hunter"], "shelf": ["regular", "read1"], "share": 0.6,
 		"forms": ["catch", "kabawk"]},
 	"small": {"perks": ["penny", "stacker", "scrap", "trashking"], "shelf": [], "share": 0.6, "forms": ["plate", "nugget"]},
-	"batch": {"perks": ["combo", "again", "streak", "doubleup"], "shelf": ["multi", "bet"], "share": 0.6, "forms": []},
+	"batch": {"perks": ["combo", "again", "streak", "allin"], "shelf": ["multi", "bet"], "share": 0.6, "forms": []},
 	"money": {"perks": ["worth", "middle"], "shelf": ["savings"], "share": 0.6, "forms": ["spur"]},
 	"churn": {"perks": ["firstpull"], "shelf": ["regular"], "share": 1.0, "forms": []},
 }
 ## Perk levels whose return tools/sim_runs prints (box_return), one build per line. A
 ## "snow" key is not a perk: SNOWBALL's count of boxes already cleared; a "form" key
 ## (a FormDef.id) plays that form's boxes alone. NET WORTH (the cash, kept at 0 here),
-## SEAL, the reading chain and the items (REEL IN) do nothing in box_return; DOUBLE UP
+## SEAL, the reading chain and the items (REEL IN) do nothing in box_return; ALL IN
 ## is played on every window it can be (box_return).
 const EV_SETS := [
 	{}, {"prizes": 1}, {"prizes": 3}, {"scrap": 2}, {"luck": 3}, {"luck": 3, "fortune": 1},
@@ -79,11 +79,11 @@ const EV_SETS := [
 	{"closer": 2, "firstpull": 2, "regular": 2, "read3": 1},              # 清盒
 	{"magnet": 2, "penny": 2, "stacker": 1, "multi": 2, "combo": 2},      # 小奖
 	{"insurance": 2, "pity": 2, "form": "kabawk"},                        # 保险 (on Ka-Bawk!)
-	{"doubleup": 1, "read1": 1, "multi": 2, "combo": 1},                  # 押一把
+	{"allin": 1, "read1": 1, "multi": 2, "combo": 1},                  # 梭哈
 	{"streak": 2, "magnet": 2, "multi": 2, "combo": 1},                   # 连庄
 	{"savings": 3, "lowrate": 2, "shark": 2, "worth": 1},                 # 钱生钱 (NET WORTH needs cash: 0 here)
 	{"seal": 2, "snowball": 1, "snow": 10, "bet": 3},                     # 封盒 (SEAL itself does nothing here)
-	{"read1": 1, "doubleup": 1},                                          # 跨：信息换胜率
+	{"read1": 1, "allin": 1},                                          # 跨：信息换胜率
 	{"magnet": 2, "insurance": 2, "pity": 2, "form": "kabawk"},           # 跨：确定性叠大奖票
 ]
 ## Perk levels the churn table (churn_return) prints: CHURN tickets a box, then NEW BOX.
@@ -94,7 +94,6 @@ const DAY_CAP := 6000
 const BATCH := 25
 const GAMBLE_DAY := 25   ## the gamble bot works when its cash is less than this many tickets
 const HIGH_ROLLER_CASH := 25   ## a bot buys a level of HIGH ROLLER only if its cash then holds this many tickets (G: 20 to 30)
-const PUSH_BUY := 20     ## with DOUBLE UP a bot buys this many at a time (a whole number of windows)
 const CHURN := 20        ## the churn bot's tickets a box (Catalog.FIRST_TICKETS)
 const BEST_PCT := [50, 90, 99]   ## the percentiles of each run's best prize summary gives
 
@@ -163,7 +162,7 @@ static func _play_day(run: RunState, e: Economy, m: MachineLogic, rng: RandomNum
 	var col := _column(m, rng, line.get("forms", []))
 	var borrows := bot == "borrow"
 	var churn := bot == "churn"
-	var per := CHURN if churn else PUSH_BUY if run.effect("double_up") > 0 else BATCH
+	var per := CHURN if churn else BATCH
 	var bought := 0
 	var layer := run.layer
 	while bought < DAY_CAP:
@@ -201,23 +200,24 @@ static func _play_day(run: RunState, e: Economy, m: MachineLogic, rng: RandomNum
 	e.cash_out()
 
 
-## Opens tickets bought: in batches of QUICK HANDS' size when the run has it, else one
-## at a time. After every opening, DOUBLE UP (_push).
+## Opens tickets bought: in batches of QUICK HANDS' size when the run has it (asked
+## before each batch: with ALL IN it stops at the window's end), else one at a time.
+## After every opening, ALL IN (_push).
 static func _open(run: RunState, e: Economy, held: Array) -> void:
-	var n := run.batch_size()
-	if n <= 0:
+	if run.batch_size() <= 0:
 		for en in held:
 			run.open_ticket(e, en)
 			_push(run, e)
 		return
 	var k := 0
 	while k < held.size():
+		var n := run.batch_size()
 		run.open_batch(e, held.slice(k, k + n))
 		_push(run, e)
 		k += n
 
 
-## A bot's DOUBLE UP: stake the window just closed whenever it can, while the stake is
+## A bot's ALL IN: stake the window just closed whenever it can, while the stake is
 ## under half its cash.
 static func _push(run: RunState, e: Economy) -> void:
 	if run.can_push(e) and run.push_offer() * 2 < e.cash:
@@ -417,7 +417,7 @@ static func form_table(base_forms: Array, boxes: int, seed_prefix := "FM") -> Ar
 ## With QUICK HANDS the tickets are opened in batches of its size (at most BATCH), so
 ## CHAIN and ENCORE count; SNOWBALL grows as boxes are cleared; STREAK counts its
 ## windows. The cash is kept at zero (the ledger is not kept here), so NET WORTH adds
-## nothing. With DOUBLE UP every window that can be staked is (the stake counts as
+## nothing. With ALL IN every window that can be staked is (the stake counts as
 ## spent, the x3 as won). Pass one form in `base_forms`, or a "form" key in
 ## `perk_levels`, for that form's return alone.
 static func box_return(base_forms: Array, perk_levels: Dictionary, boxes: int, seed_prefix := "EV") -> float:
@@ -429,13 +429,13 @@ static func box_return(base_forms: Array, perk_levels: Dictionary, boxes: int, s
 		var only := str(run.perks.form)
 		run.perks.erase("form")
 		base_forms = base_forms.filter(func(f): return f.id == only)
-	var pushes := run.effect("double_up") > 0
+	var pushes := run.effect("all_in") > 0
 	var e := run.new_economy()
 	e.cash = 0
 	var m := run.new_machine(base_forms, true)
 	var spent := 0
 	var won := 0
-	var n := mini(BATCH, run.batch_size()) if run.batch_size() > 0 else 1
+	var batch := run.batch_size() > 0
 	for col in m.forms.size():
 		var done := 0
 		var held := []
@@ -447,9 +447,11 @@ static func box_return(base_forms: Array, perk_levels: Dictionary, boxes: int, s
 				won += m.last_sale
 				run.cleared_box(m)
 			held.append({"form": m.forms[col], "ticket": sold.ticket, "box": sold.box, "bet": m.bet})
+			# Asked each ticket: with ALL IN the batch stops at the window's end.
+			var n := mini(BATCH, run.batch_size()) if batch else 1
 			if held.size() >= n or m.boxes[col].cursor >= m.boxes[col].size:
 				var before := e.won
-				if n > 1:
+				if batch:
 					run.open_batch(e, held)
 				else:
 					run.open_ticket(e, held[0])
@@ -497,7 +499,7 @@ static func churn_return(base_forms: Array, perk_levels: Dictionary, boxes: int,
 		"return_fees": float(won) / (spent + fees) if spent + fees > 0 else 0.0, "fee": run.change_fee()}
 
 
-## DOUBLE UP's odds on each form, no perks, stake 1: `boxes` boxes of the form in the
+## ALL IN's odds on each form, no perks, stake 1: `boxes` boxes of the form in the
 ## run's model, their tickets opened in order in windows of Catalog.WINDOW (the boxes
 ## one after another). Of the windows after one that paid, the share whose printed
 ## prizes beat it (the push wins). Returns [{form, p, windows}] (windows: how many

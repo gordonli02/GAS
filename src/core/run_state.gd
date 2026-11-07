@@ -65,15 +65,16 @@ var layer_tops := 0
 ## The window (Catalog.WINDOW tickets opened, by hand or at once, across columns; G,
 ## docs/perk_research.md section 5 part 14): tickets opened in it, the sum of their
 ## printed prizes (before the bet and every perk), what they paid into the ledger and
-## how many won. STREAK and DOUBLE UP act when it closes. Today's only.
+## how many won. STREAK and ALL IN act when it closes. Today's only.
 var window_n := 0
 var window_printed := 0
 var window_paid := 0
 var window_wins := 0
 var last_window := {}      ## the window closed last: {printed, paid}; {} before the day's first
 var streak := 0            ## STREAK: windows in a row with a winner
-var push_stake := 0        ## DOUBLE UP: the stake on the next window, 0 when none is pending
+var push_stake := 0        ## ALL IN: the stake on the next window, 0 when none is pending
 var push_printed := 0      ## the printed sum the next window has to beat
+var window_closed := false ## a window closed since the game last asked (take_window_closed); not saved
 ## Today's: a HAPPY HOUR, a SAFETY NET, the ledger when the day began.
 var happy := false
 var safety := false
@@ -89,7 +90,7 @@ var stats := {"days": 0, "play_days": 0, "shifts": 0, "tickets": 0, "wages": 0, 
 	"shop": 0, "perks": 0, "items": 0, "services": 0, "bonus": 0,   ## shop: money spent there; bonus: prize money from perks and coins
 	"rerolls": 0, "skipped_offers": 0, "savings": 0, "insured": 0, "boxes_cleared": 0, "best_prize": 0,
 	"sure_wins": 0, "refunded": 0, "sealed": 0,   ## sure_wins: prizes moved forward; refunded: tickets given back
-	"staked": 0, "push_won": 0, "push_lost": 0}   ## DOUBLE UP: stakes put up, what came back (x3), stakes lost
+	"staked": 0, "push_won": 0, "push_lost": 0}   ## ALL IN: stakes put up, what came back (x3), stakes lost
 
 
 static func start(run_config: RunConfig, seed_text: String, layer_scenes: Array) -> RunState:
@@ -587,9 +588,14 @@ func bet() -> int:
 	return maxi(1, effect("bet"))
 
 
-## Tickets opened at once from the tray (QUICK HANDS), 0 without it.
+## Tickets opened at once from the tray (QUICK HANDS), 0 without it. While ALL IN is
+## held an opening never crosses the end of a window (G): no more than the window has
+## left, so every window closes on the last ticket of an opening and its card can ask.
 func batch_size() -> int:
-	return effect("batch")
+	var n := effect("batch")
+	if n > 0 and effect("all_in") > 0:
+		n = mini(n, Catalog.WINDOW - window_n)
+	return n
 
 
 ## Every box cleared under SNOWBALL multiplies every prize again.
@@ -758,7 +764,7 @@ static func smallest_tier(form: FormDef) -> int:
 	return best
 
 
-# --- the window: STREAK and DOUBLE UP ----------------------------------------------------
+# --- the window: STREAK and ALL IN ----------------------------------------------------
 
 ## STREAK's share of the next prize: so much a window in a row with a winner, up to
 ## the cap.
@@ -781,7 +787,7 @@ func _count_window(e: Economy, t: Dictionary, paid: int, won: bool) -> void:
 
 
 ## A window of Catalog.WINDOW tickets closed: STREAK counts it (one more with a winner,
-## back to 0 without; only while the perk is held), a pending DOUBLE UP is settled
+## back to 0 without; only while the perk is held), a pending ALL IN is settled
 ## against its printed sum (more than the stake's window: three times the stake back;
 ## as much or less: the stake is gone), and it is kept as the last window (a new push
 ## may be put on it). Then the counters start again.
@@ -801,6 +807,7 @@ func _close_window(e: Economy) -> void:
 		push_stake = 0
 		push_printed = 0
 	last_window = {"printed": window_printed, "paid": window_paid}
+	window_closed = true
 	window_n = 0
 	window_printed = 0
 	window_paid = 0
@@ -808,7 +815,7 @@ func _close_window(e: Economy) -> void:
 
 
 ## The window starts over, and the streak and the last window with it (every morning;
-## the developer panel). A pending DOUBLE UP is lost (G: the window never crosses a day).
+## the developer panel). A pending ALL IN is lost (G: the window never crosses a day).
 func reset_window() -> void:
 	if push_stake > 0:
 		stats.push_lost += push_stake
@@ -817,24 +824,33 @@ func reset_window() -> void:
 	window_paid = 0
 	window_wins = 0
 	last_window = {}
+	window_closed = false
 	streak = 0
 	push_stake = 0
 	push_printed = 0
 
 
-## The stake DOUBLE UP would put up now: what the last window paid.
+## The stake ALL IN would put up now: what the last window paid.
 func push_offer() -> int:
 	return int(last_window.get("paid", 0))
 
 
-## DOUBLE UP can be played now: a window has just closed (nothing opened since) and
+## Whether a window closed since the last call (the game asks after every opening:
+## ALL IN's card goes up when one did and can_push holds). Clears the flag.
+func take_window_closed() -> bool:
+	var was := window_closed
+	window_closed = false
+	return was
+
+
+## ALL IN can be played now: a window has just closed (nothing opened since) and
 ## paid something, no push is pending, and the cash covers its pay.
 func can_push(e: Economy) -> bool:
-	return playing() and effect("double_up") > 0 and push_stake == 0 and window_n == 0 \
+	return playing() and effect("all_in") > 0 and push_stake == 0 and window_n == 0 \
 		and push_offer() > 0 and e.cash >= push_offer()
 
 
-## DOUBLE UP: the last window's pay is staked on the next window (taken out of cash).
+## ALL IN: the last window's pay is staked on the next window (taken out of cash).
 ## The next window settles it (_close_window): its printed prizes against this one's,
 ## never the money paid, so nothing bought between the windows helps (G).
 func push(e: Economy) -> bool:

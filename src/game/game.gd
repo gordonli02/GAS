@@ -90,7 +90,7 @@ var _picking := -1                  ## run, PICKY: the machine column whose new 
 var _sealing := false               ## run, SEAL: the card asking which boxes come along is up
 var _seal_keep: Array = []          ## run, SEAL: the machine columns chosen so far
 var _moonlight := false             ## run, MOONLIGHTING: at the machine after the shift (tickets for tomorrow)
-var _pushing := false               ## run, DOUBLE UP: the card asking whether to stake the window just closed is up
+var _pushing := false               ## run, ALL IN: the card asking whether to stake the window just closed is up
 var _msg_args := []
 
 
@@ -386,34 +386,35 @@ func open_many() -> void:
 		flow.deal()
 
 
-## Run, DOUBLE UP: what the run has won and lost on pushes so far (an opening compares).
+## Run, ALL IN: what the run has won and lost on pushes so far (an opening compares).
 func _push_counts() -> Array:
 	return [int(run.stats.push_won), int(run.stats.push_lost)]
 
 
-## Run, after an opening (by hand or OPEN): a push it settled is said, and, when its
-## last ticket closed a window that can be staked (RunState.can_push), the DOUBLE UP
-## card goes up (one card an opening: the last window closed).
+## Run, after an opening (by hand or OPEN): a push it settled is said, and, when it
+## closed a window (RunState.take_window_closed) that can be staked (can_push), the
+## ALL IN card goes up. While ALL IN is held an opening never crosses a window's end
+## (RunState.batch_size), so every window that closes is asked about (G).
 func _after_opening(before: Array) -> void:
 	var won := int(run.stats.push_won) - int(before[0])
 	var lost := int(run.stats.push_lost) - int(before[1])
 	if won > 0:
 		Sfx.play_win(won)
-		hud.set_status("DOUBLE UP WON $%d", [won])
+		hud.set_status("ALL IN WON $%d", [won])
 		hud.flash_win()
 	elif lost > 0:
-		hud.set_status("DOUBLE UP LOST $%d", [lost])
+		hud.set_status("ALL IN LOST $%d", [lost])
 	hud.set_cash(economy.cash)
-	if run.can_push(economy) and not _pushing:
+	if run.take_window_closed() and run.can_push(economy) and not _pushing:
 		_pushing = true
 		_show_run_card()
 
 
-## The DOUBLE UP card: the stake (what the window just closed paid), what the next
+## The ALL IN card: the stake (what the window just closed paid), what the next
 ## window has to print, PUSH IT or KEEP IT.
 func _push_card() -> void:
 	var stake := run.push_offer()
-	run_card.show_card(tr("DOUBLE UP?"), [
+	run_card.show_card(tr("ALL IN?"), [
 		[tr("STAKE %s") % Hud._money(stake), "big"],
 		tr("THE NEXT 10 MUST PRINT MORE THAN %s") % Hud._money(int(run.last_window.get("printed", 0))),
 		tr("MORE: %s BACK. AS MUCH OR LESS: GONE") % Hud._money(stake * 3),
@@ -421,7 +422,7 @@ func _push_card() -> void:
 	], [[{"id": "push", "text": tr("PUSH IT")}, {"id": "keep", "text": tr("KEEP IT"), "kind": "chrome"}]])
 
 
-## A key on the DOUBLE UP card.
+## A key on the ALL IN card.
 func _on_push(id: String) -> void:
 	_pushing = false
 	Sfx.play("button")
@@ -1072,9 +1073,9 @@ func _show_run_card() -> void:
 		# HOUSE ACCOUNT: what is on the tab is settled as the day ends.
 		var tab := [[tr("ON THE TAB %s") % Hud._money(economy.tab), "big"], [tr("THE TAB IS SETTLED WHEN YOU LEAVE"), "dim"]] \
 			if economy.tab != 0 else []
-		# DOUBLE UP: a stake waiting on a window does not cross the day.
+		# ALL IN: a stake waiting on a window does not cross the day.
 		if run.push_stake > 0:
-			tab.append([tr("THE STAKE ON DOUBLE UP (%s) IS LOST") % Hud._money(run.push_stake), "big"])
+			tab.append([tr("THE STAKE ON ALL IN (%s) IS LOST") % Hud._money(run.push_stake), "big"])
 		run_card.show_card(tr("LEAVE FOR TODAY?"), [[day_line, "dim"], tr("SPENT TODAY %s") % Hud._money(spent),
 			tr("WON TODAY %s") % Hud._money(won), tr("CASH %s") % cash, [tr("DUE %s") % due, "big"]] + tab + kept + last + line,
 			[[{"id": "next", "text": next_text}, {"id": "back", "text": tr("BACK"), "kind": "chrome"}], money_row])
@@ -1246,9 +1247,10 @@ func phone_state() -> Dictionary:
 		if n > 0:
 			held.append({"id": it.id, "name": tr(it.name), "kind": tr(it.kind), "rarity_id": it.rarity, "desc": _item_desc(it),
 				"note": tr("HELD %d") % n, "use_text": tr("USE") if it.use == "column" or it.use == "now" else "",
-				"can_use": _can_use(it)})
+				"can_use": _can_use(it), "why": _use_why(it)})
 	st.held = held
 	st.held_line = tr("ITEMS %d OF %d") % [run.items_held(), run.item_cap()]
+	st.use_line = tr("USE: PICK A COLUMN AT THE MACHINE, OR FROM HERE") if not held.is_empty() else ""
 	var shelf := []
 	for id in run.shelf:
 		var it := run.catalog.item(id)
@@ -1335,6 +1337,29 @@ func _can_use(it: Dictionary) -> bool:
 	if it.use == "now":
 		return run.can_use_now(it.id) and (it.id != "tip" or at_machine) and (it.id != "slip" or _unopened() > 0)
 	return false
+
+
+## When and where an item is used (the phone says it under a held item whose USE is
+## greyed or that has none; G could not tell why), translated. "" for COPIER (its rule
+## is in its text).
+func _use_why(it: Dictionary) -> String:
+	match str(it.get("use", "")):
+		"column":
+			return tr("AT THE MACHINE, ON A DAY OF PLAY")
+		"auto":
+			return tr("WORKS BY ITSELF")
+		"offer":
+			return tr("USED FROM THE OFFERS CARD")
+	match str(it.id):
+		"tip":
+			return tr("AT THE MACHINE, ON A DAY OF PLAY")
+		"happy", "safety":
+			return tr("ON A DAY OF PLAY")
+		"overtime":
+			return tr("BEFORE THE DAY IS CHOSEN, OR AFTER A SHIFT")
+		"slip":
+			return tr("WITH UNOPENED TICKETS ON THE TABLE")
+	return ""
 
 
 ## A key on the phone.
@@ -1652,7 +1677,7 @@ func dev_reset() -> void:
 ## in the run, "perks" takes every perk to its top level, "items" gives three of each,
 ## "offers" deals again, "deal" puts the dealt perk `arg` (an id) first in today's
 ## offers, "sure_items" gives one of each SURE item (past the pockets' room), "window"
-## starts the ticket window over (the streak and a pending DOUBLE UP with it).
+## starts the ticket window over (the streak and a pending ALL IN with it).
 func dev_run(what: String, arg := "") -> void:
 	match what:
 		"cash":

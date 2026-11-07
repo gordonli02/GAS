@@ -2,7 +2,7 @@ extends "res://tests/test_case.gd"
 ## Perks, items and contacts in the run (the tree draft v2, M9.5): the catalog's shape
 ## (the shelf and the four kinds), the prize formula and every effect hook, the daily
 ## perk offers and the item shelf, the sure wins (a prize of the box moved forward),
-## opening at once, the window of ten (STREAK, DOUBLE UP), HIGH ROLLER's fixed bet,
+## opening at once, the window of ten (STREAK, ALL IN), HIGH ROLLER's fixed bet,
 ## MOONLIGHTING's wage cut, box reading, and how all of it is saved.
 ## Big Catch's tiers (the pack's): 0 and 1 top ($500), 2 mid ($100), 3 low ($25); $1.
 
@@ -1223,7 +1223,7 @@ func test_streak() -> void:
 	check(e.balanced(), "ledger balanced")
 
 
-func test_double_up() -> void:
+func test_all_in() -> void:
 	if _catch() == null:
 		return
 	var res := _playing(1000)
@@ -1231,7 +1231,7 @@ func test_double_up() -> void:
 	var e: Economy = res[1]
 	_window(r, e, [3])
 	check(not r.can_push(e), "without the perk: no")
-	r.perks = {"doubleup": 1}
+	r.perks = {"allin": 1}
 	check(r.can_push(e), "with it: the window just closed paid $25")
 	eq(r.push_offer(), 25, "the stake is what it paid")
 	r.open_ticket(e, _entry(-1))
@@ -1259,12 +1259,12 @@ func test_double_up() -> void:
 	# What the tickets print counts, not what they pay: FAT PRIZES bought between the
 	# windows pays the next one double, and still does not win.
 	r.push(e)
-	r.perks = {"doubleup": 1, "prizes": 3}
+	r.perks = {"allin": 1, "prizes": 3}
 	cash = e.cash
 	_window(r, e, [2])
 	eq(e.cash, cash + 200, "paid $200, printed $100: lost")
 	eq(int(r.stats.push_lost), 200, "a second stake lost")
-	r.perks = {"doubleup": 1}
+	r.perks = {"allin": 1}
 	# Nothing paid: nothing to stake.
 	_window(r, e, [])
 	check(not r.can_push(e), "a window of losers cannot be staked")
@@ -1281,6 +1281,68 @@ func test_double_up() -> void:
 	eq(int(r.stats.push_lost), lost + 100, "and its stake is gone")
 	check(r.last_window.is_empty() and r.window_n == 0 and not r.can_push(e), "a fresh window")
 	check(e.balanced(), "ledger balanced")
+
+
+## ALL IN asks after every window (G, 2026-11-07): while it is held QUICK HANDS opens no
+## further than the window's end, so every window closes on an opening's last ticket.
+func test_all_in_every_window() -> void:
+	if _catch() == null:
+		return
+	var res := _playing(5000)
+	var r: RunState = res[0]
+	var e: Economy = res[1]
+	r.perks = {"multi": 2}
+	eq(r.batch_size(), 20, "QUICK HANDS 2 without ALL IN: 20 at once")
+	r.perks = {"multi": 2, "combo": 1, "allin": 1}
+	eq(r.batch_size(), 10, "with ALL IN and an empty window: 10")
+	r.take_window_closed()
+	# By hand three, then OPEN opens the seven the window has left.
+	for k in 3:
+		r.open_ticket(e, _entry(3 if k == 0 else -1))
+	check(not r.take_window_closed(), "three opened: no window closed")
+	eq(r.batch_size(), 7, "three opened: the rest of the window, 7")
+	var batch := []
+	for k in r.batch_size():
+		batch.append(_entry(-1))
+	r.open_batch(e, batch)
+	eq(r.window_n, 0, "the opening ended on the window")
+	check(r.take_window_closed(), "a window closed in that opening")
+	check(not r.take_window_closed(), "said once")
+	check(r.can_push(e), "the card can ask: the window paid $25")
+	# An OPEN 20 from here: ten, the card, the next ten, the card again.
+	for i in 2:
+		eq(r.batch_size(), 10, "an empty window: 10 (opening %d)" % (i + 1))
+		batch = []
+		for k in r.batch_size():
+			batch.append(_entry(2 if k == 0 else -1))
+		r.open_batch(e, batch)
+		check(r.take_window_closed() and r.window_n == 0, "the window closed on its tenth (opening %d)" % (i + 1))
+		check(r.can_push(e), "and the card can ask (opening %d)" % (i + 1))
+	# The tenth by hand closes a window too.
+	for k in 9:
+		r.open_ticket(e, _entry(3 if k == 0 else -1))
+	check(not r.take_window_closed(), "nine by hand: open")
+	r.open_ticket(e, _entry(-1))
+	check(r.take_window_closed() and r.can_push(e), "the tenth by hand: closed, the card asks")
+	# QUICK HANDS 3 (the whole tray) is capped the same.
+	r.perks = {"multi": 3, "combo": 1, "allin": 1}
+	eq(r.batch_size(), 10, "the whole tray with ALL IN: 10")
+	r.end_day(e)
+	check(not r.take_window_closed(), "a new day clears it")
+	check(e.balanced(), "ledger balanced")
+	# The simulator's batch bot opens 25 bought in three openings (10, 10, 5) and stakes
+	# the first window, which paid.
+	var res2 := _playing(5000)
+	var r2: RunState = res2[0]
+	var e2: Economy = res2[1]
+	r2.perks = {"multi": 2, "combo": 1, "allin": 1}
+	var bought := []
+	for k in 25:
+		bought.append(_entry(3 if k == 0 else -1))
+	RunSim._open(r2, e2, bought)
+	eq(int(r2.stats.staked), 25, "the bot staked the first window's $25")
+	eq(int(r2.stats.push_lost), 25, "the second printed nothing: lost")
+	eq(r2.window_n, 5, "five into the third window")
 
 
 func test_window_saved() -> void:

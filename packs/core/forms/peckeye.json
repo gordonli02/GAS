@@ -72,6 +72,7 @@
     4,
     3
   ],
+  "shape": { "prizes": { "sailor": 500, "spinach": 500, "anchor": 100, "pipe": 5 } },
   "win_display": "whole",
   "layout": "layouts/peckeye.json"
 }

@@ -160,14 +160,16 @@ func test_shapes_move_money_between_tiers_only_in_the_run() -> void:
 	var run_model := RunConfig.standard().box_model(0)
 	check(run_model.shapes, "the run's model asks for shapes")
 	check(not BoxModel.standard().shapes, "the standard model (free play) does not")
+	# Every form has the run's prize table (the smallest prizes came down for G, after
+	# M9.5); the five G shaped carry their own shares too, the plain ones wait for
+	# their signature rules.
 	var shaped := ["catch", "plate", "spur", "kabawk", "nugget"]
 	var stats := {}
 	for form in pack.forms:
-		var has_shape: bool = not form.shape.is_empty()
-		eq(has_shape, shaped.has(form.id), form.id + ": has a shape")
-		eq(form.shape.has("prizes"), has_shape, form.id + ": a shaped form has the run's prize table")
+		check(form.shape.has("prizes"), form.id + ": has the run's prize table")
+		eq(form.shape.has("top"), shaped.has(form.id), form.id + ": has its own shares")
 		var run_form: FormDef = form.shaped()
-		eq(run_form.shaped_prizes, has_shape, form.id + ": shaped() puts the prizes on")
+		check(run_form.shaped_prizes, form.id + ": shaped() puts the prizes on")
 		check(run_form.uid() == form.uid(), form.id + ": the same form")
 		var low := int(run_form.tiers[run_form.tier_indices("low")[0]].prize)
 		var differ := 0
@@ -197,17 +199,18 @@ func test_shapes_move_money_between_tiers_only_in_the_run() -> void:
 					tops += run.counts[i]
 			lows += run.counts[run_form.tier_indices("low")[0]]
 			total += run.prize_total()
-		if has_shape:
-			check(differ > 50, "%s: the shape changes the counts (%d of 100 boxes)" % [form.id, differ])
-		else:
-			eq(differ, 0, form.id + ": without a shape the run's box is the standard box")
+		check(differ > 50, "%s: the run's prize table changes the counts (%d of 100 boxes)" % [form.id, differ])
 		stats[form.id] = {"tops": tops / 100.0, "lows": lows / 100.0, "winners": 100.0 * winners / tickets}
 		note("%s: %.2f tops and %.0f lows ($%d) a box, %.1f winners in 100, $%.0f a box (100 run boxes)" % [form.id, tops / 100.0, lows / 100.0, low, 100.0 * winners / tickets, total / 100.0])
 	# The shapes as G chose them: Ka-Bawk! is all or nothing, Big Catch the jackpot form,
 	# Hot Plate and Nugget Rush pay small and often; Pecking Order is the plain form.
 	check(stats.kabawk.tops > stats.catch.tops and stats.catch.tops > stats.order.tops, "top prizes: Ka-Bawk! > Big Catch > plain")
-	check(stats.nugget.winners > stats.plate.winners and stats.plate.winners > stats.order.winners, "winners: Nugget Rush > Hot Plate > plain")
-	check(stats.order.winners > stats.catch.winners and stats.catch.winners > stats.kabawk.winners, "winners: plain > Big Catch > Ka-Bawk!")
+	# With the smallest prizes at $5 (G: the forms felt hopeless) every form but Ka-Bawk!
+	# wins over ten in a hundred; Ka-Bawk! stays the all-or-nothing form.
+	for id in ["nugget", "plate", "order", "catch"]:
+		check(stats[id].winners > 10.0, "winners: %s over ten in a hundred (%.1f)" % [id, stats[id].winners])
+	for id in ["nugget", "plate", "order", "catch"]:
+		check(stats.kabawk.winners < stats[id].winners, "winners: Ka-Bawk! the fewest (%.1f against %s)" % [stats.kabawk.winners, id])
 	check(stats.plate.lows > stats.order.lows and stats.order.lows > stats.kabawk.lows, "small prizes: Hot Plate > plain > Ka-Bawk!")
 
 

@@ -75,6 +75,6 @@
     3
   ],
   "win_display": "each_group",
-  "shape": { "top": [0.05, 0.25], "mid": [0.5, 0.8], "prizes": { "shoe": 500, "star": 500, "hat": 200, "cactus": 25 } },
+  "shape": { "top": [0.05, 0.25], "mid": [0.5, 0.8], "prizes": { "shoe": 500, "star": 500, "hat": 200, "cactus": 2 } },
   "layout": "layouts/jar.json"
 }

@@ -75,6 +75,7 @@
     3,
     4
   ],
+  "shape": { "prizes": { "rooster": 500, "hen": 500, "chick": 100, "whole_egg": 5 } },
   "win_display": "each_group",
   "layout": "layouts/order.json"
 }

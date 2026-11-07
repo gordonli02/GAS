@@ -127,7 +127,7 @@ func _ready() -> void:
 	var deal_row := HBoxContainer.new()
 	_perk_id.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_perk_id.max_length = 24
-	_perk_id.placeholder_text = "perk id，比如 doubleup"
+	_perk_id.placeholder_text = "perk id，比如 allin"
 	_perk_id.add_theme_font_override("font", LcdStyle.FONT)
 	_perk_id.add_theme_font_size_override("font_size", 22)
 	_perk_id.add_theme_color_override("font_color", LcdStyle.LCD)

@@ -77,6 +77,6 @@
     4
   ],
   "win_display": "each_group",
-  "shape": { "top": [0.0, 0.30], "mid": [0.0, 0.05], "prizes": { "egg": 200, "stack": 200, "mug": 50, "pie": 10 } },
+  "shape": { "top": [0.0, 0.30], "mid": [0.0, 0.05], "prizes": { "egg": 200, "stack": 200, "mug": 50, "pie": 5 } },
   "layout": "layouts/plate.json"
 }

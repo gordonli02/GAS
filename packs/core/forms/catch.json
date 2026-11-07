@@ -75,6 +75,6 @@
     3
   ],
   "win_display": "whole",
-  "shape": { "top": [0.5, 1.0], "mid": [0.0, 0.1], "prizes": { "walleye": 1000, "bobber": 1000, "boot": 100, "worm": 25 } },
+  "shape": { "top": [0.5, 1.0], "mid": [0.0, 0.1], "prizes": { "walleye": 1000, "bobber": 1000, "boot": 100, "worm": 5 } },
   "layout": "layouts/single.json"
 }
