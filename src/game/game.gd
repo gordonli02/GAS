@@ -433,8 +433,8 @@ func _push_card() -> void:
 	var stake := run.push_offer()
 	run_card.show_card(tr("ALL IN?"), [
 		[tr("STAKE %s") % Hud._money(stake), "big"],
-		tr("THE NEXT 10 MUST PRINT MORE THAN %s") % Hud._money(int(run.last_window.get("printed", 0))),
-		tr("MORE: %s BACK. AS MUCH OR LESS: GONE") % Hud._money(stake * 3),
+		tr("THE NEXT 10 MUST PRINT AT LEAST %s") % Hud._money(run.push_target()),
+		tr("AT LEAST THAT: %s BACK. LESS: GONE") % Hud._money(stake * 3),
 		[tr("CASH %s") % Hud._money(economy.cash), "dim"],
 	], [[{"id": "push", "text": tr("PUSH IT")}, {"id": "keep", "text": tr("KEEP IT"), "kind": "chrome"}]])
 

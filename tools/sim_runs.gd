@@ -17,8 +17,8 @@ extends Node
 ## out; --ev-boxes=N boxes of each form, 0 to skip), each form alone without perks and
 ## with DUE A WIN 2, and the churn exploit at fixed perks (--churn-boxes=N boxes a
 ## column, 0 to skip). Then ALL IN's odds on each form (RunSim.push_odds: of the
-## windows of ten after one that paid, the share whose printed prizes beat it;
-## --push-boxes=N boxes a form, 0 to skip). Then each form's boxes in the run's model (its shape): return,
+## windows of ten after one that paid, the share whose printed prizes reach its bar,
+## the form's Catalog.ALL_IN_SHARE of it; --push-boxes=N boxes a form, 0 to skip). Then each form's boxes in the run's model (its shape): return,
 ## winners per 100 tickets, top prizes a box and how bumpy one ticket's prize is
 ## (--form-boxes=N, 0 to skip).
 
@@ -122,9 +122,9 @@ func _run() -> void:
 			var c := RunSim.churn_return(res.pack.forms, levels, churn_boxes)
 			print("  %-28s %7.3f %7.3f %6d" % [label, c["return"], c.return_fees, c.fee])
 	if push_boxes > 0:
-		print("\nALL IN: windows of %d, %d boxes a form, no perks (P: the next window's printed prizes beat one that paid):" % [Catalog.WINDOW, push_boxes])
+		print("\nALL IN: windows of %d, %d boxes a form, no perks (P: the next window's printed prizes reach the bar, the form's share of one that paid):" % [Catalog.WINDOW, push_boxes])
 		for row in RunSim.push_odds(res.pack.forms, push_boxes):
-			print("  %-10s P %.3f  (%d windows)" % [row.form, row.p, row.windows])
+			print("  %-10s share %3d%%  P %.3f  (%d windows)" % [row.form, row.share, row.p, row.windows])
 	if form_boxes > 0:
 		print("\neach form in the run's model (its shape), %d boxes, no perks:" % form_boxes)
 		print("  %-10s %7s %9s %7s %8s" % ["form", "return", "win/100", "tops", "sd $"])

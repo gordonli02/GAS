@@ -33,12 +33,12 @@ var magnet := 0
 ## CONSOLATION: of the losers taken from a box, this many in a hundred (rolled from the
 ## seed) win the smallest prize instead. 0: off.
 var consolation := 0
-## CRUMBS: a winner taken from a box splits its prize over up to this many of the next
-## losers in the box (TicketBox.crumble). 0: off.
+## CRUMBS: a winner taken from a box breaks its prize over up to this many of the next
+## losers in the box, each the smallest prize (TicketBox.crumble). 0: off.
 var crumbs := 0
-## PACKED: a box that goes on the machine gets up to this many percent more smallest
-## prizes, paid for by its middle ones (TicketBox.pack). Boxes already on it stay as
-## they are.
+## PACKED: a box that goes on the machine has this many percent of its prizes bigger
+## than the smallest broken into smallest ones over its losers (TicketBox.pack). Boxes
+## already on it stay as they are.
 var packed := 0
 ## Asked with the box before a ticket is taken: whether this one has to win (a sure
 ## win is a winner of the box moved onto it). The run's rule (STAKEOUT, INSURANCE).
