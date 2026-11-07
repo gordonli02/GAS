@@ -27,6 +27,11 @@ const AUTOSAVE := 2.0
 ## share of the tray's offset from the middle; a tighter heap than the discards.
 const WIN_PILE_AT := Vector3(1.03, 0, -1.8)
 const WIN_PILE_SPREAD := 0.55
+## The item tray (run): at the near left, mirroring the trash can; x as a share of the
+## tray's offset from the middle, as above. It lies in front of the discard pile, left of
+## the notepad and below the held ticket, turned toward the player.
+const ITEM_TRAY_AT := Vector3(-0.94, 0, 3.0)
+const ITEM_TRAY_YAW := 0.3
 
 var painter := TicketPainter.new()
 var rooms := RoomSet.new()
@@ -49,6 +54,9 @@ var run_card := RunCard.new()
 var phone := Phone.new()
 var table_phone := TablePhone.new()
 var trash_can := TrashCan.new()
+## Run only: the room's tray of items held on the table, and the picker it opens (M9.7).
+var item_tray := ItemTray.new()
+var item_picker := ItemPicker.new()
 var dev: DevPanel
 
 ## Where the save lives ("" = the platform's save folder); tools point it elsewhere.
@@ -127,6 +135,7 @@ func _ready() -> void:
 	add_child(notepad)
 	add_child(table_phone)
 	add_child(trash_can)
+	add_child(item_tray)
 	add_child(hud)
 
 	var forms: Array = []
@@ -180,6 +189,8 @@ func _ready() -> void:
 	add_child(phone)
 	phone.acted.connect(_on_phone)
 	phone.closed.connect(_on_phone_closed)
+	add_child(item_picker)
+	item_picker.acted.connect(_on_picker)
 	add_child(menu)
 	menu.mode_picked.connect(set_mode)
 	menu.new_run_pressed.connect(new_run)
@@ -669,6 +680,7 @@ func _clear_table() -> void:
 	machine_view.show_bill(0, 0.0)
 	run_card.hide_card()
 	phone.visible = false
+	item_picker.visible = false
 
 
 ## The room and the bills of the stage in play: the layer's in the run, the player's
@@ -1246,16 +1258,7 @@ func phone_state() -> Dictionary:
 			"ok": economy.cash >= run.reroll_price() and not run.offerable().is_empty()}
 	if run.can_skip_offers():
 		st.skip_offers = {"text": tr("SKIP FOR AN ITEM"), "ok": true}
-	var held := []
-	for it in run.catalog.items:
-		var n := run.held(it.id)
-		if n > 0:
-			held.append({"id": it.id, "name": tr(it.name), "kind": tr(it.kind), "rarity_id": it.rarity, "desc": _item_desc(it),
-				"note": tr("HELD %d") % n, "use_text": tr("USE") if it.use == "column" or it.use == "now" else "",
-				"can_use": _can_use(it), "why": _use_why(it)})
-	st.held = held
-	st.held_line = tr("ITEMS %d OF %d") % [run.items_held(), run.item_cap()]
-	st.use_line = tr("USE: PICK A COLUMN AT THE MACHINE, OR FROM HERE") if not held.is_empty() else ""
+	st.merge(items_state())
 	var shelf := []
 	for id in run.shelf:
 		var it := run.catalog.item(id)
@@ -1279,6 +1282,22 @@ func phone_state() -> Dictionary:
 		contacts.append({"id": c.id, "name": tr(c.name), "line": line, "answers": c.get("answers", false), "services": services})
 	st.contacts = contacts
 	return st
+
+
+## The items held, as the phone's ITEMS page and the item picker on the table both show
+## them (one set of rules for USE and for why it is grey), translated: `held` (a row
+## each: name, kind, what it does, HELD n, USE, whether it can be used now and when
+## it can), `held_line` and `use_line`. Run only.
+func items_state() -> Dictionary:
+	var held := []
+	for it in run.catalog.items:
+		var n := run.held(it.id)
+		if n > 0:
+			held.append({"id": it.id, "name": tr(it.name), "kind": tr(it.kind), "rarity_id": it.rarity, "desc": _item_desc(it),
+				"note": tr("HELD %d") % n, "use_text": tr("USE") if it.use == "column" or it.use == "now" else "",
+				"can_use": _can_use(it), "why": _use_why(it)})
+	return {"held": held, "held_line": tr("ITEMS %d OF %d") % [run.items_held(), run.item_cap()],
+		"use_line": tr("USE: PICK A COLUMN AT THE MACHINE, OR FROM HERE") if not held.is_empty() else ""}
 
 
 ## A shelf perk on the phone's SHELF page: its level, what it does now and next, its
@@ -1398,60 +1417,113 @@ func _on_phone(action: String, id: String) -> void:
 		"buy_service":
 			ok = run != null and run.buy_service(id, economy)
 		"use_item":
-			var it := run.catalog.item(id) if run != null else {}
-			if it.is_empty() or not _can_use(it):
-				pass
-			elif it.use == "column":
-				aim = id
-				machine.armed = false
-				machine.change_armed = false
-				phone.close()
-				return
-			else:
-				var got := run.use_now(id, machine, economy)
-				ok = not got.is_empty()
-				match id:
-					"slip":
-						if ok:
-							# Every unopened ticket on the table goes back for its full price.
-							var gone := tray.items.duplicate()
-							tray.clear()
-							var hand := _trash_hand()
-							if not hand.is_empty():
-								gone.append(current)
-								current = {}
-								flow.send_away(trash_can.mouth(), false)
-							var back := run.refund_tickets(economy, gone, 100)
-							hud.set_cash(economy.cash)
-							hud.set_status("RETURNED %d · $%d BACK", [gone.size(), back])
-					"overtime":
-						hud.set_status("OVERTIME ON")
-					"tip":
-						if ok:
-							var col := columns.find(int(got.column))
-							phone.close()
-							say("HOTTEST: COLUMN %d", [col + 1], 4.0)
-							_info_column = col
-							_info_until = _time + 4.0
-							Sfx.play("toss")
-							_store_session()
-							return
-					"happy":
-						hud.set_status("HAPPY HOUR")
-					"safety":
-						hud.set_status("SAFETY NET ON")
-					"copy":
-						if ok:
-							hud.set_status("COPIED %s", [tr(run.catalog.item(got.copied).name)])
+			use_item(id)
+			return
 	if ok:
 		Sfx.play("toss")
 	phone.show_state(phone_state())
 	_store_session()
 
 
+## A held item's USE key, on the phone's ITEMS page or on the item picker (one path for
+## both, so an item does the same from either). A column item then waits for a column
+## press at the machine (aim); TIP-OFF names the hottest column. Both put the phone and
+## the picker away; the others leave them up with the new numbers.
+func use_item(id: String) -> void:
+	var it := run.catalog.item(id) if run != null else {}
+	var ok := false
+	if it.is_empty() or not _can_use(it):
+		pass
+	elif it.use == "column":
+		aim = id
+		machine.armed = false
+		machine.change_armed = false
+		_put_items_away()
+		return
+	else:
+		var got := run.use_now(id, machine, economy)
+		ok = not got.is_empty()
+		match id:
+			"slip":
+				if ok:
+					# Every unopened ticket on the table goes back for its full price.
+					var gone := tray.items.duplicate()
+					tray.clear()
+					var hand := _trash_hand()
+					if not hand.is_empty():
+						gone.append(current)
+						current = {}
+						flow.send_away(trash_can.mouth(), false)
+					var back := run.refund_tickets(economy, gone, 100)
+					hud.set_cash(economy.cash)
+					hud.set_status("RETURNED %d · $%d BACK", [gone.size(), back])
+			"overtime":
+				hud.set_status("OVERTIME ON")
+			"tip":
+				if ok:
+					var col := columns.find(int(got.column))
+					_put_items_away()
+					say("HOTTEST: COLUMN %d", [col + 1], 4.0)
+					_info_column = col
+					_info_until = _time + 4.0
+					Sfx.play("toss")
+					_store_session()
+					return
+			"happy":
+				hud.set_status("HAPPY HOUR")
+			"safety":
+				hud.set_status("SAFETY NET ON")
+			"copy":
+				if ok:
+					hud.set_status("COPIED %s", [tr(run.catalog.item(got.copied).name)])
+	if ok:
+		Sfx.play("toss")
+	phone.show_state(phone_state())
+	_show_items_state()
+	_store_session()
+
+
+func _put_items_away() -> void:
+	phone.close()
+	item_picker.close()
+
+
 func _on_phone_closed() -> void:
 	if run_card.visible:
 		_show_run_card()
+
+
+# --- the item tray and its picker -----------------------------------------------------
+
+## The item tray on the table was clicked: the picker of the items held (run only).
+func open_items() -> void:
+	if run == null or menu.visible or _switching or not _ready_done or item_picker.visible or phone.visible \
+			or run_card.visible:
+		return
+	Sfx.play("button")
+	aim = ""
+	item_picker.open(items_state())
+
+
+## A key on the item picker: USE goes the phone's way.
+func _on_picker(action: String, id: String) -> void:
+	if action == "use_item":
+		use_item(id)
+
+
+func _show_items_state() -> void:
+	if run != null:
+		item_picker.show_state(items_state())
+
+
+## What lies in the item tray: a token for each item held, in the catalogue's order.
+func item_tokens() -> Array:
+	var out := []
+	if run != null:
+		for it in run.catalog.items:
+			for n in run.held(it.id):
+				out.append({"id": it.id, "kind": it.kind, "rarity": it.rarity})
+	return out
 
 
 # --- menu and settings --------------------------------------------------------------
@@ -1521,6 +1593,7 @@ func set_language(code: String) -> void:
 		_show_run_card()
 	if phone.visible:
 		phone.show_state(phone_state())
+	_show_items_state()
 
 
 func quit_game() -> void:
@@ -1587,7 +1660,7 @@ func _notification(what: int) -> void:
 		# Parts never added (run-tool, missing data). Its own parts only.
 		Orphans.free_members(self, ["painter", "rooms", "machine_light", "camera", "view", "flecks", "flow",
 			"table_tray", "pile", "win_pile", "machine_view", "hud", "notepad", "input", "menu", "run_card",
-			"phone", "table_phone", "trash_can"])
+			"phone", "table_phone", "trash_can", "item_tray", "item_picker"])
 
 
 
@@ -1745,6 +1818,7 @@ func dev_run(what: String, arg := "") -> void:
 				_show_run_card()
 	if phone.visible:
 		phone.show_state(phone_state())
+	_show_items_state()
 	_store_session()
 
 
@@ -1813,7 +1887,7 @@ func _take_ticket() -> Dictionary:
 
 ## A revealed winner may go to its pile by itself only while nothing is over the table.
 func _may_auto_collect() -> bool:
-	return not (menu.visible or run_card.visible or phone.visible)
+	return not (menu.visible or run_card.visible or phone.visible or item_picker.visible)
 
 
 func _deal_after_toss() -> bool:
@@ -1911,6 +1985,8 @@ func _process(dt: float) -> void:
 func _refresh_ui() -> void:
 	hud.set_cash(economy.cash)
 	hud.set_ledger(tray.size(), economy)
+	if run != null:
+		item_tray.show_items(item_tokens())
 	var n := economy.net()
 	var net := tr("NET %s") % (("+" if n > 0 else "-" if n < 0 else "") + Hud._money(absi(n)))
 	if run != null and run.reading() >= BoxReading.BOOKS:
@@ -2046,6 +2122,8 @@ func _place_bill_window() -> void:
 ## the player's table (free play); the run's layers set their own without that.
 func set_room(room_id: String, remember := true) -> void:
 	rooms.set_room(room_id)
+	item_tray.set_room(room_id)
+	item_tray.show_tray(run != null)
 	if remember:
 		Save.set_setting("room", room_id)
 	_menu_state()
@@ -2093,3 +2171,5 @@ func _place_tray_and_pile() -> void:
 	table_phone.rotation = Vector3(0, -0.32, 0)
 	# The trash can stands at the near right, in front of the tray and beside the phone.
 	trash_can.position = Vector3(sx * 1.0, 0, 2.8)
+	item_tray.position = ITEM_TRAY_AT * Vector3(sx, 1, 1)
+	item_tray.rotation = Vector3(0, ITEM_TRAY_YAW, 0)

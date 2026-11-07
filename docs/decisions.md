@@ -929,3 +929,42 @@ work in free play and the run; the preview tools (`use_save` off) keep both off.
   counting what opening by hand with Space pays; with the setting off a click does what it
   did. A winner goes to the winners' pile after the pause, a loser stays, and a card over the
   table holds the winner. `tests/test_save.gd` round-trips both settings.
+
+## M9.7, item 5: the item tray on the table
+G chose code shapes per room, like the room props. A small tray of the room's own lies
+on the table in the run (`ItemTray`, built with its own `RoomKit` and no per-mesh
+colliders: one click box around the whole tray, lid included, with meta `items`):
+- **Diner**: a tin serving tray with a paper napkin in it, its front rim bent in on the
+  right where it took a knock. **Bar**: a cigar box, red paper lining, the lid up past
+  upright with its cream and red label facing the player. **Bingo hall**: a light blue
+  plastic organiser, two compartments for the items and a third holding a red dauber
+  standing and a green one lying down.
+- **Where**: the near left, mirroring the trash can (`Game.ITEM_TRAY_AT`, x a share of
+  the tray's offset as for the winners' pile, turned 0.3 toward the player): in front of
+  the discard pile, left of the notepad, below the held ticket, so it never sits under
+  the ticket in hand and clicks on the ticket still reach the paper. The same spot in all
+  three rooms; `tests/test_item_tray.gd` checks it clears every room's props on a wide
+  and a 4:3 window. A full discard pile can reach its back edge.
+- **Tokens**: one per item held (the catalogue's order), up to eight; past that the rest
+  are implied. A shape per kind (INFO a card with an ink line, ECONOMY a coin, ACTION a
+  block, SURE a gem) in the phone's rarity colour (cream, blue, gold). Laid again only
+  when what is held changes.
+- **Free play** has no items and the phone has no SHOP there, so the tray is put away
+  (hidden, its click box off). In the run it shows even when empty.
+- **The picker** (`ItemPicker`, the run card's plate and LCD look): clicking the tray at
+  the table opens it. It shows the very rows of the phone's ITEMS page: `Game.items_state`
+  (taken out of `phone_state`, which now merges it in) builds them for both, so USE is lit
+  or grey by the same `_can_use` and the same reason (`_use_why`) shows under a grey or
+  missing USE. USE on either goes through `Game.use_item` (taken out of `_on_phone`), so an
+  item does the same from both; a column item (or TIP-OFF) puts the phone and the picker
+  away, the others leave the picker up with the new numbers, as the phone stays up.
+  BACK, Esc or a click beside the plate closes it. While it is up nothing reaches the
+  table or the machine, and a revealed winner waits (`_may_auto_collect`), as for the
+  phone and the run card. With nothing held it says so and points at the phone's shop
+  (one new line in `locale/ui.csv`, no new Chinese characters). The phone's ITEMS page
+  stays as it was.
+- Since the tray is at the table and column items are used at the machine
+  (`_can_use`: `at_machine`), their USE is always grey on the picker, with the phone's
+  reason under it. Only RETURN SLIP, HAPPY HOUR, SAFETY NET, OVERTIME and COPIER can be
+  used from the tray. If G wants the tray to start a column item, USE there could take the
+  player to the machine with the item aimed; that would change the rule, so it is not done.

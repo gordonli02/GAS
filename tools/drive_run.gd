@@ -2,9 +2,9 @@ extends Node
 ## Plays the story mode's run in the game scene with synthetic input: the menu's mode
 ## keys, the story and day cards, a day at the machine (bills, tickets, NEW BOX, LOAN,
 ## the last sale of a box), the perk offers after a day (buy, reroll, done), the phone
-## (LOAN, the perk tree, the item shelf, box reading, a call to a contact), HIGH ROLLER's
-## fixed bet, opening at once, putting a ticket back in the tray, the trash can, tickets kept
-## overnight, LEAVE, a shift of work, paying early into the next layer
+## (LOAN, the perk tree, the item shelf, box reading, a call to a contact), the item tray
+## and its picker, HIGH ROLLER's fixed bet, opening at once, putting a ticket back in the
+## tray, the trash can, tickets kept overnight, LEAVE, a shift of work, paying early into the next layer
 ## and its stake, saving and reloading mid-run, the deadline, the settlement, and a
 ## whole run cleared by work alone. Checks the money identity every frame and saves
 ## screenshots. The save file goes to <output dir>/save/, never the player's own.
@@ -357,6 +357,19 @@ func _run() -> void:
 	_expect(game.phone.visible, "clicking the phone on the table opens it")
 	_key(KEY_ESCAPE)
 	await _wait(0.3)
+	# The item tray (M9.7): its picker lists what the phone's ITEMS page lists. LUCKY COIN
+	# is used on a column at the machine: grey at the table, the phone's reason under it.
+	_expect(game.item_tray.visible and game.item_tray.token_count() == mini(run.items_held(), ItemTray.MAX_TOKENS),
+		"the item tray on the table, a token for each item held")
+	_click(game.camera.unproject_position(game.item_tray.global_position + Vector3(0, 0.12, 0)))
+	await _wait(0.4)
+	var coin := game.item_picker.key("use_coin")
+	_expect(game.item_picker.visible and coin != null and coin.disabled and game.item_picker.why("coin") != "",
+		"clicking the item tray opens the picker: LUCKY COIN grey at the table, and why")
+	await _shot("08c_item_picker")
+	_key(KEY_ESCAPE)
+	await _wait(0.3)
+	_expect(not game.item_picker.visible and not game.menu.visible, "Esc puts the picker away (and opens no menu)")
 
 	# LEAVE: the day's summary, then the next day.
 	_click(_button_center(game.hud.run_key("leave")))
@@ -482,6 +495,7 @@ func _run() -> void:
 	_expect(game.mode == "free" and game.run == null and not game.run_card.visible, "FREE PLAY")
 	_expect(game.tray.size() == 1 and game.economy.cash == 195, "free play as it was left: one ticket, $195")
 	_expect(Save.run.is_empty(), "nothing of the finished run is kept")
+	_expect(not game.item_tray.visible, "free play: no item tray on the table")
 	# The trash can in free play: everything unopened, after asking.
 	_key(KEY_B)
 	await _wait(1.6)

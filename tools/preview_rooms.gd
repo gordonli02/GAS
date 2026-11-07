@@ -5,6 +5,7 @@ extends Node
 ##   --table-only      skip the machine views
 ##   --only=<room>     just that room
 ##   --dim=f           scale the room's own gains by f (trying brightness steps)
+##   --items           show the run's item tray (M9.7) at the table, eight tokens in it
 
 var game: Game
 
@@ -18,6 +19,7 @@ func _run() -> void:
 	var out: String = args[0]
 	DirAccess.make_dir_recursive_absolute(out)
 	var table_only := args.has("--table-only")
+	var items := args.has("--items")
 	for a in args:
 		if a.begins_with("--gains="):
 			RoomSet.gains_override = Array(a.trim_prefix("--gains=").split(",")).map(func(x): return float(x))
@@ -36,6 +38,9 @@ func _run() -> void:
 		if only != "" and id != only:
 			continue
 		game.set_room(id)
+		if items:
+			game.item_tray.show_tray(true)
+			game.item_tray.show_items(_sample_items())
 		game.close_machine()
 		await _wait(1.0)
 		await _shot(out.path_join(id + "_table.png"))
@@ -49,6 +54,14 @@ func _run() -> void:
 		await _wait(1.0)
 		await _shot(out.path_join(id + "_machine.png"))
 	get_tree().quit()
+
+
+## One token of each kind and rarity, eight in all (the tray's most).
+static func _sample_items() -> Array:
+	var out := []
+	for k in ItemTray.MAX_TOKENS:
+		out.append({"kind": ["INFO", "ECONOMY", "ACTION", "SURE"][k % 4], "rarity": ["common", "rare", "legendary"][k % 3]})
+	return out
 
 
 func _wait(t: float) -> void:

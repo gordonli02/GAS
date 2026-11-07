@@ -2,8 +2,8 @@ class_name GameInput
 extends Node
 ## Mouse and keys for the whole game. Clicks respect occlusion: the front-most
 ## thing under the pointer decides (MIGRATION.md "Table and machine navigation").
-## Esc opens and closes the menu (or puts the phone away first); while either is open
-## nothing else reaches the game. P takes the phone out and puts it away.
+## Esc opens and closes the menu (or puts the phone or the item picker away first); while
+## any of them is open nothing else reaches the game. P takes the phone out and puts it away.
 ## Backquote toggles the developer panel in debug builds.
 
 var game: Game
@@ -17,6 +17,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		if e.keycode == KEY_ESCAPE:
 			if game.phone.visible and not game.menu.visible:
 				game.phone.close()
+			elif game.item_picker.visible and not game.menu.visible:
+				game.item_picker.close()
 			else:
 				game.toggle_menu()
 			get_viewport().set_input_as_handled()
@@ -32,7 +34,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			game.dev.toggle()
 			get_viewport().set_input_as_handled()
 			return
-	if game.menu.visible or game.run_card.visible or game.phone.visible:
+	if game.menu.visible or game.run_card.visible or game.phone.visible or game.item_picker.visible:
 		return
 	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
 		if e.pressed:
@@ -103,6 +105,9 @@ func _press(pos: Vector2) -> void:
 	if hit.has_meta("trash"):
 		game.click_trash()
 		return
+	if hit.has_meta("items"):
+		game.open_items()
+		return
 	if hit.has_meta("tray") and game.put_back():
 		return
 	if flow.state == TicketFlow.State.IDLE and game.tray.is_empty():
@@ -142,7 +147,7 @@ func _update_cursor(pos: Vector2) -> void:
 			shape = Input.CURSOR_CAN_DROP
 		else:
 			var hit := _pick(pos)
-			if hit.has_meta("machine") or hit.has_meta("phone") or hit.has_meta("trash") \
+			if hit.has_meta("machine") or hit.has_meta("phone") or hit.has_meta("trash") or hit.has_meta("items") \
 					or (hit.has_meta("tray") and game.flow.hand() in [TableNav.Hand.FRONT, TableNav.Hand.BACK]):
 				shape = Input.CURSOR_POINTING_HAND
 	Input.set_default_cursor_shape(shape)
