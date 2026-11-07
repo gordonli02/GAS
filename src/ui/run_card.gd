@@ -52,7 +52,8 @@ func _ready() -> void:
 
 
 ## title: text. lines: each a text, or [text, style] with style "text" (default),
-## "dim", "big", "story" (wrapped prose) or "note" (dim, wrapped). rows: rows of keys, each key
+## "dim", "big", "story" (wrapped prose) or "note" (dim, wrapped), or [text, style, Color]
+## for a line in its own colour (an offer's rarity). rows: rows of keys, each key
 ## {id, text, kind: "key" (lit green, default) or "chrome", disabled: bool}.
 func show_card(title: String, lines: Array, rows: Array) -> void:
 	_title.text = title
@@ -63,8 +64,9 @@ func show_card(title: String, lines: Array, rows: Array) -> void:
 	for line in lines:
 		var text: String = line if line is String else line[0]
 		var style: String = "text" if line is String else line[1]
-		var l := LcdStyle.label(text, 30 if style == "big" else 24,
-			LcdStyle.DIM_TEXT if style == "dim" or style == "note" else LcdStyle.BRIGHT_TEXT)
+		var tint: Color = line[2] if line is Array and line.size() > 2 else \
+			(LcdStyle.DIM_TEXT if style == "dim" or style == "note" else LcdStyle.BRIGHT_TEXT)
+		var l := LcdStyle.label(text, 30 if style == "big" else 24, tint)
 		l.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 		LcdStyle.menu_look(l)
 		if style == "story" or style == "note":

@@ -111,10 +111,11 @@ const RARITY_WEIGHT := {"common": 10, "rare": 5, "legendary": 2}
 ## The deal at each layer (RunState.deal_offers), one entry per layer, the last one
 ## for any layer after it: the weight of each rarity (0 deals none) and the kinds left
 ## out (G, docs/perk_research.md section 5.12). Layer 1 is mostly common, a few rare,
-## no legendary and no risk; layer 2 opens everything at RARITY_WEIGHT; layer 3 weighs
+## a legendary now and then (G: the first layer must be able to raise a player's
+## ceiling) and no risk; layer 2 opens everything at RARITY_WEIGHT; layer 3 weighs
 ## legendary up. The weights are placeholders.
 const DEAL := [
-	{"rarity": {"common": 10, "rare": 3, "legendary": 0}, "no_kinds": ["risk"]},
+	{"rarity": {"common": 10, "rare": 3, "legendary": 1}, "no_kinds": ["risk"]},
 	{"rarity": {"common": 10, "rare": 5, "legendary": 2}, "no_kinds": []},
 	{"rarity": {"common": 10, "rare": 5, "legendary": 5}, "no_kinds": []},
 ]
@@ -473,8 +474,8 @@ func problems() -> PackedStringArray:
 		for k in DEAL[i].no_kinds:
 			if not KINDS.has(k):
 				out.append("the deal at layer %d: no kind %s" % [i + 1, k])
-	if not DEAL.is_empty() and (int(DEAL[0].rarity.get("legendary", 0)) != 0 or not DEAL[0].no_kinds.has("risk")):
-		out.append("the deal at layer 1: no legendary and no risk (G)")
+	if not DEAL.is_empty() and not DEAL[0].no_kinds.has("risk"):
+		out.append("the deal at layer 1: no risk (G)")
 	for p in perks:
 		if _circular(p.id, {}):
 			out.append("perk %s needs itself" % p.id)

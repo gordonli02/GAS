@@ -735,15 +735,22 @@ func test_the_deal_by_layer() -> void:
 	var r := _run()
 	var legendary := func(p: Dictionary) -> bool: return p.rarity == "legendary"
 	var risk := func(p: Dictionary) -> bool: return Catalog.kind(p) == "risk"
-	# Layer 1: no legendary, no risk; mostly common.
+	# Layer 1: no risk; mostly common; a legendary now and then once one is open (G:
+	# the first layer can raise the ceiling).
 	var d1 := _deals(r)
-	eq(_count(r, d1, legendary), 0, "layer 1: nothing legendary dealt")
 	eq(_count(r, d1, risk), 0, "layer 1: no risk perk dealt")
 	check(_count(r, d1, func(p: Dictionary) -> bool: return p.rarity == "common") > _count(r, d1, func(p: Dictionary) -> bool: return p.rarity == "rare"),
 		"layer 1: more common than rare")
 	for id in r.offerable():
-		check(Catalog.kind(r.catalog.perk(id)) != "risk" and r.catalog.perk(id).rarity != "legendary", "layer 1: %s not even offerable" % id)
+		check(Catalog.kind(r.catalog.perk(id)) != "risk", "layer 1: %s not even offerable" % id)
 	_two_and_two(r, d1, "layer 1")
+	var opened := _run()
+	opened.perks = {"closer": 1}
+	var leg1 := _count(opened, _deals(opened), legendary)
+	check(leg1 > 0, "layer 1 with CLOSER: SNOWBALL or ASSEMBLY LINE dealt now and then (%d)" % leg1)
+	opened.layer = 1
+	var leg1b := _count(opened, _deals(opened), legendary)
+	check(leg1 < leg1b, "fewer than layer 2 would deal with the same perks (%d to %d)" % [leg1, leg1b])
 	# Layer 2: everything open.
 	r.layer = 1
 	var d2 := _deals(r)
@@ -757,7 +764,7 @@ func test_the_deal_by_layer() -> void:
 	var leg3 := _count(r, d3, legendary)
 	check(leg3 > leg2, "layer 3: more legendary than layer 2 (%d to %d)" % [leg3, leg2])
 	_two_and_two(r, d3, "layer 3")
-	note("legendary dealt over 180 deals: layer 2 %d, layer 3 %d" % [leg2, leg3])
+	note("legendary dealt over 180 deals: layer 1 (with CLOSER) %d, layer 2 %d, layer 3 %d" % [leg1, leg2, leg3])
 	# A layer past the table deals by the last one's weights (the seed has the layer in it).
 	eq(Catalog.deal(5), Catalog.deal(2), "past the table: the last layer's weights")
 	r.layer = 5

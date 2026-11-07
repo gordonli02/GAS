@@ -615,11 +615,12 @@ The rules are `docs/perk_research.md` section 5 ("12. 发牌规则") and `docs/r
 M9.5; this is how they landed. The weights are placeholders.
 - **A deal table per layer** (`Catalog.DEAL`, one entry per layer, the last one for any
   layer after it; `Catalog.deal(layer)`): each rarity's weight and the kinds left out.
-  Layer 1: common 10 / rare 3 / legendary 0, no risk; layer 2: 10 / 5 / 2 (the old
-  `RARITY_WEIGHT`, which stays as the list of rarities); layer 3: 10 / 5 / 5.
-  `Catalog.deal_weight(p, layer)` is a perk's weight there, 0 when left out, and
-  `problems()` checks the table (three entries, a weight 0 or more for every rarity,
-  known kinds, layer 1 without legendary and without risk).
+  Layer 1: common 10 / rare 3 / legendary 1 (G, after a first look: the first layer
+  must be able to raise a player's ceiling, so a legendary comes now and then once
+  one is open), no risk; layer 2: 10 / 5 / 2 (the old `RARITY_WEIGHT`, which stays as
+  the list of rarities); layer 3: 10 / 5 / 5. `Catalog.deal_weight(p, layer)` is a
+  perk's weight there, 0 when left out, and `problems()` checks the table (three
+  entries, a weight 0 or more for every rarity, known kinds, layer 1 without risk).
 - **`RunState.offerable()` is the layer's**: a perk the layer's deal leaves out is not
   offerable at all, so the REROLL key greys out when nothing is left to deal.
 - **`deal_offers()`** draws by the layer's weights, still x1.5 for a level up and x2 for
@@ -630,9 +631,11 @@ M9.5; this is how they landed. The weights are placeholders.
   (DOUBLE DOWN, `offer_bonus`) are drawn freely. Two kinds means two branches (risk,
   twist and sure are each a branch of their own), so the branch rule only matters when
   the pool is all build.
-- **The offers card** (`Game._offer_card`) shows each offer's kind next to its rarity
-  (`Catalog.KIND_NAMES`) and, through `_perk_text`, a risk perk's cost; still no
-  requirements on it (those are the shelf's).
+- **The offers card** (`Game._offer_card`) shows each offer's kind (`Catalog.KIND_NAMES`)
+  and, through `_perk_text`, a risk perk's cost. The rarity is not written (G): the
+  line is in its colour (`Phone.rarity_color`: gold, blue, plain for common; a card
+  line may carry a Color as its third element). Still no requirements on it (those
+  are the shelf's).
 - **The perks of a form** (section 6b) are not written; the hook is there: a dealt perk
   with `form` (a form's uid) is offerable only when `offerable(forms)` /
   `deal_offers(forms)` is given that uid. Nobody passes the machine's forms yet, so such

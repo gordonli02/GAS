@@ -402,6 +402,12 @@ func _perk_node(p: Dictionary) -> Button:
 
 
 func _rarity_color(r: String) -> Color:
+	return rarity_color(r)
+
+
+## A rarity's colour (the phone's tree, the card of offers): gold, blue, or the dim
+## text for common.
+static func rarity_color(r: String) -> Color:
 	match r:
 		"legendary":
 			return GOLD
