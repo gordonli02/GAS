@@ -1013,3 +1013,69 @@ stays true.
   the share (the full share on Lucky Spur), boxes already on the machine untouched;
   CRUMBS's total paid per box unchanged, pieces on the next losers, edges (fewer losers,
   no second split); all three the same from a seed and replayed from the log.
+
+## M9.7 item 4, and the batch line and the line that wins more often after G's look
+G's decisions after item 3 (2026-11-07); the plan is `docs/roadmap.md` M9.7 items 3 and 4.
+- **ALL IN wins about half the time on every form, the x3 kept.** The next window wins
+  when its printed prizes reach a share of the staked window's printed prizes (more than
+  $0 always). The share is per form, `Catalog.ALL_IN_SHARE` (form uid -> percent) with
+  `ALL_IN_DEFAULT` 75 for a form without a row. **Decided here: in the catalog, not the
+  form's json**: it is the perk's balance, found by the simulator, kept beside the other
+  perk numbers (CONSOLATION); the json holds the form's own odds. Each ticket of the
+  staked window counts at its own form's share (`window_bar`, the sum of prize x
+  percent; `Catalog.all_in_bar` rounds it up to dollars, $1 at least), so a window of
+  two forms has a fair bar. `last_window` carries `bar`; a push keeps it as `push_need`;
+  `RunState.push_target()` is what the card shows. Both are saved; a run saved before
+  gets the old rule (more than the window). Blind P (`RunSim.push_odds`, 200 boxes):
+  Big Catch 100% 0.53, Hot Plate 100% 0.50, Lucky Spur 100% 0.52, Pecking Order 75%
+  0.50, Ka-Bawk! 50% 0.54, One Flock 75% 0.50, Nugget Rush 70% 0.49, Peckeye 100% 0.54.
+  Windows print in steps of the smallest prize, so P jumps between bars (at 100% "as
+  much" already wins; at 101% P falls to 0.15-0.34; Ka-Bawk! is 0.44 at 55%, 0.54 at
+  50%). With P near 0.5 and x3 a push is worth 1.5 stakes: G's call. The card in
+  game.gd still says "MORE THAN" the window's printed sum: it is the main session's to
+  wire (`push_target()`, "AT LEAST").
+- **QUICK HANDS, CHAIN and ENCORE wait for the shop outside the run (M13).** They carry
+  `"meta": true`: `Catalog.perks_of` and `dealt()` skip them (so the shelf, the deal and
+  the phone's lists), `RunState.can_buy_perk` refuses them, and a saved offer of one is
+  dropped. Their effects and code are untouched, so a save or the developer panel's
+  "every perk" (which sets every non-risk perk, these too) still opens in batches; M13
+  turns them back on. `Catalog.problems` reports a perk of the run that needs a meta one.
+  ALL IN needs STREAK 1 instead of CHAIN 1.
+- **The simulator**: the `batch` bot stays, as the window line (STREAK, ALL IN, MAGNET,
+  CRUMBS, CONSOLATION, HIGH ROLLER), opening one ticket at a time; `build` takes STREAK
+  where it took CHAIN and ENCORE, and no shelf perk. `EV_SETS` rows holding QUICK HANDS,
+  CHAIN or ENCORE stay as "what if" rows marked M13, each beside a row without them; the
+  押一把 rows take STREAK 1. `push_odds` takes a `shares` override and prints the share.
+- **CRUMBS** (5 / 20): a prize bigger than the smallest breaks over up to 5 / 20 of the
+  next losers in its box, each the smallest prize; the ticket keeps the rest, the smallest
+  at least. It was 1 / 2 pieces; `crumble` already had this rule, only the levels and
+  text changed. Winners per 100 (60 boxes, none / 1 / 2): Big Catch 14.3 / 14.4 / 14.9,
+  Hot Plate 16.3 / 16.4 / 16.8, Lucky Spur 19.0 / 20.2 / 24.0, Pecking Order 14.2 /
+  14.9 / 16.6, Ka-Bawk! 8.5 / 9.2 / 10.9, One Flock 13.7 / 14.4 / 16.1, Nugget Rush
+  12.4 / 14.3 / 16.3, Peckeye 16.4 / 17.0 / 18.7. Big Catch and Hot Plate hold one or two
+  prizes over the smallest a box, so it stays small there.
+- **PACKED** (25 / 50%): of the prizes bigger than the smallest a box holds when it goes
+  on the machine (tops and middles, every prize on a ticket), that share is broken into
+  smallest prizes, each picked from the seed, its ticket keeping one and losers picked
+  from the seed taking the rest; same money to the coin. **Decided here: the fraction of
+  a prize is rolled from the seed** (rounding sent Big Catch's one big prize to 0% at
+  level 1 and 100% at level 2). Winners per 100 (none / 1 / 2): Big Catch 14.3 / 14.9 /
+  17.0, Hot Plate 16.3 / 16.6 / 16.8, Lucky Spur 19.0 / 25.6 / 31.5, Pecking Order 14.2
+  / 15.1 / 15.9, Ka-Bawk! 8.5 / 11.9 / 14.5, One Flock 13.7 / 14.5 / 15.3, Nugget Rush
+  12.4 / 13.4 / 14.4, Peckeye 16.4 / 17.1 / 18.1. `TicketBox.PACK_ROLES` is gone.
+- **Stacking** (`box_return`, 6 boxes a form): PENNY JAR 2 alone 2.53; with PACKED 2 it
+  was 2.87 (+0.34, over the 0.25 line), so **the smallest prizes PACKED makes are not
+  small prizes to PENNY JAR nor prizes to STACKER**: `pack` counts them on the ticket
+  (`packed`), `pay_ticket` pays them as printed and leaves them out of STACKER's count.
+  After: PACKED 2 + PENNY JAR 2 2.53 (+0.00); PENNY JAR 2 + STREAK 2 5.04, with PACKED 2
+  5.43; STREAK 2 2.07, with PACKED 2 2.23; CRUMBS 2 + PENNY JAR 2 2.75 (+0.22, under the
+  line, left as it is: its pieces do take PENNY JAR); PACKED or CRUMBS alone 1.047 (no
+  perks 1.047). The card says NOT FOR PENNY JAR OR STACKER. Rarity and prices unchanged.
+- **Text**: ALL IN's, PACKED's and CRUMBS's descriptions in both languages (CRUMBS has one
+  text now, with the count); one new character (半), so the CJK fonts were cut again.
+- **Tests**: `test_run_sim` checks every form's blind P within 0.45-0.55 (40 boxes on
+  other seeds; 60 with `--full`) and that the old bar was under 0.4; `test_perks` the bar
+  by form and for mixed and empty windows, the three parked perks never shelved, dealt
+  or sold (every layer, 30 rerolls) and still working when held, the save of the new
+  window fields, CRUMBS on all eight forms at 5 / 20, PACKED's share per box and in all,
+  its money, determinism and replay, and its pieces passed over by PENNY JAR and STACKER.

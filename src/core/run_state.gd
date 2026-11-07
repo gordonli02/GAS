@@ -70,10 +70,16 @@ var window_n := 0
 var window_printed := 0
 var window_paid := 0
 var window_wins := 0
-var last_window := {}      ## the window closed last: {printed, paid}; {} before the day's first
+## ALL IN's bar so far: every printed prize of the window times its form's share
+## (Catalog.ALL_IN_SHARE), in dollar-percents (Catalog.all_in_bar makes it dollars).
+var window_bar := 0
+## The window closed last: {printed, paid, bar} (bar: what the next window has to print
+## for a push on this one to win); {} before the day's first.
+var last_window := {}
 var streak := 0            ## STREAK: windows in a row with a winner
 var push_stake := 0        ## ALL IN: the stake on the next window, 0 when none is pending
-var push_printed := 0      ## the printed sum the next window has to beat
+var push_printed := 0      ## the staked window's printed sum
+var push_need := 0         ## the printed sum the next window has to reach (the bar, $1 at least)
 var window_closed := false ## a window closed since the game last asked (take_window_closed); not saved
 ## Today's: a HAPPY HOUR, a SAFETY NET, the ledger when the day began.
 var happy := false
@@ -678,17 +684,27 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 		if back > 0:
 			e.bonus(back)
 			stats.bonus += back
-		_count_window(e, t, back, false)
+		_count_window(e, t, form, back, false)
 		return back
 	var base := 0.0
 	var tops := 0
 	# CRUMBS: a split ticket's best prize gave `cut` away to the tickets after it.
 	var cut := int(t.get("cut", 0))
+	# PACKED: the smallest prizes it broke off a big one are not small prizes to PENNY
+	# JAR, nor prizes to STACKER (G, 2026-11-07: it must not stack up with PENNY JAR).
+	var packed := int(t.get("packed", 0)) if int(t.get("prize", 0)) > 0 else 0
+	var low := smallest_tier(form)
+	var counted := won_tiers.size()
 	for tier in won_tiers:
 		var p := float(form.tiers[tier].prize)
 		if cut > 0 and tier == int(t.tier):
 			p -= cut
 			cut = 0
+		if packed > 0 and tier == low:
+			packed -= 1
+			counted -= 1
+			base += p
+			continue
 		match str(form.tiers[tier].role):
 			"top":
 				p *= effect_x("top_x")
@@ -699,7 +715,7 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 				p *= effect_x("low_x")
 		base += p
 	var mult := x * snow_x()
-	if won_tiers.size() >= 2:
+	if counted >= 2:
 		mult *= effect_x("stack_x")
 	if int(t.get("no", 0)) <= Catalog.FIRST_TICKETS:
 		mult *= effect_x("first_x")
@@ -718,7 +734,7 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 	e.open_ticket(total)
 	stats.bonus += total - int(t.prize) * ticket_bet
 	stats.best_prize = maxi(int(stats.best_prize), total)
-	_count_window(e, t, total, true)
+	_count_window(e, t, form, total, true)
 	return total
 
 
@@ -782,11 +798,13 @@ func streak_pct() -> int:
 	return mini(effect("streak_cap"), effect("streak_pct") * streak)
 
 
-## A ticket opened (pay_ticket, every path): it counts in the window, and the tenth
-## closes it (_close_window).
-func _count_window(e: Economy, t: Dictionary, paid: int, won: bool) -> void:
+## A ticket opened (pay_ticket, every path): it counts in the window (its printed prize
+## at its form's ALL IN share in the bar), and the tenth closes it (_close_window).
+func _count_window(e: Economy, t: Dictionary, form: FormDef, paid: int, won: bool) -> void:
+	var printed := maxi(0, int(t.prize))
 	window_n += 1
-	window_printed += maxi(0, int(t.prize))
+	window_printed += printed
+	window_bar += printed * Catalog.all_in_share(form.uid() if form != null else "")
 	window_paid += paid
 	if won:
 		window_wins += 1
@@ -796,16 +814,16 @@ func _count_window(e: Economy, t: Dictionary, paid: int, won: bool) -> void:
 
 ## A window of Catalog.WINDOW tickets closed: STREAK counts it (one more with a winner,
 ## back to 0 without; only while the perk is held), a pending ALL IN is settled
-## against its printed sum (more than the stake's window: three times the stake back;
-## as much or less: the stake is gone), and it is kept as the last window (a new push
-## may be put on it). Then the counters start again.
+## against its bar (printed prizes that reach it: three times the stake back; less: the
+## stake is gone), and it is kept as the last window with its own bar (a new push may
+## be put on it). Then the counters start again.
 func _close_window(e: Economy) -> void:
 	if effect("streak_pct") > 0:
 		streak = streak + 1 if window_wins > 0 else 0
 	else:
 		streak = 0
 	if push_stake > 0:
-		if window_printed > push_printed:
+		if window_printed >= maxi(1, push_need):
 			var back := push_stake * 3
 			e.bonus(back)
 			stats.push_won += back
@@ -814,10 +832,12 @@ func _close_window(e: Economy) -> void:
 			stats.push_lost += push_stake
 		push_stake = 0
 		push_printed = 0
-	last_window = {"printed": window_printed, "paid": window_paid}
+		push_need = 0
+	last_window = {"printed": window_printed, "paid": window_paid, "bar": Catalog.all_in_bar(window_bar)}
 	window_closed = true
 	window_n = 0
 	window_printed = 0
+	window_bar = 0
 	window_paid = 0
 	window_wins = 0
 
@@ -829,6 +849,7 @@ func reset_window() -> void:
 		stats.push_lost += push_stake
 	window_n = 0
 	window_printed = 0
+	window_bar = 0
 	window_paid = 0
 	window_wins = 0
 	last_window = {}
@@ -836,11 +857,21 @@ func reset_window() -> void:
 	streak = 0
 	push_stake = 0
 	push_printed = 0
+	push_need = 0
 
 
 ## The stake ALL IN would put up now: what the last window paid.
 func push_offer() -> int:
 	return int(last_window.get("paid", 0))
+
+
+## What the next window has to print for ALL IN to win: the pending push's bar, or,
+## with none pending, the bar a push on the window just closed would have (the card
+## shows it). $1 at least.
+func push_target() -> int:
+	if push_stake > 0:
+		return maxi(1, push_need)
+	return maxi(1, int(last_window.get("bar", 1)))
 
 
 ## Whether a window closed since the last call (the game asks after every opening:
@@ -859,13 +890,14 @@ func can_push(e: Economy) -> bool:
 
 
 ## ALL IN: the last window's pay is staked on the next window (taken out of cash).
-## The next window settles it (_close_window): its printed prizes against this one's,
-## never the money paid, so nothing bought between the windows helps (G).
+## The next window settles it (_close_window): its printed prizes against this one's
+## bar, never the money paid, so nothing bought between the windows helps (G).
 func push(e: Economy) -> bool:
 	if not can_push(e):
 		return false
 	var stake := push_offer()
 	e.pay(stake)
+	push_need = push_target()
 	push_stake = stake
 	push_printed = int(last_window.get("printed", 0))
 	stats.staked += stake
@@ -992,9 +1024,11 @@ func perk_price(perk_id: String) -> int:
 	return int(p.levels[level(perk_id)].price) * stake()
 
 
+## A perk parked for the shop outside the run (Catalog.meta) is never sold in a run.
 func can_buy_perk(perk_id: String, e: Economy) -> bool:
 	var price := perk_price(perk_id)
-	return playing() and price > 0 and missing(perk_id).is_empty() and e.cash >= price
+	return playing() and price > 0 and not Catalog.meta(catalog.perk(perk_id)) and missing(perk_id).is_empty() \
+		and e.cash >= price
 
 
 ## Buys the next level of a shelf perk from cash (the dealt ones come through
@@ -1345,7 +1379,7 @@ func buy_service(service_id: String, e: Economy) -> bool:
 const _INTS := ["layer", "day", "shifts", "borrowed", "loan_due", "loan_bonus", "extra_days", "offer_bonus",
 	"offer_rerolls", "shelf_rerolls", "dry", "snow", "layer_losers", "layer_tops", "day_spent", "day_won",
 	"day_tickets", "noback_days", "window_n", "window_printed", "window_paid", "window_wins", "streak",
-	"push_stake", "push_printed"]
+	"push_stake", "push_printed", "window_bar", "push_need"]
 const _BOOLS := ["offers_open", "offer_bought", "happy", "safety", "sure_armed", "overtime"]
 
 
@@ -1400,7 +1434,7 @@ static func from_dict(d: Dictionary, run_config: RunConfig) -> RunState:
 	for id in r.items.keys():
 		if r.catalog.item(id).is_empty():
 			r.items.erase(id)
-	r.offers = _ids(d.get("offers"), func(id): return not r.catalog.perk(id).is_empty())
+	r.offers = _ids(d.get("offers"), func(id): return not r.catalog.perk(id).is_empty() and not Catalog.meta(r.catalog.perk(id)))
 	r.shelf = _ids(d.get("shelf"), func(id): return not r.catalog.item(id).is_empty())
 	r.offers_open = r.offers_open and not r.offers.is_empty()
 	r.last_item = str(d.get("last_item", ""))
@@ -1423,17 +1457,23 @@ static func from_dict(d: Dictionary, run_config: RunConfig) -> RunState:
 	# The window within its bounds (a run saved before it loads with a fresh one; an
 	# old save's "bet" is ignored: the bet is HIGH ROLLER's level now).
 	var lw = d.get("last_window", {})
+	# A window saved before ALL IN's bar (2026-11-07) gets the old rule's: more than it.
 	if typeof(lw) == TYPE_DICTIONARY and lw.has("printed") and lw.has("paid"):
-		r.last_window = {"printed": maxi(0, int(lw.printed)), "paid": maxi(0, int(lw.paid))}
+		var printed := maxi(0, int(lw.printed))
+		r.last_window = {"printed": printed, "paid": maxi(0, int(lw.paid)), "bar": maxi(1, int(lw.get("bar", printed + 1)))}
 	if r.window_n < 0 or r.window_n >= Catalog.WINDOW or r.window_printed < 0 or r.window_wins > r.window_n \
-			or r.streak < 0 or r.push_stake < 0 or r.push_printed < 0:
+			or r.streak < 0 or r.push_stake < 0 or r.push_printed < 0 or r.window_bar < 0 or r.push_need < 0:
 		r.window_n = 0
 		r.window_printed = 0
+		r.window_bar = 0
 		r.window_paid = 0
 		r.window_wins = 0
 		r.streak = maxi(0, r.streak)
 		r.push_stake = maxi(0, r.push_stake)
 		r.push_printed = maxi(0, r.push_printed)
+		r.push_need = maxi(0, r.push_need)
+	if r.push_stake > 0 and r.push_need <= 0:
+		r.push_need = r.push_printed + 1
 	return r
 
 

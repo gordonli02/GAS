@@ -26,6 +26,7 @@ func test_bots_finish_and_balance() -> void:
 		check(RunSim.BOTS.has(line), "%s is a bot" % line)
 		for id in RunSim.LINES[line].perks + RunSim.LINES[line].shelf:
 			check(not Catalog.standard().perk(id).is_empty(), "%s: %s is in the catalog" % [line, id])
+			check(not Catalog.meta(Catalog.standard().perk(id)), "%s: %s is sold in a run (not parked for M13)" % [line, id])
 	var n := 6 if full else 2
 	for bot in RunSim.BOTS:
 		if bot == "work":
@@ -74,6 +75,27 @@ func test_summary_carries_the_targets_numbers() -> void:
 	check(s.best[0] > 0, "every run wins something")
 	eq(RunSim.percentiles([5, 1, 4, 2, 3], [50, 90, 99]), [3, 5, 5], "nearest rank")
 	eq(RunSim.percentiles([], [50]), [0], "nothing: 0")
+
+
+func test_all_in_wins_about_half() -> void:
+	# G (2026-11-07): a push wins about half the time on every form, the x3 kept; each
+	# form's bar (Catalog.ALL_IN_SHARE) was found with push_odds on 200 boxes. Here
+	# fewer boxes on other seeds: the blind P within 0.45 to 0.55 on every form.
+	var pack := core_pack()
+	if pack == null:
+		return
+	var rows := RunSim.push_odds(pack.forms, 60 if full else 40, "PT")
+	eq(rows.size(), pack.forms.size(), "a row per form")
+	for row in rows:
+		note("ALL IN on %s: share %d%%, P %.3f (%d windows)" % [row.form, row.share, row.p, row.windows])
+		check(row.p >= 0.45 and row.p <= 0.55, "%s: P %.3f within 0.45 to 0.55" % [row.form, row.p])
+		check(row.windows > 1000, "%s: enough windows (%d)" % [row.form, row.windows])
+	# The old bar (more than the window) was about a third or less.
+	var old := {}
+	for f in pack.forms:
+		old[f.id] = 101
+	for row in RunSim.push_odds(pack.forms, 20, "PT", old):
+		check(row.p < 0.4, "%s: more than the window was P %.3f" % [row.form, row.p])
 
 
 func test_perks_raise_the_return() -> void:

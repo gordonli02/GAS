@@ -12,7 +12,8 @@ extends RefCounted
 ## Two ways to get a perk (the mixed tree, G):
 ##   the shelf   perks marked `shelf` are always on the phone, with requirements
 ##               shown and levels to plan for: what opens a new move (reading, the
-##               loan, SAVINGS, bigger batches, the bet, picking a form, the tab)
+##               loan, SAVINGS, the bet, picking a form, the tab; bigger batches wait
+##               for M13)
 ##   the offers  every other perk is dealt (RunState.deal_offers), a few each morning,
 ##               the day's choice; its requirements are not shown
 ## Every dealt perk has a kind (kind()): "build" (the lines a build is made of; each
@@ -63,9 +64,11 @@ extends RefCounted
 ##   streak_pct   + % a window in a row with a winner (+ slot; STREAK; a window is
 ##                WINDOW tickets opened, the player's, across columns, today's)
 ##   streak_cap   STREAK's + % goes no higher than this
-##   all_in       a window that paid may be staked on the next: more printed prize
-##                money in it pays the stake x3 back, as much or less loses it (ALL IN;
-##                while it is held QUICK HANDS opens no further than the window's end)
+##   all_in       a window that paid may be staked on the next: printed prize money in
+##                it that reaches the bar (ALL_IN_SHARE of the staked window's, by each
+##                ticket's form; more than 0 always) pays the stake x3 back, less loses
+##                it (ALL IN; while it is held QUICK HANDS opens no further than the
+##                window's end)
 ##   loan_pct     the house line + % of the layer's own
 ##   loan_x       the house line times this (LOAN SHARK)
 ##   rate_x       the loan interest times this (LOAN SHARK's price; LOW RATE's cut is
@@ -100,13 +103,20 @@ extends RefCounted
 ##   stakeout     the first ticket sold on a day wins
 ##   marked       a column PEEKed at has its winners of the next MARKED_WINDOW come first
 ##   consolation  % of the losers taken from a box win the smallest prize (CONSOLATION)
-##   packed       a box loaded from now on has up to % more smallest prizes, its middle
-##                ones paying for them (PACKED; the box's money is the same)
-##   crumbs       a winner taken from a box splits its prize over up to this many of the
-##                next losers in it, each the smallest prize (CRUMBS; the money is the same)
+##   packed       a box loaded from now on has % of its prizes bigger than the smallest
+##                (tops and middles, picked from the seed) broken into smallest prizes
+##                over its losers (PACKED; the box's money is the same; PENNY JAR and
+##                STACKER pass those pieces over, TicketBox.pack)
+##   crumbs       a winner taken from a box with a prize bigger than the smallest splits
+##                it over up to this many of the next losers in it, each the smallest
+##                prize, while it keeps the smallest at least (CRUMBS; the money is the same)
 ## The last three are the line that wins more often (docs/perk_research.md section 15):
 ## the ticket really is a winner (it shows it, STREAK and ALL IN count it), decided
 ## from the seed as it leaves the box (MachineLogic._take, TicketBox).
+## A perk with `meta` is parked for the shop outside the run (M13): never on the shelf,
+## dealt or sold in a run (perks_of, dealt, RunState.can_buy_perk), its effect still
+## working when it is held (a save, the developer panel). QUICK HANDS, CHAIN and ENCORE
+## (G, 2026-11-07: no batch opening in the run until then).
 ## Items are used up: each one held is one use. `use`: "column" (pick a column at the
 ## machine), "now" (used from the phone), "auto" (works by itself), "offer" (a key on
 ## the day's perk offers).
@@ -129,6 +139,19 @@ const QUEUE_MOVES := 5
 ## add 40 to 85% to the return, so 5 / 10 (about +20 / +40%, FAT PRIZES' range; winners
 ## from about 15 in 100 to 19 / 23). The balance pass tunes it here.
 const CONSOLATION := [5, 10]
+## ALL IN's bar (G, 2026-11-07: a push wins about half the time on every form; the x3
+## stays): the next window wins when its printed prizes reach this percentage of the
+## staked window's, each ticket of the staked window counted at its own form's share
+## (form uid -> percent). Measured with RunSim.push_odds (blind P, windows of ten, 200
+## boxes a form): Big Catch 0.53, Hot Plate 0.50, Lucky Spur 0.52, Pecking Order 0.50,
+## Ka-Bawk! 0.54, One Flock 0.50, Nugget Rush 0.49, Peckeye 0.54. The windows print in
+## steps of the smallest prize, so P jumps between bars (Ka-Bawk! 0.44 at 55%, 0.54 at
+## 50%). A form without a row (a Workshop form) uses ALL_IN_DEFAULT, the middle of the
+## core forms'. Kept here beside the perk's other numbers (CONSOLATION) rather than in
+## the form's json: it is ALL IN's balance, measured by the simulator.
+const ALL_IN_SHARE := {"core:catch": 100, "core:plate": 100, "core:spur": 100, "core:order": 75,
+	"core:kabawk": 50, "core:flock": 75, "core:nugget": 70, "core:peckeye": 100}
+const ALL_IN_DEFAULT := 75
 const RARITY_WEIGHT := {"common": 10, "rare": 5, "legendary": 2}
 ## The deal at each layer (RunState.deal_offers), one entry per layer, the last one
 ## for any layer after it: the weight of each rarity (0 deals none) and the kinds left
@@ -190,7 +213,9 @@ const STANDARD := {
 			"effect": "item_cut", "levels": [{"price": 100, "value": 25}]},
 		{"id": "pockets", "branch": "shelf", "shelf": true, "rarity": "common", "name": "BIG POCKETS", "desc": "ROOM FOR %d ITEMS",
 			"effect": "pockets", "levels": [{"price": 80, "value": 2, "show": 5}, {"price": 200, "value": 5, "show": 8}]},
-		{"id": "multi", "branch": "shelf", "shelf": true, "rarity": "common", "name": "QUICK HANDS", "effect": "batch", "levels": [
+		# QUICK HANDS waits for the shop outside the run (M13, G 2026-11-07): `meta`, so it
+		# is never on the shelf, dealt or sold in a run; its effect still works when held.
+		{"id": "multi", "branch": "shelf", "shelf": true, "meta": true, "rarity": "common", "name": "QUICK HANDS", "effect": "batch", "levels": [
 			{"price": 80, "value": 5, "desc": "OPEN 5 AT ONCE"},
 			{"price": 200, "value": 20, "desc": "OPEN 20 AT ONCE"},
 			{"price": 400, "value": 9999, "desc": "OPEN THE WHOLE TRAY AT ONCE"}]},
@@ -226,20 +251,22 @@ const STANDARD := {
 			"effect": "scrap_pct", "levels": [{"price": 100, "value": 10}, {"price": 300, "value": 25}]},
 		{"id": "trashking", "branch": "small", "rarity": "legendary", "name": "TRASH KING", "desc": "PRIZES +%d%% PER 100 LOSERS THIS LAYER",
 			"requires": {"scrap": 1}, "effect": "trash_pct", "levels": [{"price": 600, "value": 5}]},
-		# Build: all at once (with QUICK HANDS off the shelf).
-		{"id": "combo", "branch": "batch", "rarity": "rare", "name": "CHAIN", "desc": "ONE OPENING: EVERY MORE WINNER +%d%%", "requires": {"multi": 1},
+		# Build: all at once. CHAIN and ENCORE act on one opening of QUICK HANDS, so they
+		# wait for M13 with it (`meta`: never dealt in a run; the effects still work).
+		{"id": "combo", "branch": "batch", "meta": true, "rarity": "rare", "name": "CHAIN", "desc": "ONE OPENING: EVERY MORE WINNER +%d%%", "requires": {"multi": 1},
 			"effect": "combo_pct", "levels": [{"price": 400, "value": 50}, {"price": 1200, "value": 100}]},
-		{"id": "again", "branch": "batch", "rarity": "rare", "name": "ENCORE", "desc": "ONE OPENING: %d%% OF WINNERS PAY AGAIN", "requires": {"multi": 2},
+		{"id": "again", "branch": "batch", "meta": true, "rarity": "rare", "name": "ENCORE", "desc": "ONE OPENING: %d%% OF WINNERS PAY AGAIN", "requires": {"multi": 2},
 			"effect": "again_pct", "levels": [{"price": 300, "value": 15}, {"price": 900, "value": 30}]},
-		# On the window of WINDOW tickets (G, part 3). ALL IN is the old perk's name on the
-		# window stake (G renamed DOUBLE UP back, 2026-11-07). Neither needs QUICK
-		# HANDS (ten by hand is a window too); they are this line's because batches play them fast.
+		# On the window of WINDOW tickets (G, part 3): what is left of the line in a run.
+		# ALL IN is the old perk's name on the window stake (G renamed DOUBLE UP back,
+		# 2026-11-07); it needs STREAK 1 (G, 2026-11-07: CHAIN went out with QUICK HANDS).
+		# The next window wins at ALL_IN_SHARE of the staked one's printed prizes.
 		{"id": "streak", "branch": "batch", "rarity": "rare", "name": "STREAK", "effect": "streak_pct", "levels": [
 			{"price": 300, "value": 25, "extra": {"streak_cap": 100}, "desc": "EVERY 10 OPENED WITH A WINNER: PRIZES +25% MORE, UP TO +100%"},
 			{"price": 800, "value": 40, "extra": {"streak_cap": 160}, "desc": "EVERY 10 OPENED WITH A WINNER: PRIZES +40% MORE, UP TO +160%"}]},
 		{"id": "allin", "branch": "batch", "rarity": "legendary", "name": "ALL IN",
-			"desc": "10 OPENED PAID: STAKE IT ON THE NEXT 10. MORE PRINTED PRIZES: X3 BACK. LESS: GONE",
-			"requires": {"combo": 1}, "effect": "all_in", "levels": [{"price": 2000, "value": 1}]},
+			"desc": "10 OPENED PAID: STAKE IT ON THE NEXT 10. THEY PRINT AT LEAST HALF TO ALL OF THIS, BY THE TICKET: X3 BACK. LESS: GONE",
+			"requires": {"streak": 1}, "effect": "all_in", "levels": [{"price": 2000, "value": 1}]},
 		# Build: money that makes money (with SAVINGS off the shelf).
 		{"id": "worth", "branch": "money", "rarity": "legendary", "name": "NET WORTH", "desc": "PRIZES +2%% PER %s IN CASH", "money": true, "requires": {"savings": 1},
 			"effect": "worth_pct", "levels": [{"price": 1500, "value": 2, "show": 100}]},
@@ -256,11 +283,10 @@ const STANDARD := {
 		# moves (CONSOLATION adds some; PACKED and CRUMBS put the same money on more tickets).
 		{"id": "consolation", "branch": "often", "rarity": "common", "name": "CONSOLATION", "desc": "%d%% OF LOSERS WIN THE SMALLEST PRIZE",
 			"effect": "consolation", "levels": [{"price": 100, "value": CONSOLATION[0]}, {"price": 300, "value": CONSOLATION[1]}]},
-		{"id": "packed", "branch": "often", "rarity": "rare", "name": "PACKED", "desc": "BOXES LOADED FROM NOW ON: MIDDLE PRIZES BROKEN INTO SMALLEST ONES, UP TO +%d%%",
+		{"id": "packed", "branch": "often", "rarity": "rare", "name": "PACKED", "desc": "BOXES LOADED FROM NOW ON: %d%% OF THE BIG PRIZES BROKEN INTO SMALLEST ONES, NOT FOR PENNY JAR OR STACKER",
 			"effect": "packed", "levels": [{"price": 200, "value": 25}, {"price": 500, "value": 50}]},
-		{"id": "crumbs", "branch": "often", "rarity": "rare", "name": "CRUMBS", "effect": "crumbs", "levels": [
-			{"price": 250, "value": 1, "desc": "A PRIZE SPLITS IN TWO: THE NEXT LOSER IN THE BOX WINS THE SMALLEST"},
-			{"price": 600, "value": 2, "desc": "A PRIZE SPLITS IN THREE: THE NEXT TWO LOSERS IN THE BOX WIN THE SMALLEST"}]},
+		{"id": "crumbs", "branch": "often", "rarity": "rare", "name": "CRUMBS", "desc": "A PRIZE OVER THE SMALLEST CRUMBLES: UP TO %d OF THE NEXT LOSERS IN THE BOX WIN THE SMALLEST",
+			"effect": "crumbs", "levels": [{"price": 250, "value": 5}, {"price": 600, "value": 20}]},
 		# Risk: strong, with a price at every level.
 		{"id": "shark", "branch": "risk", "rarity": "rare", "name": "LOAN SHARK", "desc": "HOUSE LINE X%d",
 			"effect": "loan_x", "levels": [{"price": 150, "value": 2, "extra": {"rate_x": 2}, "cost": "INTEREST X2"},
@@ -421,20 +447,37 @@ static func deal_weight(p: Dictionary, layer: int) -> float:
 	return float(d.rarity.get(str(p.get("rarity", "")), 0))
 
 
-## Perks of a kind ("shelf" is the shelf, the others are dealt).
+## Whether a perk is parked for the shop outside the run (M13): not in a run's shop.
+static func meta(p: Dictionary) -> bool:
+	return bool(p.get("meta", false))
+
+
+## ALL IN's share (percent) for a form, by its uid: ALL_IN_SHARE, or ALL_IN_DEFAULT.
+static func all_in_share(form_uid: String) -> int:
+	return int(ALL_IN_SHARE.get(form_uid, ALL_IN_DEFAULT))
+
+
+## ALL IN's bar in dollars from a window's printed prizes each times its form's share
+## (the sum of prize x percent): the share of it, rounded up, and never under $1 (an
+## empty window always loses).
+static func all_in_bar(weighted: int) -> int:
+	return maxi(1, ceili(weighted / 100.0))
+
+
+## Perks of a kind ("shelf" is the shelf, the others are dealt) a run sells (no `meta`).
 func perks_of(kind_id: String) -> Array:
 	var out := []
 	for p in perks:
-		if kind(p) == kind_id:
+		if kind(p) == kind_id and not meta(p):
 			out.append(p)
 	return out
 
 
-## The perks dealt as offers (everything off the shelf).
+## The perks dealt as offers (everything off the shelf, but `meta`).
 func dealt() -> Array:
 	var out := []
 	for p in perks:
-		if not p.get("shelf", false):
+		if not p.get("shelf", false) and not meta(p):
 			out.append(p)
 	return out
 
@@ -503,6 +546,8 @@ func problems() -> PackedStringArray:
 			var lv: int = p.get("requires", {}).get(need, p.get("requires_any", {}).get(need, 0))
 			if other.is_empty():
 				out.append("perk %s needs %s, which is not there" % [p.id, need])
+			elif meta(other) and not meta(p):
+				out.append("perk %s needs %s, which a run does not sell (meta)" % [p.id, need])
 			elif lv > other.levels.size():
 				out.append("perk %s needs %s at a level it does not have" % [p.id, need])
 	if DEAL.size() != 3:

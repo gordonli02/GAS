@@ -15,6 +15,7 @@ extends RefCounted
 ##   perks    as blind, but every round of perk offers it buys the cheapest offer that
 ##            costs no more than half its cash, then the next, and so on (the perks
 ##            are where a run grows); it opens in batches when it has QUICK HANDS
+##            (never in a run now: QUICK HANDS waits for M13)
 ##   skip     as blind, but never buys a perk: every round of offers is skipped for its
 ##            item (which it never uses)
 ##   build and the line bots (LINES): as blind, but each morning they buy their shelf
@@ -26,8 +27,9 @@ extends RefCounted
 ##            per line). HIGH ROLLER is the bet (fixed): a level is bought only when
 ##            the cash left after it holds HIGH_ROLLER_CASH tickets at the new price.
 ##            With ALL IN they stake a window whenever they can while the stake is
-##            under half their cash (QUICK HANDS opens no further than a window's end
-##            while ALL IN is held, RunState.batch_size, so every window can be staked)
+##            under half their cash (one ticket at a time, so every window can be
+##            staked). `batch` is the window line now (STREAK, ALL IN, MAGNET): QUICK
+##            HANDS, CHAIN and ENCORE wait for the shop outside the run (M13)
 ##   churn    the exploit check for FIRST PULL x REGULAR (docs/perk_research.md 5.11):
 ##            buys both whenever it can pay for them, and at the machine buys CHURN
 ##            tickets of a column, then changes the box, again and again. Its return
@@ -43,14 +45,14 @@ const BOTS := ["work", "blind", "borrow", "gamble", "perks", "skip", "build",
 ## jackpot buys REGULAR for what it opens: READ THE FLARE needs CLOSER or REGULAR, and
 ## JACKPOT HUNTER needs READ THE FLARE.
 const LINES := {
-	"build": {"perks": ["snowball", "bigfish", "prizes", "closer", "combo", "again", "stacker", "penny", "luck",
-		"fortune", "firstpull", "pity", "scrap", "assembly", "middle"], "shelf": ["multi"], "share": 0.6, "forms": []},
+	"build": {"perks": ["snowball", "bigfish", "prizes", "closer", "streak", "stacker", "penny", "luck",
+		"fortune", "firstpull", "pity", "scrap", "assembly", "middle"], "shelf": [], "share": 0.6, "forms": []},
 	"clearing": {"perks": ["closer", "firstpull", "assembly", "snowball"], "shelf": ["regular"], "share": 0.6, "forms": []},
 	"jackpot": {"perks": ["bigfish", "pity", "hunter"], "shelf": ["regular", "read1"], "share": 0.6,
 		"forms": ["catch", "kabawk"]},
 	"small": {"perks": ["penny", "stacker", "consolation", "packed", "scrap", "crumbs", "trashking"], "shelf": [], "share": 0.6,
 		"forms": ["plate", "nugget"]},
-	"batch": {"perks": ["combo", "again", "streak", "crumbs", "allin"], "shelf": ["multi", "bet"], "share": 0.6, "forms": []},
+	"batch": {"perks": ["streak", "allin", "magnet", "crumbs", "consolation"], "shelf": ["bet"], "share": 0.6, "forms": []},
 	"money": {"perks": ["worth", "middle"], "shelf": ["savings"], "share": 0.6, "forms": ["spur"]},
 	"churn": {"perks": ["firstpull"], "shelf": ["regular"], "share": 1.0, "forms": []},
 }
@@ -58,7 +60,9 @@ const LINES := {
 ## "snow" key is not a perk: SNOWBALL's count of boxes already cleared; a "form" key
 ## (a FormDef.id) plays that form's boxes alone. NET WORTH (the cash, kept at 0 here),
 ## SEAL, the reading chain and the items (REEL IN) do nothing in box_return; ALL IN
-## is played on every window it can be (box_return).
+## is played on every window it can be (box_return). Rows marked M13 hold QUICK HANDS,
+## CHAIN or ENCORE, which no run sells now (they wait for the shop outside the run):
+## kept as "what if" rows, they still compute.
 const EV_SETS := [
 	{}, {"prizes": 1}, {"prizes": 3}, {"scrap": 2}, {"luck": 3}, {"luck": 3, "fortune": 1},
 	{"prizes": 1, "bigfish": 2}, {"luck": 1, "firstpull": 2}, {"luck": 1, "pity": 2},
@@ -66,11 +70,12 @@ const EV_SETS := [
 	{"closer": 2, "firstpull": 2, "assembly": 1, "snowball": 1, "regular": 2},
 	{"bigfish": 2, "pity": 2, "hunter": 1, "read1": 1},
 	{"penny": 2, "stacker": 1, "scrap": 2, "trashking": 1},
-	{"multi": 2, "combo": 2, "again": 2, "streak": 2},
+	{"multi": 2, "combo": 2, "again": 2, "streak": 2},                     # M13
+	{"streak": 2, "allin": 1, "magnet": 2},                                # the window line, in a run now
 	{"middle": 2},
 	# The draft's combos: daily small prizes (batches of 20 with CHAIN), the
 	# astronomical one (after ten boxes cleared), FLARE ONLY on BIG FISH.
-	{"magnet": 2, "penny": 2, "stacker": 1, "multi": 2, "combo": 1},
+	{"magnet": 2, "penny": 2, "stacker": 1, "multi": 2, "combo": 1},      # M13
 	{"bigfish": 2, "bet": 3, "snowball": 1, "snow": 10},
 	{"flare": 2, "bigfish": 2},
 	{"prizes": 3, "bigfish": 2, "luck": 3, "fortune": 1, "closer": 2, "firstpull": 2, "snowball": 1},
@@ -78,20 +83,26 @@ const EV_SETS := [
 	# 期望回报 column.
 	{"read1": 1, "bet": 3, "bigfish": 2},                                 # 猎大奖 (REEL IN is an item: not here)
 	{"closer": 2, "firstpull": 2, "regular": 2, "read3": 1},              # 清盒
-	{"magnet": 2, "penny": 2, "stacker": 1, "multi": 2, "combo": 2},      # 小奖
+	{"magnet": 2, "penny": 2, "stacker": 1, "multi": 2, "combo": 2},      # 小奖 (M13)
+	{"magnet": 2, "penny": 2, "stacker": 1},                              # 小奖 in a run now
 	{"insurance": 2, "pity": 2, "form": "kabawk"},                        # 保险 (on Ka-Bawk!)
-	{"allin": 1, "read1": 1, "multi": 2, "combo": 1},                  # 梭哈
-	{"streak": 2, "magnet": 2, "multi": 2, "combo": 1},                   # 连庄
+	{"allin": 1, "streak": 1, "read1": 1},                                # 梭哈 (needs STREAK 1)
+	{"streak": 2, "magnet": 2, "multi": 2, "combo": 1},                   # 连庄 (M13)
+	{"streak": 2, "magnet": 2},                                           # 连庄 in a run now
 	{"savings": 3, "lowrate": 2, "shark": 2, "worth": 1},                 # 钱生钱 (NET WORTH needs cash: 0 here)
 	{"seal": 2, "snowball": 1, "snow": 10, "bet": 3},                     # 封盒 (SEAL itself does nothing here)
-	{"read1": 1, "allin": 1},                                          # 跨：信息换胜率
+	{"read1": 1, "allin": 1, "streak": 1},                                # 跨：信息换胜率
 	{"magnet": 2, "insurance": 2, "pity": 2, "form": "kabawk"},           # 跨：确定性叠大奖票
 	# The line that wins more often (section 15): CONSOLATION adds a little, PACKED and
 	# CRUMBS alone add nothing; with PENNY JAR, CHAIN and STREAK they do.
-	{"consolation": 1}, {"consolation": 2}, {"packed": 2}, {"crumbs": 2},
+	{"consolation": 1}, {"consolation": 2}, {"packed": 1}, {"packed": 2}, {"crumbs": 1}, {"crumbs": 2},
 	{"packed": 2, "penny": 2, "consolation": 2},
-	{"crumbs": 2, "multi": 2, "combo": 2},
-	{"crumbs": 2, "consolation": 2, "streak": 2, "multi": 2, "combo": 1},
+	{"crumbs": 2, "multi": 2, "combo": 2},                                   # M13
+	{"crumbs": 2, "consolation": 2, "streak": 2, "multi": 2, "combo": 1},    # M13
+	# How they stack with PENNY JAR and STREAK (G, 2026-11-07: PACKED must not make
+	# PENNY JAR much stronger), each beside the same without it.
+	{"penny": 2}, {"packed": 2, "penny": 2}, {"crumbs": 2, "penny": 2},
+	{"penny": 2, "streak": 2}, {"packed": 2, "penny": 2, "streak": 2},
 ]
 ## Perk levels the churn table (churn_return) prints: CHURN tickets a box, then NEW BOX.
 const CHURN_SETS := [{}, {"regular": 2}, {"firstpull": 1, "regular": 2}, {"firstpull": 2, "regular": 2}]
@@ -509,13 +520,15 @@ static func churn_return(base_forms: Array, perk_levels: Dictionary, boxes: int,
 ## ALL IN's odds on each form, no perks, stake 1: `boxes` boxes of the form in the
 ## run's model, their tickets opened in order in windows of Catalog.WINDOW (the boxes
 ## one after another). Of the windows after one that paid, the share whose printed
-## prizes beat it (the push wins). Returns [{form, p, windows}] (windows: how many
-## were counted).
-static func push_odds(base_forms: Array, boxes: int, seed_prefix := "PU") -> Array:
+## prizes reach its bar (the form's Catalog.all_in_share, or `shares`' {form id:
+## percent} to try another; the push wins). Returns [{form, p, windows, share}]
+## (windows: how many were counted).
+static func push_odds(base_forms: Array, boxes: int, seed_prefix := "PU", shares := {}) -> Array:
 	var model := RunConfig.standard().box_model(0)
 	var out := []
 	for base: FormDef in base_forms:
 		var f := base.shaped()
+		var share := int(shares.get(f.id, Catalog.all_in_share(f.uid())))
 		var prev := -1
 		var sum := 0
 		var n := 0
@@ -530,10 +543,10 @@ static func push_odds(base_forms: Array, boxes: int, seed_prefix := "PU") -> Arr
 					continue
 				if prev > 0:
 					counted += 1
-					if sum > prev:
+					if sum >= Catalog.all_in_bar(prev * share):
 						beat += 1
 				prev = sum
 				sum = 0
 				n = 0
-		out.append({"form": f.id, "p": float(beat) / counted if counted > 0 else 0.0, "windows": counted})
+		out.append({"form": f.id, "p": float(beat) / counted if counted > 0 else 0.0, "windows": counted, "share": share})
 	return out

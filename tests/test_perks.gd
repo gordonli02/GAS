@@ -90,6 +90,20 @@ func test_catalog_holds_together() -> void:
 	var risky := Catalog.from_dict(Catalog.STANDARD)
 	risky.perk("shark").levels[0].erase("cost")
 	check(not risky.problems().is_empty(), "a risk perk without its price written is reported")
+	var parked := Catalog.from_dict(Catalog.STANDARD)
+	parked.perk("allin").requires = {"combo": 1}
+	check(not parked.problems().is_empty(), "a perk of the run needing one parked for M13 is reported")
+	# ALL IN's bar: a share for every core form, about half to all of the window.
+	var pack := core_pack()
+	if pack != null:
+		for f in pack.forms:
+			check(Catalog.ALL_IN_SHARE.has(f.uid()), "ALL IN has a share for %s" % f.id)
+	for k in Catalog.ALL_IN_SHARE:
+		var share := int(Catalog.ALL_IN_SHARE[k])
+		check(share > 0 and share <= 100, "%s: a share in (0, 100] (%d)" % [k, share])
+	eq(Catalog.all_in_share("someone:else"), Catalog.ALL_IN_DEFAULT, "a Workshop form: the default share")
+	eq(Catalog.all_in_bar(0), 1, "an empty window's bar is $1: the next must print something")
+	eq(Catalog.all_in_bar(25 * 70), 18, "70% of $25, rounded up")
 
 
 func test_the_prize_formula() -> void:
@@ -929,6 +943,49 @@ func test_the_shelf_of_perks() -> void:
 	check(not r.buy_perk("closer", e), "a dealt perk is not sold off the shelf")
 
 
+## QUICK HANDS, CHAIN and ENCORE wait for the shop outside the run (M13, G 2026-11-07):
+## never on the shelf, dealt or sold in a run, their effects still working when held.
+func test_batch_perks_wait_for_m13() -> void:
+	var c := Catalog.standard()
+	var parked := ["multi", "combo", "again"]
+	for id in parked:
+		check(Catalog.meta(c.perk(id)), "%s is parked (meta)" % id)
+		check(not c.dealt().has(c.perk(id)), "%s is never dealt" % id)
+		for k in Catalog.KINDS:
+			check(not c.perks_of(k).has(c.perk(id)), "%s is in no kind's list (%s)" % [id, k])
+	eq(c.perk("allin").get("requires", {}), {"streak": 1}, "ALL IN needs STREAK 1 (CHAIN went with QUICK HANDS)")
+	var res := _rich(1000000)
+	var r: RunState = res[0]
+	var e: Economy = res[1]
+	for id in parked:
+		check(not r.shelf_perks().has(id), "%s is not on the shelf" % id)
+		check(not r.offerable().has(id), "%s cannot be offered" % id)
+	check(not r.buy_perk("multi", e), "QUICK HANDS is not sold, rich as the player is")
+	r.perks["multi"] = 2
+	check(not r.offerable().has("combo") and not r.offerable().has("again"), "not even with QUICK HANDS held")
+	r.offers = ["combo"]
+	check(not r.can_buy_offer(0, e) and not r.buy_offer(0, e), "CHAIN put in the offers by hand is not sold")
+	eq(r.level("combo"), 0, "nothing bought")
+	# Every layer's deals over many seeds and rerolls, with every requirement met.
+	r.perks = {"multi": 3, "streak": 1}
+	for l in 3:
+		r.layer = l
+		for k in 30:
+			r.offer_rerolls = k
+			for id in r.deal_offers():
+				check(not parked.has(id), "layer %d: %s dealt" % [l + 1, id])
+	check(not r.offerable().has("multi") and r.missing("allin").is_empty(), "with STREAK 1 ALL IN can be offered")
+	# The simulator's bots do not buy them.
+	for line in RunSim.LINES:
+		for id in RunSim.LINES[line].perks + RunSim.LINES[line].shelf:
+			check(not parked.has(id), "the %s bot buys %s" % [line, id])
+	# Held (a save, the developer panel, M13): they still work.
+	r.perks = {"multi": 1}
+	eq(r.batch_size(), 5, "QUICK HANDS 1 held: five at once")
+	r.perks = {"multi": 3}
+	eq(r.batch_size(), 9999, "QUICK HANDS 3: the whole tray")
+
+
 func test_cheat_sheet_takes_an_offer_free() -> void:
 	var r := _run()
 	var e := r.new_economy()
@@ -1167,12 +1224,13 @@ func test_the_window_of_ten() -> void:
 	check(r.last_window.is_empty(), "none closed yet")
 	r.open_ticket(e, _entry(2))
 	eq(r.window_n, 0, "the tenth closes it")
-	eq(r.last_window, {"printed": 125, "paid": 125}, "printed and paid, the same without perks")
+	eq(r.last_window, {"printed": 125, "paid": 125, "bar": 125}, "printed and paid, the same without perks; Big Catch's bar is all of it")
 	# The printed sum is before the bet and every perk; the pay is what the ledger got.
 	r.perks = {"prizes": 3}
 	_window(r, e, [3])
-	eq(r.last_window, {"printed": 25, "paid": 50}, "FAT PRIZES 3: paid double, printed the same")
-	# QUICK HANDS 5 twice makes one window; QUICK HANDS 20 closes two in one opening.
+	eq(r.last_window, {"printed": 25, "paid": 50, "bar": 25}, "FAT PRIZES 3: paid double, printed the same")
+	# QUICK HANDS 5 twice makes one window; QUICK HANDS 20 closes two in one opening
+	# (QUICK HANDS waits for M13: set directly, its effect still works).
 	r.perks = {"multi": 1}
 	r.open_batch(e, [_entry(3), _entry(-1), _entry(-1), _entry(-1), _entry(-1)])
 	eq(r.window_n, 5, "five at once: half a window")
@@ -1245,24 +1303,34 @@ func test_all_in() -> void:
 	eq(int(r.stats.staked), 25, "counted")
 	check(not r.can_push(e) and not r.push(e), "not again while a push is pending")
 	_window(r, e, [2])
-	eq(e.cash, cash - 25 + 100 + 75, "$100 printed beats $25: the window's $100 and the stake x3")
+	eq(e.cash, cash - 25 + 100 + 75, "$100 printed reaches $25: the window's $100 and the stake x3")
 	eq(int(r.stats.push_won), 75, "what came back")
 	eq(r.push_stake, 0, "settled")
-	# Lost: as much printed is not more. A new push goes on the window that settled one.
+	# Big Catch's bar is all of the window (Catalog.ALL_IN_SHARE): as much printed wins.
+	# A new push goes on the window that settled one.
 	check(r.can_push(e), "a new push on that window")
 	eq(r.push_offer(), 100, "its $100")
+	eq(r.push_target(), 100, "the next ten must print $100 at least")
 	r.push(e)
+	eq(r.push_need, 100, "the bar is kept with the stake")
 	cash = e.cash
 	_window(r, e, [2])
-	eq(e.cash, cash + 100, "as much printed: the window's prize only")
+	eq(e.cash, cash + 100 + 300, "as much printed: the window's $100 and the stake x3")
+	eq(int(r.stats.push_won), 375, "won again")
+	# Lost: less printed than the bar.
+	r.push(e)
+	cash = e.cash
+	_window(r, e, [3, 3])
+	eq(e.cash, cash + 50, "$50 printed under the $100 bar: the window's prize only")
 	eq(int(r.stats.push_lost), 100, "the stake is lost")
 	# What the tickets print counts, not what they pay: FAT PRIZES bought between the
 	# windows pays the next one double, and still does not win.
+	_window(r, e, [2])
 	r.push(e)
 	r.perks = {"allin": 1, "prizes": 3}
 	cash = e.cash
-	_window(r, e, [2])
-	eq(e.cash, cash + 200, "paid $200, printed $100: lost")
+	_window(r, e, [3, 3])
+	eq(e.cash, cash + 100, "paid $100, printed $50 under the $100 bar: lost")
 	eq(int(r.stats.push_lost), 200, "a second stake lost")
 	r.perks = {"allin": 1}
 	# Nothing paid: nothing to stake.
@@ -1280,6 +1348,62 @@ func test_all_in() -> void:
 	eq(r.push_stake, 0, "a new day clears the push")
 	eq(int(r.stats.push_lost), lost + 100, "and its stake is gone")
 	check(r.last_window.is_empty() and r.window_n == 0 and not r.can_push(e), "a fresh window")
+	check(e.balanced(), "ledger balanced")
+
+
+## ALL IN's bar is each ticket's form's share of the window (G, 2026-11-07: a push wins
+## about half the time on every form): Ka-Bawk! half of it, Big Catch all of it.
+func test_all_in_bar_by_form() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var kabawk: FormDef = null
+	for f in pack.forms:
+		if f.id == "kabawk":
+			kabawk = f
+	if not check(kabawk != null, "Ka-Bawk! is in the core pack"):
+		return
+	eq(Catalog.all_in_share(kabawk.uid()), 50, "Ka-Bawk!: half")
+	var res := _playing(5000)
+	var r: RunState = res[0]
+	var e: Economy = res[1]
+	r.perks = {"streak": 1, "allin": 1}
+	var mid: int = kabawk.tier_indices("mid")[0]
+	var low := RunState.smallest_tier(kabawk)
+	var kb := func(tier: int) -> Dictionary:
+		return {"form": kabawk, "ticket": {"no": 100, "tier": tier, "prize": int(kabawk.tiers[tier].prize) if tier >= 0 else 0},
+			"box": null, "bet": 1}
+	# A Ka-Bawk! window of $100: the bar is $50, and $50 printed wins.
+	r.open_ticket(e, kb.call(mid))
+	for k in 9:
+		r.open_ticket(e, kb.call(-1))
+	eq(r.last_window.bar, 50, "half of $100")
+	eq(r.push_target(), 50, "what the card shows")
+	check(r.push(e), "staked $100")
+	r.open_ticket(e, kb.call(low))
+	r.open_ticket(e, kb.call(low))
+	for k in 8:
+		r.open_ticket(e, kb.call(-1))
+	eq(int(r.stats.push_won), 300, "$50 printed reaches the $50 bar: x3 back")
+	# A window of both forms: each ticket at its own form's share ($100 Big Catch at
+	# 100%, $100 Ka-Bawk! at 50%: a bar of $150).
+	r.open_ticket(e, _entry(2))
+	r.open_ticket(e, kb.call(mid))
+	for k in 8:
+		r.open_ticket(e, _entry(-1))
+	eq(r.last_window.printed, 200, "printed $200")
+	eq(r.last_window.bar, 150, "the bar: $100 + $50")
+	# A window that paid without printing (SCRAP DEALER's give-back) has a $1 bar: the
+	# next window must print something.
+	r.perks = {"streak": 1, "allin": 1, "scrap": 2}
+	_window(r, e, [])
+	check(r.can_push(e) and r.last_window.printed == 0, "paid, printed nothing: it can be staked")
+	eq(r.push_target(), 1, "the bar is $1")
+	var stake := r.push_offer()
+	check(r.push(e), "staked")
+	var lost: int = r.stats.push_lost
+	_window(r, e, [])
+	eq(int(r.stats.push_lost), lost + stake, "an empty window loses")
 	check(e.balanced(), "ledger balanced")
 
 
@@ -1353,17 +1477,26 @@ func test_window_saved() -> void:
 	r.window_paid = 200
 	r.window_wins = 2
 	r.streak = 3
+	r.window_bar = 11250
 	r.push_stake = 40
 	r.push_printed = 125
-	r.last_window = {"printed": 125, "paid": 40}
-	var back := RunState.from_dict(JSON.parse_string(JSON.stringify(r.to_dict())), RunConfig.standard())
+	r.push_need = 94
+	r.last_window = {"printed": 125, "paid": 40, "bar": 94}
+	var d := r.to_dict()
+	var back := RunState.from_dict(JSON.parse_string(JSON.stringify(d)), RunConfig.standard())
 	check(back != null, "loads")
 	if back == null:
 		return
-	check(back.window_n == 7 and back.window_printed == 150 and back.window_paid == 200 and back.window_wins == 2,
-		"the window as it stood")
-	check(back.streak == 3 and back.push_stake == 40 and back.push_printed == 125, "the streak and the push")
-	eq(back.last_window, {"printed": 125, "paid": 40}, "the window closed last")
+	check(back.window_n == 7 and back.window_printed == 150 and back.window_paid == 200 and back.window_wins == 2
+		and back.window_bar == 11250, "the window as it stood")
+	check(back.streak == 3 and back.push_stake == 40 and back.push_printed == 125 and back.push_need == 94, "the streak and the push")
+	eq(back.last_window, {"printed": 125, "paid": 40, "bar": 94}, "the window closed last")
+	# A run saved before ALL IN's bar: the old rule, more than the window.
+	d.erase("push_need")
+	d.erase("window_bar")
+	d.last_window = {"printed": 125, "paid": 40}
+	var old := RunState.from_dict(JSON.parse_string(JSON.stringify(d)), RunConfig.standard())
+	check(old != null and old.push_need == 126 and int(old.last_window.bar) == 126, "a saved push needs more than its window")
 
 
 func test_high_roller_is_the_bet() -> void:
@@ -1529,15 +1662,15 @@ func test_saved_and_loaded() -> void:
 	eq(back.sealed[0].ops.size(), 2, "with its log")
 	eq(back.stats, r.stats, "stats")
 	d.perks = {"prizes": 9, "gone": 2, "luck": -1}
-	d.offers = ["prizes", "gone"]
+	d.offers = ["prizes", "gone", "combo"]
 	d.bet = 5   # an older save's bet key: ignored, the bet is the perk's level
 	var odd := RunState.from_dict(d, RunConfig.standard())
 	eq(odd.perks, {"prizes": 3}, "unknown perks dropped, levels kept within the perk")
-	eq(odd.offers, ["prizes"], "an unknown offer dropped")
+	eq(odd.offers, ["prizes"], "an unknown offer dropped, and CHAIN (it waits for M13)")
 	eq(odd.bet(), 1, "an old save's bet is ignored: no HIGH ROLLER, x1")
 	for k in ["perks", "items", "extra_days", "services", "reports", "offers", "offers_open", "shelf", "bet", "coin_on",
 			"forms_today", "sealed", "day_tickets", "sure_armed", "window_n", "window_printed", "window_paid",
-			"window_wins", "streak", "push_stake", "push_printed", "last_window"]:
+			"window_wins", "streak", "push_stake", "push_printed", "last_window", "window_bar", "push_need"]:
 		d.erase(k)
 	var old := RunState.from_dict(d, RunConfig.standard())
 	check(old != null and old.perks.is_empty() and old.items.is_empty() and not old.offers_open, "an older run loads with nothing bought")
@@ -1687,59 +1820,104 @@ func test_consolation_on_the_machine_is_a_real_winner() -> void:
 	eq(r.window_printed, paid, "its printed prize in the window (ALL IN compares those)")
 
 
+## The big prizes (bigger than the smallest) a box holds, every prize on a ticket.
+func _big(box: TicketBox) -> int:
+	var low := box.smallest_tier()
+	var n := 0
+	for i in box.counts.size():
+		if int(box.form.tiers[i].prize) > int(box.form.tiers[low].prize):
+			n += int(box.counts[i])
+	return n
+
+
 func test_packed_puts_the_money_in_more_smallest_prizes() -> void:
 	var p := Catalog.standard().perk("packed")
 	eq(p.rarity, "rare", "PACKED is rare")
-	eq(p.levels.map(func(l): return int(l.value)), [25, 50], "+25 / +50%")
-	eq(TicketBox.PACK_ROLES, ["mid"], "the middle prizes pay (G: 钱从中奖那份匀); top prizes stay")
-	for id in ["spur", "nugget", "order", "plate", "catch", "kabawk"]:
+	eq(p.levels.map(func(l): return int(l.value)), [25, 50], "25 / 50% of the big prizes")
+	for id in ["catch", "plate", "spur", "order", "kabawk", "flock", "nugget", "peckeye"]:
 		var form := _run_form(id)
 		if form == null:
 			return
 		var low := RunState.smallest_tier(form)
 		var s := int(form.tiers[low].prize)
 		for pct in [25, 50]:
-			var lows := 0
-			var lows_packed := 0
+			var big := 0
+			var broken := 0
 			var winners := 0
 			var winners_packed := 0
 			var off := 0
+			var share_off := 0
 			for n in 60:
 				var plain := _run_box(form, "PK-%02d" % n)
 				var box := _run_box(form, "PK-%02d" % n)
 				var added := box.pack(pct)
-				lows += int(plain.counts[low])
-				lows_packed += int(box.counts[low])
+				var b := _big(plain)
+				var gone := b - _big(box)
+				big += b
+				broken += gone
 				winners += _winners(plain)
 				winners_packed += _winners(box)
+				if gone != floori(b * pct / 100.0) and gone != ceili(b * pct / 100.0):
+					share_off += 1
 				var h := _holds(box)
-				var tops_kept := true
-				for i in form.tier_indices("top"):
-					tops_kept = tops_kept and box.counts[i] == plain.counts[i]
-				if absi(box.prize_total() - plain.prize_total()) >= s or h.money != box.prize_total() or not h.counts_match \
-						or int(box.counts[low]) != int(plain.counts[low]) + added or box.type_id != plain.type_id or not tops_kept:
+				if box.prize_total() != plain.prize_total() or h.money != box.prize_total() or not h.counts_match \
+						or int(box.counts[low]) != int(plain.counts[low]) + added or box.type_id != plain.type_id:
 					off += 1
-			eq(off, 0, "%s +%d%%: the same money (to the smallest prize), counts that match the tickets, the same type and tops" % [id, pct])
-			var up := float(lows_packed) / lows - 1.0
-			note("%s PACKED +%d%%: smallest prizes +%.0f%%, winners %d -> %d (60 boxes)" % [id, pct, up * 100.0, winners, winners_packed])
-			check(up >= 0.0 and up <= pct / 100.0 + 0.05, "%s: smallest prizes up by %d%% at most, as far as the middle prizes go (%.0f%%)" % [id, pct, up * 100.0])
-			if ["spur", "nugget", "order"].has(id):
-				check(winners_packed > winners, "%s: more winners" % id)
-			if id == "spur":
-				check(absf(up - pct / 100.0) <= 0.05, "Lucky Spur, all middle prizes: the full +%d%% (%.0f%%)" % [pct, up * 100.0])
+			eq(off, 0, "%s %d%%: the same money to the coin, counts that match the tickets, the same type" % [id, pct])
+			eq(share_off, 0, "%s %d%%: in every box that share of its big prizes, in whole prizes, is broken" % [id, pct])
+			var share := float(broken) / maxi(1, big)
+			note("%s PACKED %d%%: %d of %d big prizes broken (%.0f%%), winners per 100 %.1f -> %.1f (60 boxes)" % [id, pct, broken,
+				big, share * 100.0, winners / 600.0, winners_packed / 600.0])
+			# Within a tenth, or three prizes where a form has few (Big Catch: one a box).
+			check(absf(share - pct / 100.0) <= 0.1 or absf(broken - big * pct / 100.0) <= 3.0,
+				"%s: about %d%% of the big prizes broken (%.0f%%)" % [id, pct, share * 100.0])
+			check(winners_packed > winners, "%s %d%%: more winners (%d against %d)" % [id, pct, winners_packed, winners])
 	# Deterministic, logged, replayed.
 	var plate := _run_form("plate")
 	var a := _run_box(plate, "PK-SAME")
-	var b := _run_box(plate, "PK-SAME")
+	var b2 := _run_box(plate, "PK-SAME")
 	a.pack(50)
-	b.pack(50)
-	eq(_prizes(a), _prizes(b), "same seed, same box")
+	b2.pack(50)
+	eq(_prizes(a), _prizes(b2), "same seed, same box")
 	var again := _run_box(plate, "PK-SAME")
 	again.replay(a.ops)
 	eq(_prizes(again), _prizes(a), "a saved box comes back packed")
 	eq(again.counts, a.counts, "with its counts")
 	a.cursor = 1
 	eq(a.pack(50), 0, "a box sold from is not packed again")
+
+
+## The smallest prizes PACKED breaks off are not small prizes to PENNY JAR, nor prizes
+## to STACKER (G, 2026-11-07: it must not stack up with PENNY JAR); the box's own are.
+func test_packed_pieces_pass_penny_jar_over() -> void:
+	var form := _run_form("spur")
+	if form == null:
+		return
+	var box := _run_box(form, "PK-PENNY")
+	box.pack(50)
+	var piece := {}
+	var own := {}
+	for t in box.tickets:
+		if int(t.prize) <= 0 or t.wins.filter(func(g): return g >= 0).size() != 1:
+			continue
+		if int(t.get("packed", 0)) > 0 and piece.is_empty():
+			piece = t
+		elif int(t.get("packed", 0)) == 0 and int(t.tier) == box.smallest_tier() and own.is_empty():
+			own = t
+	if not check(not piece.is_empty() and not own.is_empty(), "a piece and a smallest prize of the box's own"):
+		return
+	var s := int(form.tiers[box.smallest_tier()].prize)
+	var r := _run()
+	r.perks = {"penny": 2}
+	eq(r.pay_ticket(Economy.new(), own, form), s * 3, "PENNY JAR 2: the box's own smallest prize x3")
+	eq(r.pay_ticket(Economy.new(), piece, form), s, "a piece PACKED broke off: as printed")
+	# A ticket with two prizes, one of them a piece: not a stack for STACKER.
+	var two := {"no": 100, "tier": box.smallest_tier(), "prize": 2 * s, "wins": [box.smallest_tier(), box.smallest_tier(), -1],
+		"packed": 1}
+	r.perks = {"stacker": 1}
+	eq(r.pay_ticket(Economy.new(), two, form), 2 * s, "STACKER: one of the two is a piece, no x3")
+	two.erase("packed")
+	eq(r.pay_ticket(Economy.new(), two, form), 6 * s, "both its own: x3")
 
 
 func test_packed_acts_on_boxes_loaded_while_held() -> void:
@@ -1767,13 +1945,13 @@ func test_packed_acts_on_boxes_loaded_while_held() -> void:
 func test_crumbs_split_a_prize_over_the_next_losers() -> void:
 	var p := Catalog.standard().perk("crumbs")
 	eq(p.rarity, "rare", "CRUMBS is rare")
-	eq(p.levels.map(func(l): return int(l.value)), [1, 2], "two or three tickets")
-	for id in ["spur", "catch", "plate"]:
+	eq(p.levels.map(func(l): return int(l.value)), [5, 20], "up to 5 / 20 pieces (G, 2026-11-07)")
+	for id in ["spur", "catch", "plate", "order", "kabawk", "flock", "nugget", "peckeye"]:
 		var form := _run_form(id)
 		if form == null:
 			return
 		var s := int(form.tiers[RunState.smallest_tier(form)].prize)
-		for n in [1, 2]:
+		for n in [5, 20]:
 			var winners := 0
 			var winners_split := 0
 			var off := 0
@@ -1865,6 +2043,19 @@ func test_crumbs_pay_and_edges() -> void:
 	short.counts = [0, 0, 0, 0]
 	short.counts[mid] = 1
 	eq(short.crumble(0, 2), 1, "one loser left: split in two")
+	# Limited by the prize: the ticket keeps the smallest prize at least.
+	var wide := TicketBox.new()
+	wide.form = form
+	wide.seed = "CR-WIDE"
+	wide.size = 1 + m / s + 5
+	wide.tickets = [{"no": 1, "tier": mid, "prize": m}]
+	for k in wide.size - 1:
+		wide.tickets.append({"no": k + 2, "tier": -1, "prize": 0})
+	wide.counts = [0, 0, 0, 0]
+	wide.counts[mid] = 1
+	eq(wide.crumble(0, 20), mini(20, m / s - 1), "CRUMBS 2 on a $%d prize: as many pieces as it holds, less one" % m)
+	eq(int(wide.tickets[0].prize), m - mini(20, m / s - 1) * s, "the ticket keeps the rest")
+	check(int(wide.tickets[0].prize) >= s, "the smallest prize at least")
 	# The run pays what the ticket kept and the pieces the rest: the whole prize.
 	var r := _run()
 	var e := r.new_economy()
@@ -1876,4 +2067,4 @@ func test_crumbs_pay_and_edges() -> void:
 	var pack := core_pack()
 	var rc := _run()
 	rc.perks = {"crumbs": 2}
-	eq(rc.new_machine([pack.forms[0]], true).crumbs, 2, "the machine has it")
+	eq(rc.new_machine([pack.forms[0]], true).crumbs, 20, "the machine has it: up to 20 pieces")
