@@ -4,7 +4,7 @@ extends RefCounted
 ## and restocking. Pure logic. Numbers from MIGRATION.md "Machine" and the web build.
 ##
 ## The run's perks reach the machine through a few fields RunState.apply sets (luck,
-## the bet, the last sale, MAGNET) and one callable
+## the bet, the last sale, MAGNET, CONSOLATION, CRUMBS, PACKED) and one callable
 ## (`sure_next`), asked before every ticket is taken whether this one has to win; the
 ## box then moves a winner of its own forward (TicketBox.pull_winner).
 
@@ -30,6 +30,16 @@ var bet := 1                          ## HIGH ROLLER: tickets cost and pay this 
 ## wins at least: when the window's last ticket is sold and none of it won, the next
 ## small prize of the box is moved onto it. 0: off.
 var magnet := 0
+## CONSOLATION: of the losers taken from a box, this many in a hundred (rolled from the
+## seed) win the smallest prize instead. 0: off.
+var consolation := 0
+## CRUMBS: a winner taken from a box splits its prize over up to this many of the next
+## losers in the box (TicketBox.crumble). 0: off.
+var crumbs := 0
+## PACKED: a box that goes on the machine gets up to this many percent more smallest
+## prizes, paid for by its middle ones (TicketBox.pack). Boxes already on it stay as
+## they are.
+var packed := 0
 ## Asked with the box before a ticket is taken: whether this one has to win (a sure
 ## win is a winner of the box moved onto it). The run's rule (STAKEOUT, INSURANCE).
 var sure_next: Callable
@@ -42,11 +52,13 @@ var _acc := 0.0
 var _sold := false
 
 
-func _init(machine_forms: Array, seed_text: String, box_model: BoxModel = null, light := false, box_luck := 0.0, tries := 1) -> void:
+func _init(machine_forms: Array, seed_text: String, box_model: BoxModel = null, light := false, box_luck := 0.0, tries := 1,
+		box_packed := 0) -> void:
 	model = box_model
 	prizes_only = light
 	luck = box_luck
 	luck_tries = tries
+	packed = box_packed
 	for f in machine_forms:
 		forms.append(f)
 		var box := _load(f, seed_text)
@@ -62,8 +74,15 @@ func _build(f: FormDef, seed_text: String) -> TicketBox:
 ## one, the next seed's (passed over once, or up to luck_tries times with FORTUNE, each
 ## time on its own roll). `after_clear`: the box before it was sold out, so with
 ## ASSEMBLY LINE the seeds go on until one does not lose. Every roll comes from a seed,
-## so a seed always loads the same way.
+## so a seed always loads the same way. PACKED, when on, packs the box that loads.
 func _load(f: FormDef, seed_text: String, after_clear := false) -> TicketBox:
+	var box := _pick(f, seed_text, after_clear)
+	if packed > 0:
+		box.pack(packed)
+	return box
+
+
+func _pick(f: FormDef, seed_text: String, after_clear: bool) -> TicketBox:
 	var box := _build(f, seed_text)
 	var s := seed_text
 	var tries := 0
@@ -168,7 +187,8 @@ func swap_columns(i: int, j: int) -> void:
 
 
 ## The next ticket of column `i` leaves the box, paid for: the run's sure win and
-## MAGNET act on it first. The day's cap counts it.
+## MAGNET act on it first, then CONSOLATION on a loser and CRUMBS on a winner (so the
+## ticket is what it shows: a real winner, counted as one everywhere).
 func _take(i: int, economy: Economy) -> Dictionary:
 	var box := boxes[i]
 	var at := box.cursor
@@ -182,6 +202,10 @@ func _take(i: int, economy: Economy) -> Dictionary:
 				break
 		if dry:
 			box.pull_winner(at, "small")
+	if consolation > 0 and not box.wins(at):
+		box.console(at, consolation)
+	if crumbs > 0 and box.wins(at):
+		box.crumble(at, crumbs)
 	var t: Dictionary = box.tickets[at]
 	box.cursor += 1
 	economy.buy(price(i))

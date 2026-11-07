@@ -8,6 +8,19 @@ extends RefCounted
 ## Every reorder is logged in `ops` in order, so a saved box is rebuilt from its seed
 ## and the log replayed (MachineLogic.load_boxes) and comes back as it was. Reading the
 ## box (BoxReading) counts what is left, so nothing it says is made false by a move.
+##
+## The line that wins more often (docs/perk_research.md section 15) changes tickets
+## instead of moving them, logged the same way: CONSOLATION turns a loser into the
+## smallest prize (new money, so `counts` grows), CRUMBS splits a prize over the next
+## losers (the same money on more tickets: the ticket split keeps `cut` less), PACKED
+## breaks middle prizes into smallest ones when the box goes on the machine (the same
+## money). Every change is decided from the seed and the box as it stands, so a
+## replayed log changes the box the same way again.
+
+## The prizes PACKED breaks into smallest ones (G, section 15: "钱从中奖那份匀", the
+## middle prizes' share), so a box keeps its top prizes. Adding "top" would let it
+## take those too, after the middle ones.
+const PACK_ROLES := ["mid"]
 
 var form: FormDef
 var seed := ""
@@ -16,13 +29,17 @@ var size := 0
 var counts: Array = []       ## real count per tier, same order as form.tiers
 ## Dictionary per ticket: no, tier, prize, win_group, serial, groups, marks, verify.
 ## A form that wins by group adds wins: the tier each group won, or -1; prize is then
-## their sum and tier the best of them.
+## their sum and tier the best of them. A ticket CRUMBS split has `cut` (what its best
+## tier's prize gave away; prize is already that much less), a piece of one `crumb`.
 var tickets: Array = []
 var cursor := 0              ## next ticket to sell
 var opened := 0              ## tickets opened so far (by ticket number)
-## Every reorder of what was left, in order: {"s": cursor} a SHUFFLE at that cursor,
-## {"m": [a, b]} the tickets at a and b swapped.
+## Every reorder or change of what was left, in order: {"s": cursor} a SHUFFLE at that
+## cursor, {"m": [a, b]} the tickets at a and b swapped, {"w": [i, tier]} the loser at i
+## made a winner of tier (CONSOLATION), {"c": [i, n]} the prize at i split over up to n
+## losers after it (CRUMBS), {"p": pct} smallest prizes +pct% (PACKED).
 var ops: Array = []
+var cut_total := 0           ## money CRUMBS took off split tickets (their pieces hold it)
 
 
 ## SHUFFLE (an item): the tickets not sold yet come in another order, from the seed and
@@ -76,6 +93,12 @@ func replay(saved: Array) -> void:
 			shuffle_rest()
 		elif op.has("m") and typeof(op.m) == TYPE_ARRAY and op.m.size() == 2:
 			swap(int(op.m[0]), int(op.m[1]))
+		elif op.has("w") and typeof(op.w) == TYPE_ARRAY and op.w.size() == 2:
+			make_winner(int(op.w[0]), int(op.w[1]))
+		elif op.has("c") and typeof(op.c) == TYPE_ARRAY and op.c.size() == 2:
+			crumble(int(op.c[0]), int(op.c[1]))
+		elif op.has("p"):
+			pack(int(op.p))
 
 
 func wins(i: int) -> bool:
@@ -179,15 +202,170 @@ func scatter(start: int, n: int, count: int) -> int:
 	return moved
 
 
+## The tier of the smallest prize (the first of equals).
+func smallest_tier() -> int:
+	var best := 0
+	for i in form.tiers.size():
+		if int(form.tiers[i].prize) < int(form.tiers[best].prize):
+			best = i
+	return best
+
+
+## CONSOLATION: the loser at `i` (unsold) wins the smallest prize, `pct` times in a
+## hundred; the roll is the seed's and the place's, so it comes out the same each
+## time. True when it won.
+func console(i: int, pct: int) -> bool:
+	if pct <= 0 or i < cursor or i >= size or wins(i):
+		return false
+	if SeededRng.new("%s|console|%d" % [seed, i]).next_float() * 100.0 >= pct:
+		return false
+	return make_winner(i, smallest_tier())
+
+
+## The loser at `i` (unsold) becomes a winner of `tier`: new money in the box. Logged.
+## False, and nothing changed, when it wins already or is sold.
+func make_winner(i: int, tier: int) -> bool:
+	if i < cursor or i >= size or wins(i) or tier < 0 or tier >= form.tiers.size():
+		return false
+	_win(i, tier)
+	ops.append({"w": [i, tier]})
+	return true
+
+
+## CRUMBS: the prize of the ticket at `i` (unsold; its best tier's, when it holds
+## several) is split over up to `n` more tickets, the next losers after it in the box:
+## each becomes the smallest prize and the ticket keeps the rest, so the money is the
+## same. A piece needs the ticket to keep at least the smallest prize (a split in two
+## needs twice the smallest, in three three times); pieces are never split again.
+## Logged when it split. Returns how many pieces were made.
+func crumble(i: int, n: int) -> int:
+	if n <= 0 or i < cursor or i >= size or not wins(i):
+		return 0
+	var t: Dictionary = tickets[i]
+	if t.get("crumb", false) or t.has("cut"):
+		return 0
+	var low := smallest_tier()
+	var s := int(form.tiers[low].prize)
+	var keep := int(form.tiers[int(t.tier)].prize)
+	var made := 0
+	var j := i + 1
+	while made < n and keep >= 2 * s:
+		while j < size and wins(j):
+			j += 1
+		if j >= size:
+			break
+		_win(j, low)
+		tickets[j].crumb = true
+		keep -= s
+		made += 1
+		j += 1
+	if made == 0:
+		return 0
+	t.cut = made * s
+	t.prize = int(t.prize) - made * s
+	cut_total += made * s
+	ops.append({"c": [i, n]})
+	return made
+
+
+## PACKED: the box's smallest prizes become up to `pct`% more, paid for by its prizes
+## of the PACK_ROLES: one of them is broken into smallest prizes, its ticket keeping
+## one and losers picked from the seed taking the rest, while what is still wanted is
+## at least half that prize. The money stays the same to the coin; the count lands as
+## near the share as those prizes allow (a box with few of them gains less). Only on a
+## box not sold from yet (it goes on the machine). Logged. Returns the prizes added.
+func pack(pct: int) -> int:
+	if pct <= 0 or cursor > 0:
+		return 0
+	ops.append({"p": pct})
+	var low := smallest_tier()
+	var s := int(form.tiers[low].prize)
+	var need := roundi(int(counts[low]) * pct / 100.0) * s
+	var r := SeededRng.new("%s|pack" % seed)
+	var dead := []
+	for i in range(cursor, size):
+		if not wins(i):
+			dead.append(i)
+	var added := 0
+	for tier in _tiers_above(low):
+		var v := int(form.tiers[tier].prize)
+		var holders := []
+		for i in range(cursor, size):
+			if wins(i) and tickets[i].get("wins", [tickets[i].tier]).has(tier):
+				holders.append(i)
+		while need * 2 >= v and not holders.is_empty() and dead.size() >= v / s - 1:
+			var at: int = holders.pop_at(r.next_int(holders.size()))
+			_demote(at, tier, low)
+			for k in v / s - 1:
+				_win(dead.pop_at(r.next_int(dead.size())), low)
+			need -= v
+			added += v / s
+	return added
+
+
+## The tiers of PACK_ROLES whose prize is bigger than `low`'s, smallest prize first.
+func _tiers_above(low: int) -> Array:
+	var out := []
+	for i in form.tiers.size():
+		if PACK_ROLES.has(str(form.tiers[i].role)) and int(form.tiers[i].prize) > int(form.tiers[low].prize):
+			out.append(i)
+	out.sort_custom(func(a, b): return int(form.tiers[a].prize) < int(form.tiers[b].prize))
+	return out
+
+
+## The loser at `i` wins `tier` (in a group from the seed, for a form that wins by
+## group); counted. Not logged: the op that called it is.
+func _win(i: int, tier: int) -> void:
+	var t: Dictionary = tickets[i]
+	if form.wins_by_group():
+		var w: Array = t.wins
+		w[SeededRng.new("%s|win|%d" % [seed, i]).next_int(w.size())] = tier
+	t.tier = tier
+	t.prize = int(form.tiers[tier].prize)
+	counts[tier] += 1
+
+
+## One prize of `tier` on the ticket at `i` becomes the smallest prize (`low`); its
+## best tier, prize and verify code follow. Counted.
+func _demote(i: int, tier: int, low: int) -> void:
+	var t: Dictionary = tickets[i]
+	counts[tier] -= 1
+	counts[low] += 1
+	if not form.wins_by_group():
+		t.tier = low
+		t.prize = int(form.tiers[low].prize)
+	else:
+		var w: Array = t.wins
+		w[w.find(tier)] = low
+		var best := -1
+		var sum := 0
+		for g in w:
+			if g < 0:
+				continue
+			sum += int(form.tiers[g].prize)
+			if best < 0 or int(form.tiers[g].prize) > int(form.tiers[best].prize):
+				best = g
+		t.tier = best
+		t.prize = sum
+	if t.has("verify"):
+		var top := false
+		for g in t.get("wins", [t.tier]):
+			top = top or form.is_top(g)
+		if not top:
+			t.verify = ""
+
+
 func gross() -> int:
 	return size * form.price
 
 
+## The box's prize money: every prize it holds (CRUMBS's pieces are counted as
+## prizes, so what they took off the tickets they came from is taken off here).
 func prize_total() -> int:
 	var s := 0
 	for i in counts.size():
 		s += int(form.tiers[i].prize) * int(counts[i])
-	return s
+	return s - cut_total
 
 
 func net() -> int:

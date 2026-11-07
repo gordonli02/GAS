@@ -31,12 +31,15 @@ static func interior(form: FormDef, t: Dictionary) -> Array:
 	if win and form.win_display == "whole":
 		out.append_array(_layers(inside.winner, ctx, Transform2D.IDENTITY))
 		return out
+	# CRUMBS: a split ticket's best prize (its first group of that tier) shows what it kept.
+	var cut_at: int = t.wins.find(t.tier) if form.wins_by_group() and int(t.get("cut", 0)) > 0 else -1
 	for i in inside.slots.size():
 		var slot: Dictionary = inside.slots[i]
 		if form.wins_by_group() and t.wins[i] >= 0:
 			# This group's own prize: its tier, its amount, a verify code on a top prize.
 			var tier: int = t.wins[i]
-			var own := _ctx(form, {"serial": t.serial, "prize": str(int(form.tiers[tier].prize)),
+			var amount := int(form.tiers[tier].prize) - (int(t.cut) if i == cut_at else 0)
+			var own := _ctx(form, {"serial": t.serial, "prize": str(amount),
 				"verify": t.get("verify", "")}, tier,
 				{"win": true, "lose": false, "verify": form.is_top(tier) and t.get("verify", "") != ""})
 			var r: Array = slot.rect

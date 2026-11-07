@@ -48,8 +48,9 @@ const LINES := {
 	"clearing": {"perks": ["closer", "firstpull", "assembly", "snowball"], "shelf": ["regular"], "share": 0.6, "forms": []},
 	"jackpot": {"perks": ["bigfish", "pity", "hunter"], "shelf": ["regular", "read1"], "share": 0.6,
 		"forms": ["catch", "kabawk"]},
-	"small": {"perks": ["penny", "stacker", "scrap", "trashking"], "shelf": [], "share": 0.6, "forms": ["plate", "nugget"]},
-	"batch": {"perks": ["combo", "again", "streak", "allin"], "shelf": ["multi", "bet"], "share": 0.6, "forms": []},
+	"small": {"perks": ["penny", "stacker", "consolation", "packed", "scrap", "crumbs", "trashking"], "shelf": [], "share": 0.6,
+		"forms": ["plate", "nugget"]},
+	"batch": {"perks": ["combo", "again", "streak", "crumbs", "allin"], "shelf": ["multi", "bet"], "share": 0.6, "forms": []},
 	"money": {"perks": ["worth", "middle"], "shelf": ["savings"], "share": 0.6, "forms": ["spur"]},
 	"churn": {"perks": ["firstpull"], "shelf": ["regular"], "share": 1.0, "forms": []},
 }
@@ -85,6 +86,12 @@ const EV_SETS := [
 	{"seal": 2, "snowball": 1, "snow": 10, "bet": 3},                     # 封盒 (SEAL itself does nothing here)
 	{"read1": 1, "allin": 1},                                          # 跨：信息换胜率
 	{"magnet": 2, "insurance": 2, "pity": 2, "form": "kabawk"},           # 跨：确定性叠大奖票
+	# The line that wins more often (section 15): CONSOLATION adds a little, PACKED and
+	# CRUMBS alone add nothing; with PENNY JAR, CHAIN and STREAK they do.
+	{"consolation": 1}, {"consolation": 2}, {"packed": 2}, {"crumbs": 2},
+	{"packed": 2, "penny": 2, "consolation": 2},
+	{"crumbs": 2, "multi": 2, "combo": 2},
+	{"crumbs": 2, "consolation": 2, "streak": 2, "multi": 2, "combo": 1},
 ]
 ## Perk levels the churn table (churn_return) prints: CHURN tickets a box, then NEW BOX.
 const CHURN_SETS := [{}, {"regular": 2}, {"firstpull": 1, "regular": 2}, {"firstpull": 2, "regular": 2}]

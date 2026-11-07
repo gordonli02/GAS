@@ -115,7 +115,7 @@ func new_economy() -> Economy:
 ## `light`: boxes without the print on each ticket, for simulations.
 func new_machine(base_forms: Array, light := false) -> MachineLogic:
 	var m := MachineLogic.new(stage_forms(base_forms), "%s-L%d-0001" % [seed, layer + 1], config.box_model(layer), light, luck(),
-		Catalog.FORTUNE_TRIES if effect("fortune") > 0 else 1)
+		Catalog.FORTUNE_TRIES if effect("fortune") > 0 else 1, effect("packed"))
 	# SEAL: the boxes brought along from the layer paid, as they were (the same seed
 	# gives the same box at the new stake: the prizes are scaled, the order kept).
 	for s in sealed:
@@ -140,6 +140,9 @@ func apply(m: MachineLogic) -> void:
 	m.luck_tries = Catalog.FORTUNE_TRIES if effect("fortune") > 0 else 1
 	m.flow_line = effect("flow_line") > 0
 	m.magnet = effect("magnet")
+	m.consolation = effect("consolation")
+	m.crumbs = effect("crumbs")
+	m.packed = effect("packed")
 	m.sure_next = claim_sure if effect("stakeout") > 0 or effect("insure") > 0 else Callable()
 	m.bet = bet()
 
@@ -679,8 +682,13 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 		return back
 	var base := 0.0
 	var tops := 0
+	# CRUMBS: a split ticket's best prize gave `cut` away to the tickets after it.
+	var cut := int(t.get("cut", 0))
 	for tier in won_tiers:
 		var p := float(form.tiers[tier].prize)
+		if cut > 0 and tier == int(t.tier):
+			p -= cut
+			cut = 0
 		match str(form.tiers[tier].role):
 			"top":
 				p *= effect_x("top_x")
