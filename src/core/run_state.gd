@@ -319,9 +319,17 @@ func accrue() -> void:
 	stats.interest += cost
 
 
-## What NEW BOX costs now: the stage's fee less the perk's cut.
+## What NEW BOX costs now: the stage's fee less REGULAR's cut, and, while FIRST PULL
+## is held, never less than what its multiplier adds to a box's first tickets at the
+## top bet (FIRST PULL's x times FIRST_TICKETS tickets at the layer's price times
+## bet_max: docs/perk_research.md section 5 parts 3 and 11), so changing boxes to farm
+## the first twenty cannot pay. The cut comes first, the floor after it.
 func change_fee() -> int:
-	return int(stage().get("change_fee", 0)) * (100 - mini(100, effect("fee_cut"))) / 100
+	var fee := int(stage().get("change_fee", 0)) * (100 - mini(100, effect("fee_cut"))) / 100
+	var first := effect_x("first_x")
+	if first > 1:
+		fee = maxi(fee, first * Catalog.FIRST_TICKETS * stake() * bet_max())
+	return fee
 
 
 ## Whether the column's form may be picked at NEW BOX (PICKY).
@@ -354,10 +362,12 @@ func count_sales(n: int, last_sales := 0, form_uid := "") -> void:
 		forms_today[form_uid] = true
 
 
-## The last ticket of a box was bought (its prize is paid): SNOWBALL counts it, and the
-## machine gets the bigger last-sale prize that follows.
+## The last ticket of a box was bought (its prize is paid): SNOWBALL counts it, the
+## prize counts for the run's best (stats.best_prize, as every prize pay_ticket pays),
+## and the machine gets the bigger last-sale prize that follows.
 func cleared_box(m: MachineLogic) -> void:
 	stats.boxes_cleared += 1
+	stats.best_prize = maxi(int(stats.best_prize), m.last_sale)
 	if effect("snowball") > 0:
 		snow += 1
 	apply(m)

@@ -1,7 +1,9 @@
 extends "res://tests/test_case.gd"
 ## The run simulator (RunSim): bots play whole runs by the game's own rules.
 ## The numbers themselves are looked at with tools/sim_runs; here, that the bots end
-## every run with a balanced ledger and that the work-only rule holds through them.
+## every run with a balanced ledger, that the work-only rule holds through them, that
+## the churn exploit (FIRST PULL x REGULAR) does not pay, and that summary() carries
+## what the roadmap's bots table is measured by.
 
 
 func test_work_bot_clears_with_nothing_left() -> void:
@@ -19,8 +21,15 @@ func test_bots_finish_and_balance() -> void:
 	var pack := core_pack()
 	if pack == null:
 		return
-	var n := 12 if full else 3
-	for bot in ["blind", "borrow", "mixed"]:
+	check(RunSim.BOTS.has("gamble") and not RunSim.BOTS.has("mixed"), "mixed became gamble")
+	for line in RunSim.LINES:
+		check(RunSim.BOTS.has(line), "%s is a bot" % line)
+		for id in RunSim.LINES[line].perks + RunSim.LINES[line].shelf:
+			check(not Catalog.standard().perk(id).is_empty(), "%s: %s is in the catalog" % [line, id])
+	var n := 6 if full else 2
+	for bot in RunSim.BOTS:
+		if bot == "work":
+			continue
 		for i in n:
 			var r := RunSim.play(bot, pack.forms, "B-%d" % i)
 			check([RunState.CLEARED, RunState.FAILED].has(r.status), "%s %d: the run ends" % [bot, i])
@@ -30,6 +39,41 @@ func test_bots_finish_and_balance() -> void:
 	var a := RunSim.play("blind", pack.forms, "B-0")
 	var b := RunSim.play("blind", pack.forms, "B-0")
 	eq(b, a, "the same seed plays the same run")
+
+
+func test_churn_does_not_pay() -> void:
+	# FIRST PULL x REGULAR (docs/perk_research.md 5.11): 20 tickets a box, then a new
+	# box; the fee's floor keeps it at 1 or under, counted with the fees.
+	var pack := core_pack()
+	if pack == null:
+		return
+	var s := RunSim.summary("churn", pack.forms, 60 if full else 20, "CH")
+	note("churn bot: return %.3f, with fees %.3f, fees $%.0f a run" % [s["return"], s.return_fees, s.fees])
+	check(s.return_fees <= 1.0, "the churn bot's return with fees is 1 or under (%.3f)" % s.return_fees)
+	var boxes := 60 if full else 20
+	var fixed := RunSim.churn_return(pack.forms, {"firstpull": 2, "regular": 2}, boxes)
+	note("churn at FIRST PULL 2 + REGULAR 2: return %.3f, with fees %.3f, fee $%d" % [fixed["return"], fixed.return_fees, fixed.fee])
+	eq(fixed.fee, 100, "the fee is the floor")
+	check(fixed["return"] > 2.0, "FIRST PULL pays on the first twenty (%.3f)" % fixed["return"])
+	check(fixed.return_fees <= 1.0, "but not once the fee is counted (%.3f)" % fixed.return_fees)
+
+
+func test_summary_carries_the_targets_numbers() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var s := RunSim.summary("blind", pack.forms, 12 if full else 6, "SU")
+	eq(s.layer_rates.size(), 3, "a conditional rate per layer")
+	var product := 1.0
+	for r in s.layer_rates:
+		check(r >= 0.0 and r <= 1.0, "a conditional rate is a share (%.3f)" % r)
+		product *= r
+	check(absf(product - s.cleared) < 1e-6, "the three multiply to the overall (%.4f, %.4f)" % [product, s.cleared])
+	eq(s.best.size(), 3, "the 50th, 90th and 99th percentiles of the best prize")
+	check(s.best[0] <= s.best[1] and s.best[1] <= s.best[2], "they do not decrease: %s" % str(s.best))
+	check(s.best[0] > 0, "every run wins something")
+	eq(RunSim.percentiles([5, 1, 4, 2, 3], [50, 90, 99]), [3, 5, 5], "nearest rank")
+	eq(RunSim.percentiles([], [50]), [0], "nothing: 0")
 
 
 func test_perks_raise_the_return() -> void:
@@ -47,3 +91,5 @@ func test_perks_raise_the_return() -> void:
 	check(prizes > none * 1.2, "FAT PRIZES 3 pays about 30%% more (%.3f)" % prizes)
 	check(luck > none, "LUCKY STREAK pays more (%.3f)" % luck)
 	check(all > prizes and all > luck, "together more still (%.3f)" % all)
+	var snow := RunSim.box_return(pack.forms, {"snowball": 1, "snow": 10}, n)
+	check(snow > none * 2.0, "SNOWBALL after ten boxes: about x2.6 (%.3f)" % snow)

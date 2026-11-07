@@ -102,6 +102,32 @@ func test_work_line_fails_when_off_by_anything() -> void:
 	eq(plain[0].layer, 0, "it fails in the first layer already")
 
 
+func test_borrowing_to_invest_does_not_clear() -> void:
+	# SAVINGS x LOAN (docs/perk_research.md 5.11, borrow to invest): the whole house
+	# line on the first morning, SAVINGS bought up to its top as soon as the cash is
+	# there, every day worked, the layer paid the moment it can be. At 15% a day on
+	# what is owed it still falls short of the first layer.
+	var r := _run()
+	var e := r.new_economy()
+	while r.borrow(e):
+		pass
+	eq(r.loan_due, r.loan_limit(), "the whole line borrowed")
+	var n := 0
+	while r.playing() and r.layer == 0 and n < 20:
+		while r.level(RunConfig.SAVINGS) < 3 and r.buy_perk(RunConfig.SAVINGS, e):
+			pass
+		r.work(e)
+		if r.can_pay(e):
+			r.pay(e)
+		else:
+			r.end_day(e)
+		n += 1
+	note("borrow to invest, layer 1: SAVINGS %d by the last day, cash $%d, owed $%d, due $%d" % [
+		r.level(RunConfig.SAVINGS), e.cash, r.loan_due, r.due()])
+	eq(r.status, RunState.FAILED, "borrowing the line to buy SAVINGS does not clear the first layer")
+	eq(r.layer, 0, "it fails there")
+
+
 func test_wages_alone_fall_short() -> void:
 	# The wage is flat within a layer (no hidden raises), and the wage times the days
 	# never reaches the debt: SAVINGS has to make up the rest.

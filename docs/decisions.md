@@ -693,3 +693,77 @@ phone's shop, the tags and the UI step 2 left behind landed.
 - **HOUSE ACCOUNT**: the LCD's first line is "$ x CREDIT · TAB $y" while the tab holds
   something (the tab alone when the credit is 0); the LEAVE card says ON THE TAB and
   that it is settled when you leave.
+
+## Milestone 9.5, step 5: the simulator and the exploit checks
+The plan is `docs/roadmap.md` (the clear-rate targets and M9.5 task 5) and
+`docs/perk_research.md` section 5 (parts 3, 8 and 11); this is how it landed.
+- **The bots** (`RunSim.BOTS`): `mixed` became `gamble` (plays by default, works only
+  when its cash is under `GAMBLE_DAY`, 25 tickets at the machine's cheapest price, or
+  when it can pay the layer). The build bots are one table, `RunSim.LINES`: per bot the
+  dealt perks it takes (in order of preference), the shelf perks it buys (every level,
+  while each costs at most `share` of the cash, 60%; SAVINGS only on the work line's
+  checkpoints), and the forms (`FormDef.id`) its column is picked among when the machine
+  sells one. `build` is the generic one (any line's engines, QUICK HANDS); `clearing`
+  (CLOSER, FIRST PULL, ASSEMBLY LINE, SNOWBALL; REGULAR), `jackpot` (BIG FISH, DUE A WIN,
+  JACKPOT HUNTER; REGULAR then READ THE FLARE: the line has no CLOSER, and REGULAR is
+  the other way to open READ THE FLARE, which JACKPOT HUNTER needs; Big Catch and
+  Ka-Bawk!), `small` (PENNY JAR, STACKER, SCRAP DEALER, TRASH KING; Hot Plate and Nugget
+  Rush), `batch` (CHAIN, ENCORE, ALL IN; QUICK HANDS and HIGH ROLLER), `money` (NET
+  WORTH, MIDDLE CUT; SAVINGS; Lucky Spur). A bot with HIGH ROLLER bets as the perks bot
+  does (the most it can while it holds a hundred tickets), one with ALL IN buys a column
+  out once a day of play when the money is there. `churn` buys FIRST PULL and REGULAR
+  whenever it can pay for them, and at the machine buys 20 tickets of a column, then
+  NEW BOX (cashing out the credit for the fee if needed), again and again.
+- **`summary()`** adds `layer_rates` (of the runs that reached a layer, the share that
+  paid it; the three multiply to `cleared`), `return_fees` (prizes over tickets and NEW
+  BOX fees), `fees`, and `best`: the 50th / 90th / 99th percentile (nearest rank,
+  `percentiles()`) of each run's `stats.best_prize`, in dollars. `best_prize` is set by
+  `pay_ticket` on every winning path (one at a time, a batch, ALL IN all go through it),
+  and now by `cleared_box` for the last-sale prize too.
+- **`tools/sim_runs`** defaults to 300 runs a bot and prints, per bot: cleared overall,
+  layers 1 / 2 / 3 conditional, days, tickets, return, return with fees, perks, the three
+  percentiles, then the roadmap's target where there is one, whether it is met (build
+  20 to 30%; gamble and perks within 5 points; borrow, blind and skip under theirs) and
+  whether the bot keeps its place against the next one down in build > gamble > perks >
+  borrow >= blind ~ skip (blind and skip within 3 points count as equal), and a line
+  saying whether the ordering holds. Then the return-per-dollar table (`EV_SETS`, now
+  with each line's full set, the daily small-prizes combo, the "astronomical" one with
+  `snow` set to 10 boxes cleared, FLARE ONLY 2 + BIG FISH 2; ALL IN and NET WORTH do
+  nothing in `box_return`, so the batch and money lines are shown without them;
+  `box_return` plays at the top bet now), each form alone with and without DUE A WIN 2,
+  the churn exploit at fixed perks (`RunSim.churn_return`, `CHURN_SETS`,
+  `--churn-boxes=`), and the forms' table as before.
+- **Plugged: FIRST PULL x REGULAR.** While FIRST PULL is held, `change_fee()` is at least
+  its multiplier x `Catalog.FIRST_TICKETS` x the layer's stake x `bet_max()`; REGULAR's
+  cut comes first. The brief said the stake; the top bet is in too, because FIRST PULL
+  multiplies the bet as well and a bet raised after the change would dodge a floor at
+  the bet of the moment (without HIGH ROLLER it is the same number: $100 at FIRST PULL
+  2 and stake 1).
+- **Checked, already plugged**: LOAN SHARK 2 on LOW RATE 2 is still 15% a day, and
+  BORROWED LUCK at a full line pays +100% / +200% only while owed (`test_perks`).
+  Borrowing the whole line on day 1 and buying SAVINGS up to 3 as soon as the cash is
+  there does not clear the first layer at 15% a day (`test_run`: $972 in cash on the last
+  day against $1,487 due, $351 of it the loan).
+- **Not plugged by rule**: SEAL x HIGH ROLLER x SNOWBALL is what the 99th percentile
+  measures; DUE A WIN on Ka-Bawk! is printed per form (below).
+- **One 300-run pass** (seeds SIM-0 .. SIM-299; overall, then layers 1 / 2 / 3
+  conditional; best prize p50 / p90 / p99 in dollars):
+  build 1.0% (45 / 10 / 23; 150 / 575 / 3,000), gamble 12.0% (47 / 52 / 49; 250 / 4,000 /
+  10,500), perks 2.7% (51 / 16 / 33; 150 / 750 / 5,200), borrow 5.0% (53 / 25 / 39; 400 /
+  2,500 / 10,500), blind 0.7% (50 / 12 / 11; 200 / 1,000 / 2,500), skip 0.7% (48 / 10 / 13;
+  150 / 1,000 / 2,500); the lines: clearing 0.7% (48 / 18 / 8), jackpot 0.3% (35 / 9 / 11),
+  small 3.3% (53 / 25 / 26), batch 0% (41 / 7 / 0), money 0% (38 / 8 / 0); churn 0% (it
+  never pays layer 1). The ordering fails at build (under gamble) and perks (under
+  borrow): building does not pay yet, as the roadmap expected (the first layer's debt
+  and the perk prices are the balance pass's). The churn bot's return is 0.932 on
+  tickets and 0.622 with the fees; at fixed FIRST PULL 2 + REGULAR 2 the churn pays 5.02
+  on tickets and 0.837 with the $100 fee (REGULAR 2 alone makes the fee $6: without the
+  floor the same churn would pay about 5.02 x 20 / 26 = 3.9 a dollar). Per form with DUE A WIN 2 (24 boxes, no perks / pity 2): Big
+  Catch 0.97 / 2.03, Hot Plate 1.13 / 1.35, Lucky Spur 1.15 / 2.44, Pecking Order 1.05 /
+  1.68, Ka-Bawk! 1.15 / 3.02, One Flock 0.94 / 1.60, Nugget Rush 0.94 / 1.07, Peckeye
+  1.06 / 1.59: the long losing streaks of Ka-Bawk! make DUE A WIN worth three times the
+  ticket there, three times what it is on the small-prize forms.
+- **Read with care**: `box_return` plays every box in one layer, so the effects that
+  grow with the layer or the run (SNOWBALL, TRASH KING, JACKPOT HUNTER) grow over all 48
+  boxes: the clearing set's 33.1, the small set's 41.3 and the hunter set's 3.2 are
+  that, not what a layer of play gives.

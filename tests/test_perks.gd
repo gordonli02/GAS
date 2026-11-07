@@ -222,6 +222,21 @@ func test_money_perks() -> void:
 	eq(r.change_fee(), fee / 2, "REGULAR 1: half the fee")
 	r.perks = {"regular": 2}
 	eq(r.change_fee(), fee / 4, "REGULAR 2: a quarter (never free)")
+	# FIRST PULL x REGULAR (docs/perk_research.md 5.11): while FIRST PULL is held the fee
+	# never falls under its multiplier times twenty tickets at the top bet, so changing
+	# boxes to farm the first twenty does not pay. REGULAR's cut comes first.
+	r.perks = {"firstpull": 2, "regular": 2}
+	eq(r.change_fee(), 100, "FIRST PULL 2 with REGULAR 2: x5 times 20 tickets at stake 1")
+	r.perks = {"firstpull": 1}
+	eq(r.change_fee(), 60, "FIRST PULL 1 alone: x3 times 20, over the $25 fee")
+	r.perks = {"firstpull": 2, "regular": 2, "bet": 3}
+	eq(r.change_fee(), 1000, "at a top bet of x10 the twenty cost ten times as much: so does the floor")
+	r.layer = 1
+	r.perks = {"firstpull": 2, "regular": 2}
+	eq(r.change_fee(), 500, "layer 2: at stake 5")
+	r.perks = {"regular": 2}
+	eq(r.change_fee(), r.config.layer(1).change_fee / 4, "without FIRST PULL, REGULAR 2 is a quarter there too")
+	r.layer = 0
 	r.perks = {"haggler": 1}
 	eq(r.item_price("peek"), 15, "HAGGLER: $20 less 25%")
 	eq(r.item_cap(), 3, "room for three items")
@@ -245,6 +260,29 @@ func test_money_perks() -> void:
 	e2.bonus(10000)
 	r2.pay(e2)
 	eq(r2.owe_pct(), 0, "paid: gone")
+	eq(_pays(r2, _ticket(2)), 100, "and the prize is back to the printed one")
+	# LOAN SHARK x LOW RATE x BORROWED LUCK (5.11): the shark's line, the full of it
+	# owed, pays +100% / +200% only while owed, and the rate is never nothing.
+	var r4 := _run()
+	var e4 := r4.new_economy()
+	r4.perks = {"shark": 2, "lowrate": 2, "credit": 1, "debt": 1}
+	eq(r4.interest(), 15, "LOAN SHARK 2 on LOW RATE 2: still 15% a day")
+	eq(_pays(r4, _ticket(2)), 100, "nothing owed: BORROWED LUCK adds nothing")
+	while r4.borrow(e4):
+		pass
+	eq(r4.loan_due, r4.loan_limit(), "the shark's whole line owed")
+	eq(r4.owe_pct(), 100, "BORROWED LUCK 1 at a full line: +100%")
+	eq(_pays(r4, _ticket(2)), 200, "on the prize")
+	r4.perks["debt"] = 2
+	eq(r4.owe_pct(), 200, "BORROWED LUCK 2 at a full line: +200%")
+	eq(_pays(r4, _ticket(2)), 300, "on the prize")
+	r4.accrue()
+	check(r4.loan_due > r4.loan_limit(), "a morning at 15% and more is owed than the line")
+	e4.bonus(100000)
+	r4.pay(e4)
+	eq(r4.loan_due, 0, "paid with the layer")
+	eq(r4.owe_pct(), 0, "repaid: no luck")
+	eq(_pays(r4, _ticket(2)), 100, "the prize is the printed one again")
 	# NET WORTH: +2% per $100 (times the stake) in cash.
 	var r3 := _run()
 	r3.perks = {"worth": 1}
