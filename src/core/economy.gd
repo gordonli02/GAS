@@ -123,7 +123,7 @@ func refund(amount: int) -> void:
 	cash += amount
 
 
-## Tickets paid from credit first, then cash (the run's ALL IN buys a box out at once).
+## Tickets paid from credit first, then cash, outside the machine (tests).
 func spend(amount: int) -> bool:
 	if amount < 0 or cash + credit < amount:
 		return false

@@ -4,7 +4,7 @@ extends RefCounted
 ## Pure logic; the money itself stays in Economy, which every method here is handed.
 ##
 ## A day is one of two things: a day at the machine (as many tickets as the player
-## likes, until they leave) or a shift of work (a sure wage, no tickets that day).
+## likes, until they leave) or a shift of work (a sure wage, no tickets opened that day).
 ## The debt is paid in one go, any time the money is there, and the next layer starts
 ## at once; on the last day of a layer, leaving pays it or ends the run.
 ## Borrowed money goes on top of what is due in the layer, with interest.
@@ -48,8 +48,7 @@ var offer_bought := false  ## something was bought from this round
 var shelf: Array = []      ## item ids on the phone's shelf today (bought ones leave it)
 var shelf_rerolls := 0
 var last_item := ""        ## the item bought last (COPIER copies it)
-var bet := 1               ## the machine's bet (HIGH ROLLER), 1 .. bet_max()
-var day_tickets := 0       ## tickets bought today (STAKEOUT's first, MOONLIGHTING's cap)
+var day_tickets := 0       ## tickets bought today (STAKEOUT's first)
 var forms_today := {}      ## form uid -> true, forms bought today (LOYAL, VARIETY)
 var noback_days := 0       ## days of play since NO WAY BACK was bought
 var sure_armed := false    ## a sure win is in the tray, not opened yet (no second one until it is)
@@ -63,10 +62,21 @@ var snow := 0
 var scrap := 0.0           ## SCRAP DEALER's share of losers not paid out yet (paid in whole dollars)
 var layer_losers := 0
 var layer_tops := 0
-## Today's: a HAPPY HOUR, a SAFETY NET, ALL IN used, the ledger when the day began.
+## The window (Catalog.WINDOW tickets opened, by hand or at once, across columns; G,
+## docs/perk_research.md section 5 part 14): tickets opened in it, the sum of their
+## printed prizes (before the bet and every perk), what they paid into the ledger and
+## how many won. STREAK and DOUBLE UP act when it closes. Today's only.
+var window_n := 0
+var window_printed := 0
+var window_paid := 0
+var window_wins := 0
+var last_window := {}      ## the window closed last: {printed, paid}; {} before the day's first
+var streak := 0            ## STREAK: windows in a row with a winner
+var push_stake := 0        ## DOUBLE UP: the stake on the next window, 0 when none is pending
+var push_printed := 0      ## the printed sum the next window has to beat
+## Today's: a HAPPY HOUR, a SAFETY NET, the ledger when the day began.
 var happy := false
 var safety := false
-var all_in_used := false
 var day_spent := 0
 var day_won := 0
 var catalog: Catalog = Catalog.standard()
@@ -77,8 +87,9 @@ var stats := {"days": 0, "play_days": 0, "shifts": 0, "tickets": 0, "wages": 0, 
 	"interest": 0, "repaid": 0, "box_changes": 0, "fees": 0, "last_sales": 0, "days_spared": 0,
 	"layers_cleared": 0, "discarded": 0,   ## discarded: tickets bought and thrown away unopened
 	"shop": 0, "perks": 0, "items": 0, "services": 0, "bonus": 0,   ## shop: money spent there; bonus: prize money from perks and coins
-	"rerolls": 0, "skipped_offers": 0, "savings": 0, "insured": 0, "boxes_cleared": 0, "all_ins": 0, "best_prize": 0,
-	"sure_wins": 0, "refunded": 0, "sealed": 0}   ## sure_wins: prizes moved forward; refunded: tickets given back
+	"rerolls": 0, "skipped_offers": 0, "savings": 0, "insured": 0, "boxes_cleared": 0, "best_prize": 0,
+	"sure_wins": 0, "refunded": 0, "sealed": 0,   ## sure_wins: prizes moved forward; refunded: tickets given back
+	"staked": 0, "push_won": 0, "push_lost": 0}   ## DOUBLE UP: stakes put up, what came back (x3), stakes lost
 
 
 static func start(run_config: RunConfig, seed_text: String, layer_scenes: Array) -> RunState:
@@ -129,20 +140,11 @@ func apply(m: MachineLogic) -> void:
 	m.flow_line = effect("flow_line") > 0
 	m.magnet = effect("magnet")
 	m.sure_next = claim_sure if effect("stakeout") > 0 or effect("insure") > 0 else Callable()
-	m.sale_cap = sale_cap()
-	bet = clampi(bet, 1, bet_max())
-	m.bet = bet
+	m.bet = bet()
 
 
-## Tickets the machine may still sell today: on a day of work MOONLIGHTING's (opened
-## tomorrow), else no cap (-1).
-func sale_cap() -> int:
-	if today == "work":
-		return maxi(0, effect("work_tickets") - day_tickets)
-	return -1
-
-
-## Whether tickets can be opened today (not on a day of work: MOONLIGHTING's wait).
+## Whether tickets can be opened today (not on a day of work: MOONLIGHTING's tickets
+## wait for tomorrow).
 func can_open() -> bool:
 	return playing() and today == "play"
 
@@ -221,9 +223,15 @@ func wage() -> int:
 	return int(stage().wage)
 
 
-## What the last shift worked in this layer paid.
+## What a shift pays while the run holds what it holds: the wage less MOONLIGHTING's
+## cut (G: on every day of work while it is held, tickets bought or not).
+func shift_wage() -> int:
+	return wage() * (100 - clampi(effect("wage_cut"), 0, 100)) / 100
+
+
+## What the last shift worked in this layer paid (OVERTIME's double aside).
 func last_wage() -> int:
-	return wage()
+	return shift_wage()
 
 
 func can_choose() -> bool:
@@ -251,12 +259,12 @@ func can_work() -> bool:
 	return can_choose() and effect("no_work") <= 0
 
 
-## Spends the day at work: the wage now (twice it under OVERTIME), no tickets today
-## (MOONLIGHTING buys a few, for tomorrow).
+## Spends the day at work: the wage now, less MOONLIGHTING's cut (twice that under
+## OVERTIME); no tickets opened today (MOONLIGHTING buys them, for tomorrow).
 func work(e: Economy) -> bool:
 	if not can_work():
 		return false
-	var w := wage() * (2 if overtime else 1)
+	var w := shift_wage() * (2 if overtime else 1)
 	e.earn(w)
 	today = "work"
 	shifts += 1
@@ -321,14 +329,15 @@ func accrue() -> void:
 
 ## What NEW BOX costs now: the stage's fee less REGULAR's cut, and, while FIRST PULL
 ## is held, never less than what its multiplier adds to a box's first tickets at the
-## top bet (FIRST PULL's x times FIRST_TICKETS tickets at the layer's price times
-## bet_max: docs/perk_research.md section 5 parts 3 and 11), so changing boxes to farm
-## the first twenty cannot pay. The cut comes first, the floor after it.
+## bet (FIRST PULL's x times FIRST_TICKETS tickets at the layer's price times bet():
+## docs/perk_research.md section 5 parts 3, 11 and 14; the bet is fixed, so there is
+## one bet to count), so changing boxes to farm the first twenty cannot pay. The cut
+## comes first, the floor after it.
 func change_fee() -> int:
 	var fee := int(stage().get("change_fee", 0)) * (100 - mini(100, effect("fee_cut"))) / 100
 	var first := effect_x("first_x")
 	if first > 1:
-		fee = maxi(fee, first * Catalog.FIRST_TICKETS * stake() * bet_max())
+		fee = maxi(fee, first * Catalog.FIRST_TICKETS * stake() * bet())
 	return fee
 
 
@@ -503,8 +512,8 @@ func _settle_day(e: Economy) -> void:
 func _new_day() -> void:
 	happy = false
 	safety = false
-	all_in_used = false
 	overtime = false
+	reset_window()
 	sure_armed = false
 	day_tickets = 0
 	forms_today = {}
@@ -571,18 +580,11 @@ func reading() -> int:
 	return effect("reading")
 
 
-## The highest bet the machine takes (HIGH ROLLER), 1 without it.
-func bet_max() -> int:
+## The machine's bet: HIGH ROLLER's value at the level bought, 1 without it. Fixed
+## (G, docs/perk_research.md section 5 part 14): no key changes it, a level bought
+## raises it for good. Tickets in the tray keep the bet they were bought at.
+func bet() -> int:
 	return maxi(1, effect("bet"))
-
-
-## The bets the machine offers: 1 and every level of HIGH ROLLER bought.
-func bets() -> Array:
-	var out := [1]
-	var p := catalog.perk("bet")
-	for k in mini(level("bet"), p.get("levels", []).size()):
-		out.append(int(p.levels[k].value))
-	return out
 
 
 ## Tickets opened at once from the tray (QUICK HANDS), 0 without it.
@@ -621,6 +623,7 @@ func prize_pct(e: Economy, cash := -1) -> int:
 	pct += effect("trash_pct") * (layer_losers / 100)
 	pct += effect("hunter_pct") * layer_tops
 	pct += effect("noback_pct") * noback_days
+	pct += streak_pct()
 	# LOYAL and VARIETY: the higher of the two (they are opposites).
 	var loyal := effect("loyal_pct") if forms_today.size() == 1 else 0
 	pct += maxi(loyal, effect("variety_pct") * forms_today.size())
@@ -632,9 +635,10 @@ func prize_pct(e: Economy, cash := -1) -> int:
 ## Pays an opened ticket into the ledger: its prize through every perk (the formula of
 ## Catalog's header), or, for a loser, what SCRAP DEALER gives back (and a WHITE-OUT,
 ## when held, turns the loser into the form's smallest prize). `bet`: what the ticket
-## was bought at; `x`: the opening's multiplier (CHAIN, ALL IN); `again`: ENCORE hit;
+## was bought at; `x`: the opening's multiplier (CHAIN); `again`: ENCORE hit;
 ## `cash`: what NET WORTH counts (an opening counts the cash it started with, so the
-## prizes of one opening do not feed each other). Returns the money paid.
+## prizes of one opening do not feed each other). Every ticket counts in the window
+## (_count_window), which may close on it. Returns the money paid for the ticket.
 func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 1.0, again := false, cash := -1) -> int:
 	sure_armed = false
 	var won_tiers := []
@@ -665,6 +669,7 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 		if back > 0:
 			e.bonus(back)
 			stats.bonus += back
+		_count_window(e, t, back, false)
 		return back
 	var base := 0.0
 	var tops := 0
@@ -699,6 +704,7 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 	e.open_ticket(total)
 	stats.bonus += total - int(t.prize) * ticket_bet
 	stats.best_prize = maxi(int(stats.best_prize), total)
+	_count_window(e, t, total, true)
 	return total
 
 
@@ -710,7 +716,7 @@ func open_ticket(e: Economy, entry: Dictionary) -> int:
 	return paid
 
 
-## Tray entries opened at once (QUICK HANDS, ALL IN): CHAIN counts the winners (every
+## Tray entries opened at once (QUICK HANDS): CHAIN counts the winners (every
 ## prize on a ticket, and every ENCORE) and multiplies the whole opening; `x` on top.
 ## Returns {n, winners, won} (won: everything paid, SCRAP DEALER's included).
 func open_batch(e: Economy, entries: Array, x := 1.0) -> Dictionary:
@@ -752,41 +758,94 @@ static func smallest_tier(form: FormDef) -> int:
 	return best
 
 
-## ALL IN can buy out column `i` now (once a day of play, money for the whole box).
-func can_all_in(e: Economy, m: MachineLogic, i: int) -> bool:
-	if not playing() or today != "play" or effect("all_in") <= 0 or all_in_used or m.busy():
+# --- the window: STREAK and DOUBLE UP ----------------------------------------------------
+
+## STREAK's share of the next prize: so much a window in a row with a winner, up to
+## the cap.
+func streak_pct() -> int:
+	if effect("streak_pct") <= 0:
+		return 0
+	return mini(effect("streak_cap"), effect("streak_pct") * streak)
+
+
+## A ticket opened (pay_ticket, every path): it counts in the window, and the tenth
+## closes it (_close_window).
+func _count_window(e: Economy, t: Dictionary, paid: int, won: bool) -> void:
+	window_n += 1
+	window_printed += maxi(0, int(t.prize))
+	window_paid += paid
+	if won:
+		window_wins += 1
+	if window_n >= Catalog.WINDOW:
+		_close_window(e)
+
+
+## A window of Catalog.WINDOW tickets closed: STREAK counts it (one more with a winner,
+## back to 0 without; only while the perk is held), a pending DOUBLE UP is settled
+## against its printed sum (more than the stake's window: three times the stake back;
+## as much or less: the stake is gone), and it is kept as the last window (a new push
+## may be put on it). Then the counters start again.
+func _close_window(e: Economy) -> void:
+	if effect("streak_pct") > 0:
+		streak = streak + 1 if window_wins > 0 else 0
+	else:
+		streak = 0
+	if push_stake > 0:
+		if window_printed > push_printed:
+			var back := push_stake * 3
+			e.bonus(back)
+			stats.push_won += back
+			stats.best_prize = maxi(int(stats.best_prize), back)
+		else:
+			stats.push_lost += push_stake
+		push_stake = 0
+		push_printed = 0
+	last_window = {"printed": window_printed, "paid": window_paid}
+	window_n = 0
+	window_printed = 0
+	window_paid = 0
+	window_wins = 0
+
+
+## The window starts over, and the streak and the last window with it (every morning;
+## the developer panel). A pending DOUBLE UP is lost (G: the window never crosses a day).
+func reset_window() -> void:
+	if push_stake > 0:
+		stats.push_lost += push_stake
+	window_n = 0
+	window_printed = 0
+	window_paid = 0
+	window_wins = 0
+	last_window = {}
+	streak = 0
+	push_stake = 0
+	push_printed = 0
+
+
+## The stake DOUBLE UP would put up now: what the last window paid.
+func push_offer() -> int:
+	return int(last_window.get("paid", 0))
+
+
+## DOUBLE UP can be played now: a window has just closed (nothing opened since) and
+## paid something, no push is pending, and the cash covers its pay.
+func can_push(e: Economy) -> bool:
+	return playing() and effect("double_up") > 0 and push_stake == 0 and window_n == 0 \
+		and push_offer() > 0 and e.cash >= push_offer()
+
+
+## DOUBLE UP: the last window's pay is staked on the next window (taken out of cash).
+## The next window settles it (_close_window): its printed prizes against this one's,
+## never the money paid, so nothing bought between the windows helps (G).
+func push(e: Economy) -> bool:
+	if not can_push(e):
 		return false
-	var left := m.boxes[i].size - m.boxes[i].cursor
-	return left > 0 and e.cash + e.credit >= left * m.price(i)
-
-
-## ALL IN: buys out what is left in column `i` (credit first, then cash), at the bet,
-## and opens it all at once at ALL IN's multiplier (CHAIN too). The last sale is paid.
-## Returns open_batch's result plus {entries, cost, last_sale}, or {} when it cannot.
-func all_in(e: Economy, m: MachineLogic, i: int) -> Dictionary:
-	if not can_all_in(e, m, i):
-		return {}
-	var box: TicketBox = m.boxes[i]
-	var left := box.size - box.cursor
-	var cost := left * m.price(i)
-	e.spend(cost)
-	var entries := []
-	while box.cursor < box.size:
-		entries.append({"form": m.forms[i], "ticket": box.tickets[box.cursor], "box": box, "bet": m.bet})
-		box.cursor += 1
-	m.loaded[i] = box.size
-	var last := m.last_sale
-	if last > 0:
-		e.bonus(last)
-	count_sales(left, 1 if last > 0 else 0)
-	cleared_box(m)
-	all_in_used = true
-	stats.all_ins += 1
-	var r := open_batch(e, entries, float(effect("all_in")))
-	r.entries = entries
-	r.cost = cost
-	r.last_sale = last
-	return r
+	var stake := push_offer()
+	e.pay(stake)
+	push_stake = stake
+	push_printed = int(last_window.get("printed", 0))
+	stats.staked += stake
+	return true
 
 
 # --- perk offers -----------------------------------------------------------------------
@@ -1210,8 +1269,8 @@ func use_now(item_id: String, machine: MachineLogic = null, e: Economy = null) -
 			if today == "work":
 				if e == null:
 					return {}
-				e.earn(wage())
-				stats.wages += wage()
+				e.earn(shift_wage())
+				stats.wages += shift_wage()
 			overtime = true
 			out = {"on": true}
 		"copy":
@@ -1260,9 +1319,10 @@ func buy_service(service_id: String, e: Economy) -> bool:
 # --- save ------------------------------------------------------------------------------
 
 const _INTS := ["layer", "day", "shifts", "borrowed", "loan_due", "loan_bonus", "extra_days", "offer_bonus",
-	"offer_rerolls", "shelf_rerolls", "bet", "dry", "snow", "layer_losers", "layer_tops", "day_spent", "day_won",
-	"day_tickets", "noback_days"]
-const _BOOLS := ["offers_open", "offer_bought", "happy", "safety", "all_in_used", "sure_armed", "overtime"]
+	"offer_rerolls", "shelf_rerolls", "dry", "snow", "layer_losers", "layer_tops", "day_spent", "day_won",
+	"day_tickets", "noback_days", "window_n", "window_printed", "window_paid", "window_wins", "streak",
+	"push_stake", "push_printed"]
+const _BOOLS := ["offers_open", "offer_bought", "happy", "safety", "sure_armed", "overtime"]
 
 
 func to_dict() -> Dictionary:
@@ -1270,7 +1330,7 @@ func to_dict() -> Dictionary:
 		"stats": stats.duplicate(), "perks": perks.duplicate(), "items": items.duplicate(),
 		"services": services.duplicate(), "reports": reports.duplicate(), "offers": offers.duplicate(),
 		"shelf": shelf.duplicate(), "last_item": last_item, "forms_today": forms_today.duplicate(),
-		"coin_on": coin_on.duplicate(), "sealed": sealed.duplicate(true)}
+		"coin_on": coin_on.duplicate(), "sealed": sealed.duplicate(true), "last_window": last_window.duplicate()}
 	for k in _INTS + _BOOLS:
 		d[k] = get(k)
 	return d
@@ -1336,7 +1396,20 @@ static func from_dict(d: Dictionary, run_config: RunConfig) -> RunState:
 			or not ["", "play", "work"].has(r.today) or not [PLAYING, CLEARED, FAILED].has(r.status) \
 			or r.shifts < 0 or r.borrowed < 0 or r.loan_due < r.borrowed or r.extra_days < 0:
 		return null
-	r.bet = clampi(r.bet, 1, r.bet_max())
+	# The window within its bounds (a run saved before it loads with a fresh one; an
+	# old save's "bet" is ignored: the bet is HIGH ROLLER's level now).
+	var lw = d.get("last_window", {})
+	if typeof(lw) == TYPE_DICTIONARY and lw.has("printed") and lw.has("paid"):
+		r.last_window = {"printed": maxi(0, int(lw.printed)), "paid": maxi(0, int(lw.paid))}
+	if r.window_n < 0 or r.window_n >= Catalog.WINDOW or r.window_printed < 0 or r.window_wins > r.window_n \
+			or r.streak < 0 or r.push_stake < 0 or r.push_printed < 0:
+		r.window_n = 0
+		r.window_printed = 0
+		r.window_paid = 0
+		r.window_wins = 0
+		r.streak = maxi(0, r.streak)
+		r.push_stake = maxi(0, r.push_stake)
+		r.push_printed = maxi(0, r.push_printed)
 	return r
 
 

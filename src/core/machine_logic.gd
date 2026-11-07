@@ -4,7 +4,7 @@ extends RefCounted
 ## and restocking. Pure logic. Numbers from MIGRATION.md "Machine" and the web build.
 ##
 ## The run's perks reach the machine through a few fields RunState.apply sets (luck,
-## the bet, the last sale, MAGNET, a sale cap on a day of work) and one callable
+## the bet, the last sale, MAGNET) and one callable
 ## (`sure_next`), asked before every ticket is taken whether this one has to win; the
 ## box then moves a winner of its own forward (TicketBox.pull_winner).
 
@@ -33,8 +33,6 @@ var magnet := 0
 ## Asked with the box before a ticket is taken: whether this one has to win (a sure
 ## win is a winner of the box moved onto it). The run's rule (STAKEOUT, INSURANCE).
 var sure_next: Callable
-## Tickets the machine may still sell today (MOONLIGHTING on a day of work); -1: no cap.
-var sale_cap := -1
 var boxes: Array[TicketBox] = []
 var loaded: PackedFloat32Array = []   ## tickets loaded in each box (restocking boxes fill up)
 var queue: Array = []                 ## [{form: index, n: tickets left}]
@@ -109,23 +107,13 @@ func stock_left(i: int) -> int:
 	return maxi(0, int(floor(loaded[i])) - boxes[i].cursor)
 
 
-## Whether the machine may sell anything now (the day's cap, MOONLIGHTING).
-func may_sell() -> bool:
-	return sale_cap != 0
-
-
 ## A column button (or key 1-3). Sells 1, or with PLAY ALL armed min(100, what the
-## money buys, the day's cap). Returns "insert_bill" when the money is short, "no_more"
-## when the day's cap is reached, else "".
+## money buys). Returns "insert_bill" when the money is short, else "".
 func press(i: int, e: Economy) -> String:
 	var p := price(i)
-	if not may_sell():
-		return "no_more"
 	if not e.can_buy(p):
 		return "insert_bill"
 	var n := mini(PLAY_ALL_MAX, e.power() / p) if armed else 1
-	if sale_cap > 0:
-		n = mini(n, sale_cap)
 	armed = false
 	queue.append({"form": i, "n": n})
 	return ""
@@ -133,8 +121,6 @@ func press(i: int, e: Economy) -> String:
 
 ## The red PLAY ALL button: arms (or disarms) the next column press.
 func press_play_all(e: Economy) -> String:
-	if not may_sell():
-		return "no_more"
 	if not e.can_buy(min_price()):
 		return "insert_bill"
 	armed = not armed
@@ -199,8 +185,6 @@ func _take(i: int, economy: Economy) -> Dictionary:
 	var t: Dictionary = box.tickets[at]
 	box.cursor += 1
 	economy.buy(price(i))
-	if sale_cap > 0:
-		sale_cap -= 1
 	return t
 
 
@@ -217,7 +201,7 @@ func step(dt: float, now: float, economy: Economy, tray: TicketTray) -> Dictiona
 			# Sold out: the next seed's box loads and restocks.
 			boxes[i] = _load(forms[i], next_seed(box.seed), true)
 			loaded[i] = 0.0
-	if not queue.is_empty() and (not economy.can_buy(price(queue[0].form)) or not may_sell()):
+	if not queue.is_empty() and not economy.can_buy(price(queue[0].form)):
 		queue.clear()
 	var running := not queue.is_empty() and stock_left(queue[0].form) > 0
 	ev.motor = running
@@ -227,7 +211,7 @@ func step(dt: float, now: float, economy: Economy, tray: TicketTray) -> Dictiona
 		while _acc >= 1.0 and not queue.is_empty():
 			var job: Dictionary = queue[0]
 			var i: int = job.form
-			if not economy.can_buy(price(i)) or stock_left(i) <= 0 or not may_sell():
+			if not economy.can_buy(price(i)) or stock_left(i) <= 0:
 				break
 			_acc -= 1.0
 			var box := boxes[i]
@@ -252,13 +236,13 @@ func step(dt: float, now: float, economy: Economy, tray: TicketTray) -> Dictiona
 
 ## Sells one ticket of column `i` right now: no motor, no waiting for stock, no tray.
 ## For simulations. Returns {"ticket", "box", "last_sale": bool}, or {} when the credit
-## is short or the day's cap is reached.
+## is short.
 func sell_now(i: int, economy: Economy) -> Dictionary:
 	if boxes[i].cursor >= boxes[i].size:
 		boxes[i] = _load(forms[i], next_seed(boxes[i].seed), true)
 	var box := boxes[i]
 	loaded[i] = box.size
-	if not may_sell() or not economy.can_buy(price(i)):
+	if not economy.can_buy(price(i)):
 		return {}
 	var t := _take(i, economy)
 	var last := last_sale > 0 and box.cursor >= box.size

@@ -90,6 +90,7 @@ var _picking := -1                  ## run, PICKY: the machine column whose new 
 var _sealing := false               ## run, SEAL: the card asking which boxes come along is up
 var _seal_keep: Array = []          ## run, SEAL: the machine columns chosen so far
 var _moonlight := false             ## run, MOONLIGHTING: at the machine after the shift (tickets for tomorrow)
+var _pushing := false               ## run, DOUBLE UP: the card asking whether to stake the window just closed is up
 var _msg_args := []
 
 
@@ -170,8 +171,6 @@ func _ready() -> void:
 	hud.menu_pressed.connect(toggle_menu)
 	hud.leave_pressed.connect(leave_day)
 	hud.new_box_pressed.connect(toggle_change)
-	hud.bet_pressed.connect(cycle_bet)
-	hud.all_in_pressed.connect(toggle_all_in)
 	hud.open_pressed.connect(open_many)
 	add_child(run_card)
 	run_card.picked.connect(_on_card)
@@ -214,13 +213,10 @@ func press_machine(i: int) -> void:
 		_info_column = i
 		_info_until = _time + INFO_TIME
 	if aim != "":
-		# An item (or ALL IN) waits for a column: this press is it; PLAY ALL lets it go.
+		# An item waits for a column: this press is it; PLAY ALL lets it go.
 		var item := aim
 		aim = ""
 		if play_all:
-			return
-		if item == "all_in":
-			_all_in_at(columns[i])
 			return
 		var got := run.use_item(item, machine, columns[i])
 		if not got.is_empty():
@@ -274,8 +270,6 @@ func press_machine(i: int) -> void:
 	var r := machine.press_play_all(economy) if play_all else machine.press(columns[i], economy)
 	if r == "insert_bill":
 		say("INSERT BILL")
-	elif r == "no_more":
-		say("NOTHING MORE TODAY")
 
 
 ## The red PLAY ALL button.
@@ -357,45 +351,6 @@ func toggle_change() -> void:
 	machine.press_change()
 
 
-## Run: the BET key (HIGH ROLLER) steps through the bets the perk allows. Tickets in
-## the tray keep the bet they were bought at.
-func cycle_bet() -> void:
-	if run == null or not at_machine or machine.busy() or run.today != "play" or run.bet_max() <= 1:
-		return
-	var all := run.bets()
-	run.bet = int(all[(all.find(run.bet) + 1) % all.size()])
-	run.apply(machine)
-	machine.armed = false
-	Sfx.play("button")
-	say("BET X%d", [run.bet])
-	_store_session()
-
-
-## Run: the ALL IN key arms the next column press to buy that box out and open it.
-func toggle_all_in() -> void:
-	if run == null or not at_machine or machine.busy() or run.today != "play" or run.effect("all_in") <= 0 or run.all_in_used:
-		return
-	Sfx.play("button")
-	aim = "" if aim == "all_in" else "all_in"
-	machine.armed = false
-	machine.change_armed = false
-
-
-## ALL IN on machine column `m_i`: the box bought out and opened at once; the tickets go
-## straight onto their piles.
-func _all_in_at(m_i: int) -> void:
-	var got := run.all_in(economy, machine, m_i)
-	if got.is_empty():
-		say("NO CASH")
-		return
-	_land(got.entries)
-	Sfx.play_win(maxi(1, got.won))
-	hud.set_status("ALL IN %d · %d WIN · $%d", [got.n, got.winners, got.won])
-	hud.flash_win()
-	say("ALL IN")
-	_store_session()
-
-
 ## Run, at the table: QUICK HANDS opens the next tickets of the tray at once (the ticket
 ## in hand first, if it is untouched). They go straight onto their piles.
 func open_many() -> void:
@@ -416,6 +371,7 @@ func open_many() -> void:
 		hud.set_status("OPEN THEM TOMORROW")
 		return
 	var entries := tray.take_many(run.batch_size())
+	var pushed := _push_counts()
 	var got := run.open_batch(economy, entries)
 	_land(entries)
 	if got.winners > 0:
@@ -424,12 +380,60 @@ func open_many() -> void:
 	else:
 		Sfx.play("toss")
 	hud.set_status("OPENED %d · %d WIN · $%d", [got.n, got.winners, got.won])
+	_after_opening(pushed)
 	_store_session()
 	if not tray.is_empty():
 		flow.deal()
 
 
-## Tickets opened without the hand (QUICK HANDS, ALL IN): winners onto the winners' pile,
+## Run, DOUBLE UP: what the run has won and lost on pushes so far (an opening compares).
+func _push_counts() -> Array:
+	return [int(run.stats.push_won), int(run.stats.push_lost)]
+
+
+## Run, after an opening (by hand or OPEN): a push it settled is said, and, when its
+## last ticket closed a window that can be staked (RunState.can_push), the DOUBLE UP
+## card goes up (one card an opening: the last window closed).
+func _after_opening(before: Array) -> void:
+	var won := int(run.stats.push_won) - int(before[0])
+	var lost := int(run.stats.push_lost) - int(before[1])
+	if won > 0:
+		Sfx.play_win(won)
+		hud.set_status("DOUBLE UP WON $%d", [won])
+		hud.flash_win()
+	elif lost > 0:
+		hud.set_status("DOUBLE UP LOST $%d", [lost])
+	hud.set_cash(economy.cash)
+	if run.can_push(economy) and not _pushing:
+		_pushing = true
+		_show_run_card()
+
+
+## The DOUBLE UP card: the stake (what the window just closed paid), what the next
+## window has to print, PUSH IT or KEEP IT.
+func _push_card() -> void:
+	var stake := run.push_offer()
+	run_card.show_card(tr("DOUBLE UP?"), [
+		[tr("STAKE %s") % Hud._money(stake), "big"],
+		tr("THE NEXT 10 MUST PRINT MORE THAN %s") % Hud._money(int(run.last_window.get("printed", 0))),
+		tr("MORE: %s BACK. AS MUCH OR LESS: GONE") % Hud._money(stake * 3),
+		[tr("CASH %s") % Hud._money(economy.cash), "dim"],
+	], [[{"id": "push", "text": tr("PUSH IT")}, {"id": "keep", "text": tr("KEEP IT"), "kind": "chrome"}]])
+
+
+## A key on the DOUBLE UP card.
+func _on_push(id: String) -> void:
+	_pushing = false
+	Sfx.play("button")
+	if id == "push" and run.push(economy):
+		Sfx.play("toss")
+		hud.set_status("STAKED $%d", [run.push_stake])
+		hud.set_cash(economy.cash)
+		_store_session()
+	_show_run_card()
+
+
+## Tickets opened without the hand (QUICK HANDS): winners onto the winners' pile,
 ## the rest onto the discard pile, all at once.
 func _land(entries: Array) -> void:
 	var lost := []
@@ -649,6 +653,7 @@ func _clear_table() -> void:
 	_sealing = false
 	_seal_keep = []
 	_moonlight = false
+	_pushing = false
 	tray.clear()
 	pile.clear()
 	win_pile.clear()
@@ -785,6 +790,9 @@ func _on_card(id: String) -> void:
 	if id.begins_with("seal_"):
 		_on_seal(id)
 		return
+	if id == "push" or id == "keep":
+		_on_push(id)
+		return
 	_card_busy = true
 	Sfx.play("button")
 	match id:
@@ -797,7 +805,7 @@ func _on_card(id: String) -> void:
 			run.work(economy)
 		"machine":
 			# MOONLIGHTING: to the machine after the shift, for tomorrow's tickets.
-			if run.today == "work" and run.effect("work_tickets") > 0:
+			if run.today == "work" and run.effect("wage_cut") > 0:
 				_moonlight = true
 				_leaving = false
 				open_machine()
@@ -834,7 +842,7 @@ func _on_card(id: String) -> void:
 	if run.today != "work":
 		_moonlight = false
 	if run.playing():
-		run.apply(machine)   # the day chosen: MOONLIGHTING's cap on a day of work, none on a day of play
+		run.apply(machine)   # the day chosen (a new day's perks on the machine)
 	_card_busy = false
 	_store_session()
 	_show_run_card()
@@ -988,6 +996,10 @@ func _show_run_card() -> void:
 	if _sealing and run.playing():
 		_seal_card()
 		return
+	if _pushing and run.playing() and run.can_push(economy):
+		_push_card()
+		return
+	_pushing = false
 	var due := Hud._money(run.due())
 	var cash := Hud._money(economy.cash + economy.credit)
 	var day_line := tr("LAYER %d · DAY %d OF %d") % [run.layer + 1, run.day, run.days()]
@@ -1041,15 +1053,17 @@ func _show_run_card() -> void:
 	var next_text := tr("END THE DAY") if run.last_day() else tr("NEXT DAY")
 	if run.today == "":
 		run_card.show_card(day_line, [[tr("DUE %s") % due, "big"], tr("CASH %s") % cash,
-			tr("WAGE TODAY %s") % Hud._money(run.wage())] + kept + last + line,
+			tr("WAGE TODAY %s") % Hud._money(run.shift_wage())] + kept + last + line,
 			[[{"id": "play", "text": tr("PLAY")}, {"id": "work", "text": tr("WORK"), "disabled": not run.can_work()}], money_row])
 	elif run.today == "work" and not _moonlight:
-		# MOONLIGHTING: the machine after the shift, a few tickets for tomorrow.
+		# MOONLIGHTING: the machine after the shift, tickets for tomorrow (as many as the
+		# money buys); the wage was cut for it.
 		var day_row := [{"id": "next", "text": next_text}]
-		if run.effect("work_tickets") > 0:
-			day_row.append({"id": "machine", "text": tr("TO THE MACHINE"), "kind": "chrome",
-				"disabled": run.sale_cap() <= 0})
-		run_card.show_card(tr("SHIFT DONE"), [[tr("WAGE +%s") % Hud._money(run.last_wage()), "big"],
+		var cut := []
+		if run.effect("wage_cut") > 0:
+			day_row.append({"id": "machine", "text": tr("TO THE MACHINE"), "kind": "chrome"})
+			cut = [[tr("MOONLIGHTING: THE WAGE -%d%%") % run.effect("wage_cut"), "dim"]]
+		run_card.show_card(tr("SHIFT DONE"), [[tr("WAGE +%s") % Hud._money(run.last_wage() * (2 if run.overtime else 1)), "big"]] + cut + [
 			tr("CASH %s") % cash, tr("DUE %s") % due, [day_line, "dim"]] + kept + last + line,
 			[day_row, money_row])
 	elif _leaving:
@@ -1058,6 +1072,9 @@ func _show_run_card() -> void:
 		# HOUSE ACCOUNT: what is on the tab is settled as the day ends.
 		var tab := [[tr("ON THE TAB %s") % Hud._money(economy.tab), "big"], [tr("THE TAB IS SETTLED WHEN YOU LEAVE"), "dim"]] \
 			if economy.tab != 0 else []
+		# DOUBLE UP: a stake waiting on a window does not cross the day.
+		if run.push_stake > 0:
+			tab.append([tr("THE STAKE ON DOUBLE UP (%s) IS LOST") % Hud._money(run.push_stake), "big"])
 		run_card.show_card(tr("LEAVE FOR TODAY?"), [[day_line, "dim"], tr("SPENT TODAY %s") % Hud._money(spent),
 			tr("WON TODAY %s") % Hud._money(won), tr("CASH %s") % cash, [tr("DUE %s") % due, "big"]] + tab + kept + last + line,
 			[[{"id": "next", "text": next_text}, {"id": "back", "text": tr("BACK"), "kind": "chrome"}], money_row])
@@ -1269,6 +1286,10 @@ func _perk_state(p: Dictionary) -> Dictionary:
 		lines.append(tr("NOW: %s") % _perk_text(p, lv))
 	if lv < top:
 		lines.append(tr("NEXT: %s") % _perk_text(p, lv + 1))
+	# HIGH ROLLER (`fixed`): a level bought is for good (G).
+	if p.get("fixed", false):
+		lines.append(tr("CANNOT BE UNDONE"))
+	if lv < top:
 		lines.append([tr("PRICE HERE %s") % Hud._money(price)])
 	if not miss.is_empty():
 		var names := []
@@ -1628,8 +1649,11 @@ func dev_reset() -> void:
 
 
 ## Developer: "cash" adds $500 at the stage's stake (as a prize, so the ledger holds);
-## in the run, "perks" takes every perk to its top level, "items" gives three of each.
-func dev_run(what: String) -> void:
+## in the run, "perks" takes every perk to its top level, "items" gives three of each,
+## "offers" deals again, "deal" puts the dealt perk `arg` (an id) first in today's
+## offers, "sure_items" gives one of each SURE item (past the pockets' room), "window"
+## starts the ticket window over (the streak and a pending DOUBLE UP with it).
+func dev_run(what: String, arg := "") -> void:
 	match what:
 		"cash":
 			economy.bonus(500 * (run.stake() if run != null else 1))
@@ -1655,6 +1679,26 @@ func dev_run(what: String) -> void:
 			if run != null:
 				for it in run.catalog.items:
 					run.items[it.id] = run.held(it.id) + 3
+		"deal":
+			# A dealt perk not at its top level yet: first in the offers, once.
+			var p := run.catalog.perk(arg) if run != null else {}
+			if p.is_empty() or Catalog.kind(p) == "shelf" or run.level(arg) >= p.levels.size() or not run.playing():
+				push_warning("dev: no dealt perk to offer: %s" % arg)
+			else:
+				run.offers.erase(arg)
+				run.offers.insert(0, arg)
+				run.offers_open = true
+				_show_run_card()
+		"sure_items":
+			if run != null:
+				for it in run.catalog.items:
+					if it.kind == "SURE":
+						run.items[it.id] = run.held(it.id) + 1
+		"window":
+			if run != null:
+				run.reset_window()
+				_pushing = false
+				_show_run_card()
 	if phone.visible:
 		phone.show_state(phone_state())
 	_store_session()
@@ -1740,6 +1784,7 @@ func _on_revealed(t: Dictionary, _form: FormDef) -> void:
 	# over the printed prize at its bet shows as the bonus.
 	var wins := economy.wins
 	var paid := int(t.prize)
+	var pushed := _push_counts() if run != null else []
 	if run != null:
 		paid = run.open_ticket(economy, current)
 	else:
@@ -1757,6 +1802,8 @@ func _on_revealed(t: Dictionary, _form: FormDef) -> void:
 		hud.set_status("NO WIN · $%d BACK", [paid])
 	else:
 		hud.set_status("NO WIN")
+	if run != null:
+		_after_opening(pushed)
 
 
 # --- frame ----------------------------------------------------------------------
@@ -1837,7 +1884,6 @@ func _refresh_ui() -> void:
 		else (tr("NEW BOX?") if blink else "") if machine.change_armed \
 		else (tr("PICK A COLUMN") if blink else "") if aim != "" \
 		else msg if _time < _msg_until \
-		else tr("NOTHING MORE TODAY") if _moonlight and run != null and not machine.may_sell() \
 		else str(reading[0]) if not reading.is_empty() \
 		else tr("SELECT A TICKET") if economy.can_buy(machine.min_price()) else tr("INSERT BILL")
 	var info := ""
@@ -1873,11 +1919,6 @@ func _refresh_ui() -> void:
 	if run != null:
 		change = {"fee": run.change_fee(), "armed": machine.change_armed,
 			"ok": not machine.busy() and economy.cash >= run.change_fee()}
-		if run.bet_max() > 1:
-			change.bet = {"text": tr("BET X%d") % run.bet, "ok": not machine.busy() and run.today == "play"}
-		if run.effect("all_in") > 0:
-			change.all_in = {"text": tr("ALL IN"), "armed": aim == "all_in",
-				"ok": run.today == "play" and not run.all_in_used and not machine.busy()}
 		var at_once := mini(run.batch_size(), _unopened())
 		hud.set_open(tr("OPEN %d AT ONCE") % at_once if at_once > 0 and not at_machine and run.today == "play" else "")
 		if run.playing():

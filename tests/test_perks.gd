@@ -2,7 +2,8 @@ extends "res://tests/test_case.gd"
 ## Perks, items and contacts in the run (the tree draft v2, M9.5): the catalog's shape
 ## (the shelf and the four kinds), the prize formula and every effect hook, the daily
 ## perk offers and the item shelf, the sure wins (a prize of the box moved forward),
-## opening at once, ALL IN, box reading, and how all of it is saved.
+## opening at once, the window of ten (STREAK, DOUBLE UP), HIGH ROLLER's fixed bet,
+## MOONLIGHTING's wage cut, box reading, and how all of it is saved.
 ## Big Catch's tiers (the pack's): 0 and 1 top ($500), 2 mid ($100), 3 low ($25); $1.
 
 
@@ -223,14 +224,14 @@ func test_money_perks() -> void:
 	r.perks = {"regular": 2}
 	eq(r.change_fee(), fee / 4, "REGULAR 2: a quarter (never free)")
 	# FIRST PULL x REGULAR (docs/perk_research.md 5.11): while FIRST PULL is held the fee
-	# never falls under its multiplier times twenty tickets at the top bet, so changing
+	# never falls under its multiplier times twenty tickets at the bet, so changing
 	# boxes to farm the first twenty does not pay. REGULAR's cut comes first.
 	r.perks = {"firstpull": 2, "regular": 2}
 	eq(r.change_fee(), 100, "FIRST PULL 2 with REGULAR 2: x5 times 20 tickets at stake 1")
 	r.perks = {"firstpull": 1}
 	eq(r.change_fee(), 60, "FIRST PULL 1 alone: x3 times 20, over the $25 fee")
 	r.perks = {"firstpull": 2, "regular": 2, "bet": 3}
-	eq(r.change_fee(), 1000, "at a top bet of x10 the twenty cost ten times as much: so does the floor")
+	eq(r.change_fee(), 1000, "at a bet of x10 the twenty cost ten times as much: so does the floor")
 	r.layer = 1
 	r.perks = {"firstpull": 2, "regular": 2}
 	eq(r.change_fee(), 500, "layer 2: at stake 5")
@@ -499,31 +500,37 @@ func test_twist_perks() -> void:
 	eq(r7.loan_due, roundi(21 * 1.15), "with the morning's interest on it")
 	check(not e7.tab_on, "the tab is closed")
 	check(e7.balanced(), "ledger balanced")
-	# MOONLIGHTING: a few tickets on a day of work, not opened that day.
+	# MOONLIGHTING: tickets on a day of work, as many as the money buys, not opened that
+	# day; the wage cut on every day of work while it is held (G).
 	var r8 := _run()
 	var e8 := r8.new_economy()
+	var wage := r8.wage()
 	r8.perks = {"moonlight": 1}
+	eq(r8.shift_wage(), wage * 70 / 100, "MOONLIGHTING 1: the wage -30%")
 	r8.close_offers()
+	var before := e8.cash
 	r8.work(e8)
+	eq(e8.cash - before, wage * 70 / 100, "a day of work pays the wage less the cut")
+	eq(r8.last_wage(), wage * 70 / 100, "the SHIFT DONE card says so")
 	var m8 := r8.new_machine(pack.forms, true)
-	eq(m8.sale_cap, 20, "twenty may be bought")
 	check(not r8.can_open(), "none opened today")
 	e8.credit = 30
 	e8.cash -= 30
 	var sold := 0
-	for k in 25:
+	for k in 30:
 		if not m8.sell_now(0, e8).is_empty():
 			sold += 1
-	eq(sold, 20, "the machine stops at twenty")
+	eq(sold, 30, "no limit: the machine sells what the money buys")
 	r8.count_sales(sold, 0, "core:catch")
-	r8.apply(m8)
-	eq(m8.sale_cap, 0, "nothing more today")
 	r8.end_day(e8)
 	r8.close_offers()
 	r8.play(e8)
-	r8.apply(m8)
-	eq(m8.sale_cap, -1, "a day of play: no cap")
-	check(r8.can_open(), "and the tickets open")
+	check(r8.can_open(), "the tickets open the next day")
+	r8.perks = {"moonlight": 2}
+	eq(r8.shift_wage(), wage * 85 / 100, "MOONLIGHTING 2: -15%")
+	r8.perks = {}
+	eq(r8.shift_wage(), wage, "without it: the whole wage")
+	check(e8.balanced(), "ledger balanced")
 
 
 func test_sure_wins_move_a_prize_forward() -> void:
@@ -1128,54 +1135,195 @@ func test_opening_at_once() -> void:
 	eq(r.open_batch(e, many).won, more, "the same ones every time")
 
 
-func test_all_in() -> void:
-	var pack := core_pack()
-	if pack == null:
+## A tray entry of Big Catch at tier `tier` (-1: a loser), not from a box.
+func _entry(tier: int) -> Dictionary:
+	return {"form": _catch(), "ticket": _ticket(tier), "box": null, "bet": 1}
+
+
+## Ten tickets opened by hand in `r`: the tiers in `tiers` first, losers after.
+func _window(r: RunState, e: Economy, tiers: Array) -> void:
+	for k in Catalog.WINDOW:
+		r.open_ticket(e, _entry(int(tiers[k]) if k < tiers.size() else -1))
+
+
+## A run on a day of play with `cash` in hand.
+func _playing(cash: int) -> Array:
+	var res := _rich(cash)
+	res[0].close_offers()
+	res[0].play(res[1])
+	return res
+
+
+func test_the_window_of_ten() -> void:
+	if _catch() == null:
 		return
-	var res := _rich(5000)
+	var res := _playing(1000)
 	var r: RunState = res[0]
 	var e: Economy = res[1]
-	var m := r.new_machine(pack.forms, true)
-	r.close_offers()
-	r.play(e)
-	check(not r.can_all_in(e, m, 0), "without the perk: no")
-	r.perks = {"allin": 1}
-	var box: TicketBox = m.boxes[0]
-	box.cursor = box.size - 200
-	var left := 200
-	var won := e.won
-	var spent := e.spent
-	var got := r.all_in(e, m, 0)
-	eq(got.n, left, "the whole rest of the box")
-	eq(e.spent - spent, left, "paid as tickets")
-	eq(box.cursor, box.size, "the box is sold out")
-	eq(got.last_sale, 50, "the last sale is paid")
-	eq(e.won - won, got.won + 50, "prizes and the last sale")
-	eq(r.stats.last_sales, 1, "counted")
-	check(not r.can_all_in(e, m, 1), "once a day")
+	for k in 9:
+		r.open_ticket(e, _entry(3 if k == 4 else -1))
+	eq(r.window_n, 9, "nine opened by hand: the window is still open")
+	eq(r.window_printed, 25, "the printed prizes so far")
+	check(r.last_window.is_empty(), "none closed yet")
+	r.open_ticket(e, _entry(2))
+	eq(r.window_n, 0, "the tenth closes it")
+	eq(r.last_window, {"printed": 125, "paid": 125}, "printed and paid, the same without perks")
+	# The printed sum is before the bet and every perk; the pay is what the ledger got.
+	r.perks = {"prizes": 3}
+	_window(r, e, [3])
+	eq(r.last_window, {"printed": 25, "paid": 50}, "FAT PRIZES 3: paid double, printed the same")
+	# QUICK HANDS 5 twice makes one window; QUICK HANDS 20 closes two in one opening.
+	r.perks = {"multi": 1}
+	r.open_batch(e, [_entry(3), _entry(-1), _entry(-1), _entry(-1), _entry(-1)])
+	eq(r.window_n, 5, "five at once: half a window")
+	r.open_batch(e, [_entry(-1), _entry(-1), _entry(-1), _entry(-1), _entry(-1)])
+	eq(r.window_n, 0, "five more close it")
+	eq(int(r.last_window.printed), 25, "one window of ten")
+	r.perks = {"multi": 2, "streak": 1}
+	var twenty := []
+	for k in 20:
+		twenty.append(_entry(3 if k == 0 or k == 10 else -1))
+	r.open_batch(e, twenty)
+	eq(r.window_n, 0, "QUICK HANDS 20 from an empty window: two windows, none open")
+	eq(r.streak, 2, "both counted (STREAK)")
 	check(e.balanced(), "ledger balanced")
 
 
-func test_bets() -> void:
+func test_streak() -> void:
+	if _catch() == null:
+		return
+	var res := _playing(1000)
+	var r: RunState = res[0]
+	var e: Economy = res[1]
+	_window(r, e, [3])
+	eq(r.streak, 0, "without STREAK nothing is counted")
+	r.perks = {"streak": 1}
+	eq(r.streak_pct(), 0, "no streak yet")
+	_window(r, e, [3])
+	eq(r.streak, 1, "a window with a winner")
+	eq(r.streak_pct(), 25, "STREAK 1: +25% on what follows")
+	eq(r.prize_pct(null), 25, "in the + slot")
+	# The next window's prizes are paid with it: a $25 ticket pays $31.
+	var won := e.won
+	r.open_ticket(e, _entry(3))
+	eq(e.won - won, 31, "$25 at +25%")
+	for k in 9:
+		r.open_ticket(e, _entry(-1))
+	eq(r.streak, 2, "two in a row")
+	_window(r, e, [])
+	eq(r.streak, 0, "a window of losers: back to 0")
+	for w in 5:
+		_window(r, e, [3])
+	eq(r.streak, 5, "five in a row")
+	eq(r.streak_pct(), 100, "125% capped at +100%")
+	r.perks = {"streak": 2}
+	eq(r.streak_pct(), 160, "STREAK 2: 40% a window, capped at +160%")
+	r.end_day(e)
+	eq(r.streak, 0, "a new day: the streak starts over")
+	check(e.balanced(), "ledger balanced")
+
+
+func test_double_up() -> void:
+	if _catch() == null:
+		return
+	var res := _playing(1000)
+	var r: RunState = res[0]
+	var e: Economy = res[1]
+	_window(r, e, [3])
+	check(not r.can_push(e), "without the perk: no")
+	r.perks = {"doubleup": 1}
+	check(r.can_push(e), "with it: the window just closed paid $25")
+	eq(r.push_offer(), 25, "the stake is what it paid")
+	r.open_ticket(e, _entry(-1))
+	check(not r.can_push(e), "not once a ticket of the next window is open")
+	for k in 9:
+		r.open_ticket(e, _entry(3 if k == 0 else -1))
+	# Won: the next window prints more.
+	var cash := e.cash
+	check(r.push(e), "staked")
+	eq(e.cash, cash - 25, "the stake leaves the cash")
+	eq(int(r.stats.staked), 25, "counted")
+	check(not r.can_push(e) and not r.push(e), "not again while a push is pending")
+	_window(r, e, [2])
+	eq(e.cash, cash - 25 + 100 + 75, "$100 printed beats $25: the window's $100 and the stake x3")
+	eq(int(r.stats.push_won), 75, "what came back")
+	eq(r.push_stake, 0, "settled")
+	# Lost: as much printed is not more. A new push goes on the window that settled one.
+	check(r.can_push(e), "a new push on that window")
+	eq(r.push_offer(), 100, "its $100")
+	r.push(e)
+	cash = e.cash
+	_window(r, e, [2])
+	eq(e.cash, cash + 100, "as much printed: the window's prize only")
+	eq(int(r.stats.push_lost), 100, "the stake is lost")
+	# What the tickets print counts, not what they pay: FAT PRIZES bought between the
+	# windows pays the next one double, and still does not win.
+	r.push(e)
+	r.perks = {"doubleup": 1, "prizes": 3}
+	cash = e.cash
+	_window(r, e, [2])
+	eq(e.cash, cash + 200, "paid $200, printed $100: lost")
+	eq(int(r.stats.push_lost), 200, "a second stake lost")
+	r.perks = {"doubleup": 1}
+	# Nothing paid: nothing to stake.
+	_window(r, e, [])
+	check(not r.can_push(e), "a window of losers cannot be staked")
+	# Short of cash.
+	_window(r, e, [2])
+	e.pay(e.cash - 50)
+	check(not r.can_push(e), "$50 in cash does not cover a $100 stake")
+	e.bonus(1000)
+	# A new day: a pending push is lost, the window starts over.
+	check(r.push(e), "staked before leaving")
+	var lost: int = r.stats.push_lost
+	r.end_day(e)
+	eq(r.push_stake, 0, "a new day clears the push")
+	eq(int(r.stats.push_lost), lost + 100, "and its stake is gone")
+	check(r.last_window.is_empty() and r.window_n == 0 and not r.can_push(e), "a fresh window")
+	check(e.balanced(), "ledger balanced")
+
+
+func test_window_saved() -> void:
+	var res := _rich(1000)
+	var r: RunState = res[0]
+	r.window_n = 7
+	r.window_printed = 150
+	r.window_paid = 200
+	r.window_wins = 2
+	r.streak = 3
+	r.push_stake = 40
+	r.push_printed = 125
+	r.last_window = {"printed": 125, "paid": 40}
+	var back := RunState.from_dict(JSON.parse_string(JSON.stringify(r.to_dict())), RunConfig.standard())
+	check(back != null, "loads")
+	if back == null:
+		return
+	check(back.window_n == 7 and back.window_printed == 150 and back.window_paid == 200 and back.window_wins == 2,
+		"the window as it stood")
+	check(back.streak == 3 and back.push_stake == 40 and back.push_printed == 125, "the streak and the push")
+	eq(back.last_window, {"printed": 125, "paid": 40}, "the window closed last")
+
+
+func test_high_roller_is_the_bet() -> void:
 	var pack := core_pack()
 	if pack == null:
 		return
 	var r := _run()
-	eq(r.bets(), [1], "no HIGH ROLLER: a bet of 1")
+	eq(r.bet(), 1, "no HIGH ROLLER: x1")
+	check(Catalog.standard().perk("bet").get("fixed", false), "the shelf says it cannot be undone")
 	r.perks = {"bet": 2}
-	eq(r.bets(), [1, 2, 5], "HIGH ROLLER 2: 1, 2 or 5")
-	r.bet = 5
+	eq(r.bet(), 5, "HIGH ROLLER 2: x5")
 	var m := r.new_machine(pack.forms, true)
-	eq(m.price(0), 5, "a $1 ticket costs $5")
+	eq(m.price(0), 5, "the machine sells at x5: a $1 ticket costs $5")
 	var e := r.new_economy()
 	e.credit = 5
 	e.cash -= 5
 	var sold := m.sell_now(0, e)
 	check(not sold.is_empty() and e.credit == 0, "and is paid at that")
-	r.bet = 9
+	r.perks = {"bet": 3}
 	r.apply(m)
-	eq(m.bet, 5, "never past the top bet")
-
+	eq(m.price(0), 10, "level 3 bought: x10")
+	check(e.balanced(), "ledger balanced")
 
 func test_luck_passes_losing_boxes_over() -> void:
 	var pack := core_pack()
@@ -1286,7 +1434,6 @@ func test_saved_and_loaded() -> void:
 	r.items = {"coin": 2}
 	r.buy_service("more_time", e)
 	r.reports["core:catch"] = "X-0002"
-	r.bet = 2
 	r.dry = 7
 	r.snow = 3
 	r.happy = true
@@ -1311,7 +1458,7 @@ func test_saved_and_loaded() -> void:
 	eq(back.offers, r.offers, "the offers")
 	check(back.offers_open and back.offer_rerolls == 1, "still open, rerolled once")
 	eq(back.shelf, r.shelf, "the shelf")
-	check(back.bet == 2 and back.dry == 7 and back.snow == 3 and back.happy, "the bet, the streak, the snowball, today's HAPPY HOUR")
+	check(back.bet() == 2 and back.dry == 7 and back.snow == 3 and back.happy, "the bet (HIGH ROLLER 1), the losers in a row, the snowball, today's HAPPY HOUR")
 	eq(back.coin_on, {"core:catch": 1}, "the coin on its column")
 	eq(back.forms_today, r.forms_today, "the forms of the day")
 	check(back.day_tickets == 12 and back.noback_days == 2 and back.sure_armed and back.overtime, "the day's count, NO WAY BACK's days, the sure win armed, OVERTIME")
@@ -1321,16 +1468,20 @@ func test_saved_and_loaded() -> void:
 	eq(back.stats, r.stats, "stats")
 	d.perks = {"prizes": 9, "gone": 2, "luck": -1}
 	d.offers = ["prizes", "gone"]
+	d.bet = 5   # an older save's bet key: ignored, the bet is the perk's level
 	var odd := RunState.from_dict(d, RunConfig.standard())
 	eq(odd.perks, {"prizes": 3}, "unknown perks dropped, levels kept within the perk")
 	eq(odd.offers, ["prizes"], "an unknown offer dropped")
-	eq(odd.bet, 1, "the bet within what HIGH ROLLER allows")
+	eq(odd.bet(), 1, "an old save's bet is ignored: no HIGH ROLLER, x1")
 	for k in ["perks", "items", "extra_days", "services", "reports", "offers", "offers_open", "shelf", "bet", "coin_on",
-			"forms_today", "sealed", "day_tickets", "sure_armed"]:
+			"forms_today", "sealed", "day_tickets", "sure_armed", "window_n", "window_printed", "window_paid",
+			"window_wins", "streak", "push_stake", "push_printed", "last_window"]:
 		d.erase(k)
 	var old := RunState.from_dict(d, RunConfig.standard())
 	check(old != null and old.perks.is_empty() and old.items.is_empty() and not old.offers_open, "an older run loads with nothing bought")
 	check(old != null and old.coin_on.is_empty() and old.sealed.is_empty() and not old.sure_armed, "and none of the new state")
+	check(old != null and old.window_n == 0 and old.streak == 0 and old.push_stake == 0 and old.last_window.is_empty(),
+		"a fresh window, no streak, no push")
 	# The ledger's tab is saved too.
 	var e2 := Economy.new()
 	e2.tab_on = true

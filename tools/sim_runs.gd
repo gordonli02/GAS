@@ -16,7 +16,9 @@ extends Node
 ## Then what a dollar of tickets pays back at some perk levels (whole boxes bought
 ## out; --ev-boxes=N boxes of each form, 0 to skip), each form alone without perks and
 ## with DUE A WIN 2, and the churn exploit at fixed perks (--churn-boxes=N boxes a
-## column, 0 to skip). Then each form's boxes in the run's model (its shape): return,
+## column, 0 to skip). Then DOUBLE UP's odds on each form (RunSim.push_odds: of the
+## windows of ten after one that paid, the share whose printed prizes beat it;
+## --push-boxes=N boxes a form, 0 to skip). Then each form's boxes in the run's model (its shape): return,
 ## winners per 100 tickets, top prizes a box and how bumpy one ticket's prize is
 ## (--form-boxes=N, 0 to skip).
 
@@ -41,8 +43,11 @@ func _run() -> void:
 	var ev_boxes := 6
 	var churn_boxes := 200
 	var form_boxes := 300
+	var push_boxes := 100
 	for a in OS.get_cmdline_user_args():
-		if a.begins_with("--form-boxes="):
+		if a.begins_with("--push-boxes="):
+			push_boxes = maxi(0, a.trim_prefix("--push-boxes=").to_int())
+		elif a.begins_with("--form-boxes="):
 			form_boxes = maxi(0, a.trim_prefix("--form-boxes=").to_int())
 		elif a.begins_with("--churn-boxes="):
 			churn_boxes = maxi(0, a.trim_prefix("--churn-boxes=").to_int())
@@ -104,7 +109,7 @@ func _run() -> void:
 	if ev_boxes > 0:
 		print("\nreturn per dollar of tickets, %d boxes of each form bought out:" % ev_boxes)
 		for levels in RunSim.EV_SETS:
-			var label := "no perks" if levels.is_empty() else ", ".join(levels.keys().map(func(k): return "%s %d" % [k, levels[k]]))
+			var label := "no perks" if levels.is_empty() else ", ".join(levels.keys().map(func(k): return "%s %s" % [k, str(levels[k])]))
 			print("  %-60s %.3f" % [label, RunSim.box_return(res.pack.forms, levels, ev_boxes)])
 		var pity_boxes := ev_boxes * 4
 		print("\neach form alone, %d boxes: no perks / DUE A WIN 2 (pity 2):" % pity_boxes)
@@ -116,6 +121,10 @@ func _run() -> void:
 			var label := "no perks" if levels.is_empty() else ", ".join(levels.keys().map(func(k): return "%s %d" % [k, levels[k]]))
 			var c := RunSim.churn_return(res.pack.forms, levels, churn_boxes)
 			print("  %-28s %7.3f %7.3f %6d" % [label, c["return"], c.return_fees, c.fee])
+	if push_boxes > 0:
+		print("\nDOUBLE UP: windows of %d, %d boxes a form, no perks (P: the next window's printed prizes beat one that paid):" % [Catalog.WINDOW, push_boxes])
+		for row in RunSim.push_odds(res.pack.forms, push_boxes):
+			print("  %-10s P %.3f  (%d windows)" % [row.form, row.p, row.windows])
 	if form_boxes > 0:
 		print("\neach form in the run's model (its shape), %d boxes, no perks:" % form_boxes)
 		print("  %-10s %7s %9s %7s %8s" % ["form", "return", "win/100", "tops", "sd $"])

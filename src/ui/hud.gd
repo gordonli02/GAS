@@ -12,8 +12,6 @@ signal phone_pressed       ## the phone (LOAN, and in the run the shop and conta
 signal menu_pressed
 signal leave_pressed       ## run: leave for today
 signal new_box_pressed     ## run: change a column's box
-signal bet_pressed         ## run: the next bet (HIGH ROLLER)
-signal all_in_pressed      ## run: ALL IN on the next column pressed
 signal open_pressed        ## run: open tickets at once (QUICK HANDS)
 
 var _cash := LcdStyle.label("", 46)
@@ -27,8 +25,6 @@ var _bill_values: Array = Economy.BILLS
 var _run_line := LcdStyle.label("", 20, LcdStyle.BRIGHT_TEXT)
 var _leave: Button
 var _new_box: Button
-var _bet: Button
-var _all_in: Button
 var _open: Button
 var _cash_out: Button
 var _window: PanelContainer
@@ -137,21 +133,6 @@ func _ready() -> void:
 	_new_box.visible = false
 	_new_box.pressed.connect(func(): new_box_pressed.emit())
 	wv.add_child(_new_box)
-	var run_row := HBoxContainer.new()
-	run_row.add_theme_constant_override("separation", 8)
-	_bet = LcdStyle.chrome("", 20)
-	_bet.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
-	_bet.pressed.connect(func(): bet_pressed.emit())
-	_all_in = LcdStyle.chrome("", 20)
-	_all_in.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
-	_all_in.toggle_mode = true
-	_all_in.pressed.connect(func(): all_in_pressed.emit())
-	for b in [_bet, _all_in]:
-		b.custom_minimum_size = Vector2(0, 44)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.visible = false
-		run_row.add_child(b)
-	wv.add_child(run_row)
 	_window.add_child(wv)
 	_arrow.color = LcdStyle.RIM
 	_arrow.polygon = PackedVector2Array([Vector2(0, -12), Vector2(0, 12), Vector2(-16, 0)])
@@ -218,18 +199,6 @@ func set_bill_window(show: bool, e: Economy, machine_busy: bool, change := {}) -
 		_new_box.text = tr("NEW BOX %s") % _money(change.fee)
 		_new_box.set_pressed_no_signal(change.armed)
 		_new_box.disabled = not change.ok
-	# HIGH ROLLER's bet and ALL IN, when the run has them.
-	var bet: Dictionary = change.get("bet", {})
-	_bet.visible = not bet.is_empty()
-	if not bet.is_empty():
-		_bet.text = str(bet.text)
-		_bet.disabled = not bet.ok
-	var all_in: Dictionary = change.get("all_in", {})
-	_all_in.visible = not all_in.is_empty()
-	if not all_in.is_empty():
-		_all_in.text = str(all_in.text)
-		_all_in.set_pressed_no_signal(all_in.armed)
-		_all_in.disabled = not all_in.ok
 
 
 ## Run, at the table: the key that opens tickets at once (QUICK HANDS). An empty text
@@ -254,10 +223,6 @@ func run_key(id: String) -> Button:
 	match id:
 		"leave":
 			return _leave
-		"bet":
-			return _bet
-		"all_in":
-			return _all_in
 		"open":
 			return _open
 	return _new_box

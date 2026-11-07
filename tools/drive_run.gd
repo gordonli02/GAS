@@ -3,7 +3,7 @@ extends Node
 ## keys, the story and day cards, a day at the machine (bills, tickets, NEW BOX, LOAN,
 ## the last sale of a box), the perk offers after a day (buy, reroll, done), the phone
 ## (LOAN, the perk tree, the item shelf, box reading, a call to a contact), HIGH ROLLER's
-## bet, ALL IN, opening at once, putting a ticket back in the tray, the trash can, tickets kept
+## fixed bet, opening at once, putting a ticket back in the tray, the trash can, tickets kept
 ## overnight, LEAVE, a shift of work, paying early into the next layer
 ## and its stake, saving and reloading mid-run, the deadline, the settlement, and a
 ## whole run cleared by work alone. Checks the money identity every frame and saves
@@ -267,6 +267,7 @@ func _run() -> void:
 	await _shot("07g_reading")
 	# The top level: the notepad keeps a line for every box (developer panel: every perk at the top).
 	game.dev_run("perks")
+	run.perks.erase("doubleup")   # its card would stop the drive (tests/test_perks has DOUBLE UP)
 	_key(KEY_B)
 	await _wait(1.4)
 	_expect(run.reading() == 5 and not game.at_machine, "every perk at the top; at the table")
@@ -321,30 +322,13 @@ func _run() -> void:
 	_expect(e.balanced(), "ledger balanced after the reload")
 	_expect(run.reading() == 5 and run.held("coin") == 1 and run.extra_days == 1 and game.machine.luck == 0.9, "perks, items and the extra day kept")
 
-	# HIGH ROLLER: the BET key steps through the bets. ALL IN: a column's box bought out
-	# and opened at once.
-	_expect(game.at_machine and game.hud.run_key("bet").visible and game.hud.run_key("all_in").visible, "the BET and ALL IN keys")
-	_click(_button_center(game.hud.run_key("bet")))
-	await _wait(0.3)
-	_expect(run.bet == 2 and game.machine.price(0) == 2, "BET x2: a $1 ticket costs $2")
+	# HIGH ROLLER is the bet (fixed, G): the panel's perks bought it to the top, x10, and
+	# there is no key to change it. The rest of the drive plays at x1 (the perk taken off).
+	_expect(game.at_machine and run.bet() == 10 and game.machine.price(0) == 10, "HIGH ROLLER 3: a $1 ticket costs $10")
 	await _shot("07m_bet")
-	for k in 3:
-		_click(_button_center(game.hud.run_key("bet")))
-		await _wait(0.2)
-	_expect(run.bet == 1, "x5, x10, then back to x1")
-	e.bonus(5000)
-	var piles := game.piled()
-	var sold: int = run.stats.tickets
-	_click(_button_center(game.hud.run_key("all_in")))
-	await _wait(0.3)
-	_expect(game.aim == "all_in", "ALL IN arms")
-	_key(KEY_4)
-	await _wait(0.6)
-	_expect(run.stats.all_ins == 1 and run.stats.tickets > sold and game.piled() > piles and game.tray.is_empty(), "column 4 bought out and opened: %d tickets" % (run.stats.tickets - sold))
-	_expect(run.stats.last_sales == 2 and e.balanced(), "its last sale paid, the ledger balanced")
-	await _shot("07n_all_in")
-	await _wait(0.2)
-	_expect(game.hud.run_key("all_in").disabled and not run.can_all_in(e, game.machine, 0), "ALL IN once a day")
+	run.perks.erase("bet")
+	run.apply(game.machine)
+	_expect(game.machine.price(0) == 1, "without it: $1 again")
 
 	# Tickets at the table: one goes back into the tray, one in the trash can; the rest
 	# stay overnight (G, after M9).
@@ -394,7 +378,7 @@ func _run() -> void:
 	cash = e.cash
 	_card("work")
 	await _wait(0.3)
-	_expect(e.cash == cash + 120 and run.today == "work", "WORK: $120 at once")
+	_expect(e.cash == cash + run.shift_wage() and run.shift_wage() == 120 * 85 / 100 and run.today == "work", "WORK: $120 less MOONLIGHTING 2's 15% at once")
 	_expect(game.run_card.key("play") == null and game.run_card.key("next") != null, "no tickets today, only NEXT DAY")
 	await _shot("09_shift_done")
 	_card("next")

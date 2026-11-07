@@ -24,6 +24,7 @@ var _rooms := {}
 var _forms: Array[Button] = []
 var _lamps: Array[Button] = []
 var _seed := LineEdit.new()
+var _perk_id := LineEdit.new()
 var _tiers := GridContainer.new()
 var _facts := GridContainer.new()
 var _slots := VBoxContainer.new()
@@ -116,11 +117,26 @@ func _ready() -> void:
 
 	col.add_child(_sticker("Run", "剧情模式"))
 	var run_keys := _cols(col, 3)
-	for pair in [["+现金", "cash"], ["技能全满", "perks"], ["道具各 +3", "items"], ["换一批 perk", "offers"], ["每天 +1 选项", "offer_more"]]:
+	for pair in [["+现金", "cash"], ["技能全满", "perks"], ["道具各 +3", "items"], ["换一批 perk", "offers"], ["每天 +1 选项", "offer_more"],
+			["给确定性道具", "sure_items"], ["开票窗清零", "window"]]:
 		var b := _plain(pair[0])
 		var what: String = pair[1]
 		b.pressed.connect(func(): game.dev_run(what))
 		run_keys.add_child(b)
+	# A perk by its id (catalog.gd) put first in today's offers.
+	var deal_row := HBoxContainer.new()
+	_perk_id.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_perk_id.max_length = 24
+	_perk_id.placeholder_text = "perk id，比如 doubleup"
+	_perk_id.add_theme_font_override("font", LcdStyle.FONT)
+	_perk_id.add_theme_font_size_override("font_size", 22)
+	_perk_id.add_theme_color_override("font_color", LcdStyle.LCD)
+	_perk_id.text_submitted.connect(func(_t): _deal_perk())
+	deal_row.add_child(_perk_id)
+	var deal := _plain("指定发 perk")
+	deal.pressed.connect(_deal_perk)
+	deal_row.add_child(deal)
+	col.add_child(deal_row)
 
 	col.add_child(_sticker("Lamp", "红灯亮度"))
 	var lamps := _cols(col, MachineView.LAMP_STEPS)
@@ -170,6 +186,12 @@ func _new_box() -> void:
 	game.dev_new_box(form_index, s if s != "" else Game.SEED)
 	_seed.release_focus()
 	_refresh()
+
+
+## The run: the perk named in the field goes first in today's offers.
+func _deal_perk() -> void:
+	game.dev_run("deal", _perk_id.text.strip_edges())
+	_perk_id.release_focus()
 
 
 func _refresh() -> void:

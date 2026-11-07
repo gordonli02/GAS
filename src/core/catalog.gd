@@ -29,10 +29,11 @@ extends RefCounted
 ##
 ## How a prize is paid (RunState.pay_ticket): the printed prize times the bet, times
 ## one plus the sum of every "+%" (prize_pct, owe_pct's share, worth_pct, pity_pct,
-## trash_pct, hunter_pct, noback_pct's days, loyal_pct or variety_pct, a HAPPY HOUR),
-## times every "x" (top_x, mid_x and low_x on their prizes, stack_x on a ticket with
-## two prizes or more, first_x on a box's first tickets, the snowball, a LUCKY COIN on
-## its column, the opening's combo and an ALL IN). An again_pct roll pays it all twice.
+## trash_pct, hunter_pct, noback_pct's days, STREAK's windows, loyal_pct or
+## variety_pct, a HAPPY HOUR), times every "x" (top_x, mid_x and low_x on their prizes,
+## stack_x on a ticket with two prizes or more, first_x on a box's first tickets, the
+## snowball, a LUCKY COIN on its column, the opening's combo). An again_pct roll pays
+## it all twice. DOUBLE UP's x3 is paid on its own, when a window closes.
 ## "x" effects of two perks multiply (effect_x), "+" effects add (effect).
 ##
 ## Effects (value per level):
@@ -56,9 +57,13 @@ extends RefCounted
 ##   combo_pct    in one opening, every winner after the first adds this % to the
 ##                opening's multiplier (x slot)
 ##   again_pct    in one opening, % chance that a winner pays again
-##   bet          the machine's top bet (price and prizes times it)
-##   all_in       once a play day: a column's box bought out and opened at once, prizes
-##                times this
+##   bet          the machine's bet (price and prizes times it), fixed at the level
+##                bought (no key changes it; `fixed` on the perk says so on the shelf)
+##   streak_pct   + % a window in a row with a winner (+ slot; STREAK; a window is
+##                WINDOW tickets opened, the player's, across columns, today's)
+##   streak_cap   STREAK's + % goes no higher than this
+##   double_up    a window that paid may be staked on the next: more printed prize
+##                money in it pays the stake x3 back, as much or less loses it (DOUBLE UP)
 ##   loan_pct     the house line + % of the layer's own
 ##   loan_x       the house line times this (LOAN SHARK)
 ##   rate_x       the loan interest times this (LOAN SHARK's price; LOW RATE's cut is
@@ -82,7 +87,8 @@ extends RefCounted
 ##   debt_up      every layer's debt + % (DOUBLE DOWN's price)
 ##   noback_pct   + % per day of play since it was bought, for the run   (+ slot)
 ##   no_work      no more days of work this run (NO WAY BACK's price)
-##   work_tickets on a day of work, this many tickets may be bought (opened the next day)
+##   wage_cut     every day of work pays % less; on one, tickets may be bought (opened
+##                the next day), as many as on a day of play (MOONLIGHTING)
 ##   refund_pct   an untorn ticket goes back to the machine for % of its price
 ##   seal         paying a layer takes this many boxes along into the next
 ##   loyal_pct    + % while one form alone was bought today   (+ slot)
@@ -104,6 +110,7 @@ const SHELF_REROLL := 10
 const FIRST_TICKETS := 20
 const FORTUNE_TRIES := 12
 const WORTH_STEP := 100
+const WINDOW := 10               ## STREAK and DOUBLE UP: a window is this many tickets opened (G)
 const MARKED_WINDOW := 10        ## MARKED: the PEEKed column's winners of this many come first
 const QUEUE_WINDOW := 20         ## QUEUE JUMP: winners moved into the next this many
 const QUEUE_MOVES := 5
@@ -171,7 +178,8 @@ const STANDARD := {
 			{"price": 80, "value": 5, "desc": "OPEN 5 AT ONCE"},
 			{"price": 200, "value": 20, "desc": "OPEN 20 AT ONCE"},
 			{"price": 400, "value": 9999, "desc": "OPEN THE WHOLE TRAY AT ONCE"}]},
-		{"id": "bet", "branch": "shelf", "shelf": true, "rarity": "rare", "name": "HIGH ROLLER", "desc": "BET UP TO X%d: PRICE AND PRIZES",
+		# HIGH ROLLER is the bet itself (G, part 14): the level bought, never undone.
+		{"id": "bet", "branch": "shelf", "shelf": true, "rarity": "rare", "name": "HIGH ROLLER", "desc": "BET X%d: PRICE AND PRIZES", "fixed": true,
 			"effect": "bet", "levels": [{"price": 300, "value": 2}, {"price": 900, "value": 5}, {"price": 2500, "value": 10}]},
 		{"id": "picky", "branch": "shelf", "shelf": true, "rarity": "rare", "name": "PICKY", "desc": "NEW BOX: PICK WHICH TICKET GOES IN", "requires": {"regular": 1},
 			"effect": "pick_form", "levels": [{"price": 150, "value": 1}]},
@@ -207,8 +215,14 @@ const STANDARD := {
 			"effect": "combo_pct", "levels": [{"price": 400, "value": 50}, {"price": 1200, "value": 100}]},
 		{"id": "again", "branch": "batch", "rarity": "rare", "name": "ENCORE", "desc": "ONE OPENING: %d%% OF WINNERS PAY AGAIN", "requires": {"multi": 2},
 			"effect": "again_pct", "levels": [{"price": 300, "value": 15}, {"price": 900, "value": 30}]},
-		{"id": "allin", "branch": "batch", "rarity": "legendary", "name": "ALL IN", "desc": "ONCE A DAY: BUY A BOX OUT, OPEN IT AT ONCE, X%d",
-			"requires": {"combo": 1}, "effect": "all_in", "levels": [{"price": 2000, "value": 2}]},
+		# On the window of WINDOW tickets (G, part 3: ALL IN's place). Neither needs QUICK
+		# HANDS (ten by hand is a window too); they are this line's because batches play them fast.
+		{"id": "streak", "branch": "batch", "rarity": "rare", "name": "STREAK", "effect": "streak_pct", "levels": [
+			{"price": 300, "value": 25, "extra": {"streak_cap": 100}, "desc": "EVERY 10 OPENED WITH A WINNER: PRIZES +25% MORE, UP TO +100%"},
+			{"price": 800, "value": 40, "extra": {"streak_cap": 160}, "desc": "EVERY 10 OPENED WITH A WINNER: PRIZES +40% MORE, UP TO +160%"}]},
+		{"id": "doubleup", "branch": "batch", "rarity": "legendary", "name": "DOUBLE UP",
+			"desc": "10 OPENED PAID: STAKE IT ON THE NEXT 10. MORE PRINTED PRIZES: X3 BACK. LESS: GONE",
+			"requires": {"combo": 1}, "effect": "double_up", "levels": [{"price": 2000, "value": 1}]},
 		# Build: money that makes money (with SAVINGS off the shelf).
 		{"id": "worth", "branch": "money", "rarity": "legendary", "name": "NET WORTH", "desc": "PRIZES +2%% PER %s IN CASH", "money": true, "requires": {"savings": 1},
 			"effect": "worth_pct", "levels": [{"price": 1500, "value": 2, "show": 100}]},
@@ -241,8 +255,8 @@ const STANDARD := {
 			"effect": "noback_pct", "levels": [{"price": 800, "value": 10, "extra": {"no_work": 1}, "cost": "NO MORE DAYS OF WORK THIS RUN"},
 				{"price": 1500, "value": 15, "extra": {"no_work": 1}, "cost": "NO MORE DAYS OF WORK THIS RUN"}]},
 		# Twist: a rule of the day changed.
-		{"id": "moonlight", "branch": "twist", "rarity": "common", "name": "MOONLIGHTING", "desc": "A DAY OF WORK: BUY %d TICKETS, OPEN THEM TOMORROW",
-			"effect": "work_tickets", "levels": [{"price": 150, "value": 20}, {"price": 350, "value": 50}]},
+		{"id": "moonlight", "branch": "twist", "rarity": "common", "name": "MOONLIGHTING", "desc": "A DAY OF WORK: BUY TICKETS FOR TOMORROW, THE WAGE -%d%%",
+			"effect": "wage_cut", "levels": [{"price": 150, "value": 30}, {"price": 350, "value": 15}]},
 		{"id": "returns", "branch": "twist", "rarity": "common", "name": "RETURNS", "desc": "AN UNTORN TICKET GOES BACK FOR %d%% OF ITS PRICE",
 			"effect": "refund_pct", "levels": [{"price": 100, "value": 50}, {"price": 300, "value": 100}]},
 		{"id": "seal", "branch": "twist", "rarity": "rare", "name": "SEAL",

@@ -767,3 +767,108 @@ The plan is `docs/roadmap.md` (the clear-rate targets and M9.5 task 5) and
   grow with the layer or the run (SNOWBALL, TRASH KING, JACKPOT HUNTER) grow over all 48
   boxes: the clearing set's 33.1, the small set's 41.3 and the hunter set's 3.2 are
   that, not what a layer of play gives.
+
+## Milestone 9.5, steps 6 and 7: the fixed bet, the wage cut, DOUBLE UP and STREAK on the window, the panel
+The plan is `docs/roadmap.md` (M9.5 tasks 6 and 7) and `docs/perk_research.md` section 5
+(parts 2, 3, 5 and 14, G's decisions after step 5); this is how it landed.
+- **HIGH ROLLER is the bet.** `RunState.bet()` is HIGH ROLLER's value at the level bought
+  (1 without it); the `bet` field, `bet_max()`, `bets()`, the BET key (`Game.cycle_bet`,
+  the HUD's key and `run_key("bet")`, the change state's `bet`) are gone. `apply()` puts it
+  on the machine as before; a tray entry keeps the bet it was bought at. The perk carries
+  `fixed: true` and the shelf card says CANNOT BE UNDONE under what it does (through
+  `_perk_state`, for any perk with the flag). Its text is now "BET X%d: PRICE AND PRIZES"
+  (it said "up to"). The save no longer writes `bet`; an old save's `bet` is ignored.
+  FIRST PULL's floor on the NEW BOX fee is `... x stake() x bet()`: the same number as
+  with `bet_max()`, and now there is only the one bet to dodge it with.
+- **MOONLIGHTING cuts the wage.** The effect is `wage_cut` (percent): 30 / 15 at levels 1 /
+  2 (placeholders). `RunState.shift_wage()` is `wage()` less the cut, on every day of work
+  while the perk is held (G), tickets bought or not; `work()`, `last_wage()` and OVERTIME's
+  pay on a day already worked all use it (OVERTIME doubles what is paid). `wage()` stays
+  the stage's wage: `RunConfig` and the work line never hold the perk. The sale cap is
+  gone everywhere (`RunState.sale_cap()`, `MachineLogic.sale_cap` / `may_sell()`, the
+  `"no_more"` return, NOTHING MORE TODAY on the LCD); after the shift the machine sells as
+  on a day of play and opening is still refused (`can_open()`). The day's card says WAGE
+  TODAY after the cut; SHIFT DONE says the wage paid and, under it, "MOONLIGHTING: THE
+  WAGE -n%"; TO THE MACHINE is never greyed. `day_tickets` stays (STAKEOUT's).
+- **ALL IN is gone**: the perk, `all_in` effect, `can_all_in` / `all_in` / `all_in_used` /
+  `stats.all_ins`, the key, `_all_in_at`, the HUD button, drive_run's checks, `test_all_in`,
+  its three locale rows. `Economy.spend` stays (a test uses it).
+- **The window** (`Catalog.WINDOW` = 10, G): every ticket paid through `pay_ticket` (by
+  hand, in a batch, the simulator's) counts in it: `window_n`, `window_printed` (the
+  sum of `t.prize`, before the bet and every perk), `window_paid` (what it paid into the
+  ledger, SCRAP DEALER's give-back included) and `window_wins` (tickets paid as a prize:
+  a WHITE-OUT's loser counts, a FLARE ONLY zeroed one does not). The tenth closes it
+  (`_close_window`): STREAK, then a pending DOUBLE UP, then `last_window = {printed,
+  paid}` and the counters start over. A batch closes windows as it goes, so a batch of
+  20 from an empty window closes two, and the STREAK a window earns already counts on the
+  tickets after it in the same batch. `reset_window()` (every morning, the panel) clears
+  the window, the last one, the streak and a pending push. All of it is saved;
+  `from_dict` starts a window that does not add up afresh.
+- **STREAK** (`streak`, rare, batch line, build): `streak_pct` 25 / 40 a window with
+  `extra: {"streak_cap": 100}` / 160. A closed window with a winner adds one to `streak`,
+  one without sets it to 0; while the perk is not held windows are not counted (buying it
+  starts from 0). `prize_pct` adds `streak_pct()` = `mini(streak_cap, streak_pct x
+  streak)`. Its text is a level `desc` each ("EVERY 10 OPENED WITH A WINNER: PRIZES +25%
+  MORE, UP TO +100%"), as QUICK HANDS does, so the cap shows.
+- **DOUBLE UP** (`doubleup`, legendary, batch line, requires CHAIN 1, $2000, effect
+  `double_up`). `can_push(e)`: the perk, nothing pending, nothing opened since a window
+  closed (`window_n == 0`), that window paid something (`push_offer()`, its pay) and the
+  cash covers it. `push(e)` takes the stake out of cash (`e.pay`, `stats.staked`) and
+  keeps `push_stake` and `push_printed` (that window's printed sum). The next window's
+  close settles it: printed sum greater than `push_printed` pays `e.bonus(stake x 3)`
+  (`stats.push_won`, and `best_prize` if bigger), as much or less loses the stake
+  (`stats.push_lost`); then a new push may go on that window. No threshold for a second
+  push in a row (G). Printed, never paid, so HIGH ROLLER or FAT PRIZES bought between the
+  windows do not help (a test buys FAT PRIZES between and still loses).
+  - **Decided here: a push pending when the day ends is lost** (`reset_window` counts it in
+    `push_lost`). G's rule is that the window never crosses a day; refunding it would let
+    a player stake and walk away for free. The LEAVE card says so ("THE STAKE ON DOUBLE UP
+    ($n) IS LOST") while one is pending.
+  - **Decided here: the card is asked only when an opening ends on a window** (the rule of
+    `window_n == 0`). By hand that is every tenth ticket; QUICK HANDS 5 every second
+    opening; QUICK HANDS 20 from an empty window every opening. An opening that leaves
+    a window half open is not asked even if it closed one on the way (mixing hand and
+    batch openings can do that); the brief's "the last window closed" in other words.
+- **The game**: `_after_opening` runs after every opening (`_on_revealed` by hand,
+  `open_many`): it says a push settled (DOUBLE UP WON $n with the win sound and flash, or
+  DOUBLE UP LOST $n), updates the HUD's cash, and when `can_push` puts up the DOUBLE UP?
+  card (`_pushing`, the PICKY / SEAL pattern): STAKE $n, what the next ten must print,
+  what comes back, the cash; PUSH IT (`push`) and KEEP IT (`keep`). Pushing says STAKED
+  $n. Chinese: 押一把 / 连庄 / 押上 / 不押 / 押金.
+- **The simulator**: the bots buy a level of HIGH ROLLER (where their shelf list has it:
+  the batch line) only while the cash left after paying for it holds `HIGH_ROLLER_CASH`
+  (25) tickets of the machine's cheapest form at the new bet (`_rolls`); `_bet` is gone.
+  The perks bot never had HIGH ROLLER (it buys dealt offers only, and the perk is on the
+  shelf), so its `_bet` call was dead and nothing replaces it. The batch line takes
+  CHAIN, ENCORE, STREAK, DOUBLE UP and pushes after every opening that can, while the
+  stake is under half its cash; with DOUBLE UP it buys `PUSH_BUY` (20) tickets at a time
+  instead of 25 so its openings end on a window. `box_return` stakes every window it can
+  (the stake counted as spent, the x3 as won) and takes a `"form"` key in the perk
+  levels to play one form alone. `RunSim.push_odds(base_forms, boxes)`: per form, boxes
+  in the run's model opened in windows of ten one after another, the share of windows
+  after one that paid whose printed sum beats it; `tools/sim_runs` prints it
+  (`--push-boxes=N`, 100 by default). `EV_SETS`: the batch row is `{multi 2, combo 2,
+  again 2, streak 2}`, and one row per line of the combo table (猎大奖, 清盒, 小奖, 保险
+  on Ka-Bawk!, 押一把, 连庄, 钱生钱, 封盒, and the two cross rows), each with a comment
+  naming it and what box_return cannot see (REEL IN, NET WORTH's cash, SEAL, reading);
+  the column is filled after the lead's run.
+- **The developer panel** (run section, Chinese labels): 换一批 perk stays; 指定发 perk
+  is a field for a perk id and a key (`Game.dev_run("deal", id)`): a dealt perk not at
+  its top level goes first in today's offers (a duplicate dropped) and the offers card
+  shows (it shows itself only in the morning; later the phone's TODAY page has it); an
+  unknown or shelf id only warns in the log. 给确定性道具 (`"sure_items"`) adds one SURE
+  THING, REEL IN and QUEUE JUMP past the pockets' room; 开票窗清零 (`"window"`) is
+  `reset_window()` (a pending stake counts as lost).
+- **drive_run** (not run here): the BET / ALL IN block is now a check that the panel's
+  "every perk" left the bet at x10 and no key, then HIGH ROLLER is taken off so the rest
+  plays at x1; DOUBLE UP is taken off after the panel's perks (its card would stop the
+  drive); the shift's wage check expects MOONLIGHTING 2's 15% cut.
+- **The numbers of a 300-run pass after this step** (the lead's, Haiku in three parallel
+  runs): the bots are where step 5 left them (build 1.0%, gamble 12.0%, perks 2.3%,
+  borrow 5.0%, blind 0.7%, skip 0.7%, small 4.7%, clearing 0.3%, jackpot 0.3%, batch
+  and money 0%, churn 0.62 with fees). `push_odds`, no perks: P from 0.01 (Ka-Bawk!) to
+  0.28 (Nugget Rush), Hot Plate 0.18; the x3 breaks even at 1/3, so DOUBLE UP loses on
+  every form when every window is pushed blind (the 押一把 row returns 1.03, the
+  information row 0.61). The balance pass has to retune it (odds by form, or a lower
+  bar); a player who pushes only on a PEEK or a reading will do better than these P.
+  The combo table's 期望回报 column is filled from the `EV_SETS` rows.
