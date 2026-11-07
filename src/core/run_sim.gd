@@ -40,13 +40,18 @@ const BOTS := ["work", "blind", "borrow", "gamble", "perks", "skip", "build",
 	"clearing", "jackpot", "small", "batch", "money", "churn"]
 ## The build bots: dealt perks taken, best first; shelf perks bought (every level, in
 ## this order; SAVINGS only on the work line's checkpoints); the share of the cash a
-## perk may cost; the forms (FormDef.id) the bot's column is picked among when the
-## machine sells one of them (none: any column).
+## perk may cost; `reserve`, optional: a dealt perk is bought only if the cash left
+## holds this many tickets of the machine's cheapest price (0 when missing); the forms
+## (FormDef.id) the bot's column is picked among when the machine sells one of them
+## (none: any column). `build` takes the perks that lift the return of any ticket,
+## cheapest and surest first (G, 2026-11-07: a sensible player who builds does not buy
+## CLOSER or FIRST PULL in a layer whose boxes hold 900 tickets or more; `clearing`
+## measures those), and keeps 100 tickets of cash.
 ## jackpot buys REGULAR for what it opens: READ THE FLARE needs CLOSER or REGULAR, and
 ## JACKPOT HUNTER needs READ THE FLARE.
 const LINES := {
-	"build": {"perks": ["snowball", "bigfish", "prizes", "closer", "streak", "stacker", "penny", "luck",
-		"fortune", "firstpull", "pity", "scrap", "assembly", "middle"], "shelf": [], "share": 0.6, "forms": []},
+	"build": {"perks": ["prizes", "luck", "scrap", "penny", "bigfish", "streak", "stacker", "fortune", "pity", "middle"],
+		"shelf": [], "share": 0.6, "reserve": 100, "forms": []},
 	"clearing": {"perks": ["closer", "firstpull", "assembly", "snowball"], "shelf": ["regular"], "share": 0.6, "forms": []},
 	"jackpot": {"perks": ["bigfish", "pity", "hunter"], "shelf": ["regular", "read1"], "share": 0.6,
 		"forms": ["catch", "kabawk"]},
@@ -146,7 +151,7 @@ static func play(bot: String, base_forms: Array, seed_text: String, config: RunC
 		if wants_play and e.cash + e.credit < price and bot == "borrow":
 			while run.can_borrow():
 				run.borrow(e)
-		if wants_play and e.cash + e.credit >= price:
+		if wants_play and (_can_buy(e, price) if not line.is_empty() else e.cash + e.credit >= price):
 			run.play(e)
 			_play_day(run, e, m, rng, bot, line)
 		elif not run.work(e) and run.play(e):
@@ -158,6 +163,17 @@ static func play(bot: String, base_forms: Array, seed_text: String, config: RunC
 		assert(e.balanced(), "the ledger must balance")
 	return {"status": run.status, "layer": run.layer, "days": int(run.stats.days), "tickets": int(run.stats.tickets),
 		"cash": e.cash, "spent": e.spent, "won": e.won, "balanced": e.balanced(), "stats": run.stats.duplicate()}
+
+
+## Whether the bill slot can turn this cash into a ticket at `price`: it takes bills
+## only (the smallest is five tickets' worth at the layer's stake), so coins under one
+## are stuck in the pocket until a day's wage lifts them. A player with such coins works
+## the day. The line bots do (the plain bots, blind, borrow, perks and skip, keep their
+## old rule: they "play" the rest of the layer with the coins stuck and buy nothing, and
+## the bands of docs/roadmap.md's table were set against that; fixing them lifts blind
+## to 14%, skip to 12%, borrow to 13%, perks to 35%).
+static func _can_buy(e: Economy, price: int) -> bool:
+	return e.credit >= price or (e.cash + e.credit >= price and e.cash >= int(e.bills[0]))
 
 
 ## The column a bot plays today: one of its line's forms when the machine sells one,
@@ -274,6 +290,7 @@ static func _save(run: RunState, e: Economy) -> void:
 static func _build(run: RunState, e: Economy, m: MachineLogic, line: Dictionary) -> void:
 	var share := float(line.get("share", 0.6))
 	var prefs: Array = line.get("perks", [])
+	var keep: int = int(line.get("reserve", 0)) * m.min_price()
 	for id in line.get("shelf", []):
 		if id == RunConfig.SAVINGS:
 			_save(run, e)
@@ -292,7 +309,8 @@ static func _build(run: RunState, e: Economy, m: MachineLogic, line: Dictionary)
 		for k in run.offers.size():
 			var id := str(run.offers[k])
 			var p := run.perk_price(id)
-			if prefs.has(id) and p > 0 and p <= e.cash * share and (best < 0 or prefs.find(id) < prefs.find(str(run.offers[best]))):
+			if prefs.has(id) and p > 0 and p <= e.cash * share and e.cash - p >= keep \
+					and (best < 0 or prefs.find(id) < prefs.find(str(run.offers[best]))):
 				best = k
 		if best < 0 or not run.buy_offer(best, e):
 			break
