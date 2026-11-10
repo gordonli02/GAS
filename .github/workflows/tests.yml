@@ -1,0 +1,44 @@
+name: Tests
+
+# The headless test suite (tests/run_tests.tscn) on every push and by hand.
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Acceptance sizes (--full)
+        type: boolean
+        default: false
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/godot
+      - name: Run the tests
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout 25m godot --headless --path . res://tests/run_tests.tscn -- \
+            ${{ inputs.full && '--full' || '' }} 2>&1 | tee tests.log
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '```'
+            grep -E 'FAIL|passed|failed' tests.log | tail -40 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tests-log
+          path: tests.log

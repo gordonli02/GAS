@@ -1,0 +1,131 @@
+name: Simulator
+
+# Runs tools/sim_runs on GitHub's machines, one job per bot in parallel, then puts the
+# bots' table together on the run's summary page. Start it by hand: Actions > Simulator >
+# Run workflow (pick the branch there). A bot's numbers do not depend on which other bots
+# run beside it (each run is seeded by the prefix and its number), so the split table is
+# the same as one local run's, except the "order" column, which needs every bot in one
+# process and is left out.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bots:
+        description: 'Bots, comma separated, or "all"'
+        default: all
+      runs:
+        description: Runs per bot
+        default: "300"
+      seed:
+        description: Seed prefix
+        default: SIM
+      tables:
+        description: Also print the return, churn, ALL IN and form tables (one more job)
+        type: boolean
+        default: true
+      extra_args:
+        description: 'More sim_runs arguments, e.g. --ev-boxes=200 --push-boxes=1000'
+        default: ""
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      bots: ${{ steps.list.outputs.bots }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        shell: bash
+        run: |
+          if [ "${{ inputs.bots }}" = "all" ]; then
+            # RunSim.BOTS, read from the source so the list never goes stale.
+            list=$(sed -n '/^const BOTS := \[/,/\]/p' src/core/run_sim.gd | grep -o '"[a-z_]*"' | tr -d '"')
+          else
+            list=$(echo "${{ inputs.bots }}" | tr ',' '\n' | tr -d ' ')
+          fi
+          echo "bots=$(echo "$list" | grep . | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+  bot:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        bot: ${{ fromJson(needs.plan.outputs.bots) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/godot
+      - name: Run ${{ matrix.bot }}
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout 290m godot --headless --path . res://tools/sim_runs.tscn -- \
+            --bots=${{ matrix.bot }} --runs=${{ inputs.runs }} --seed=${{ inputs.seed }} \
+            --ev-boxes=0 --churn-boxes=0 --push-boxes=0 --form-boxes=0 \
+            ${{ inputs.extra_args }} 2>&1 | tee sim-${{ matrix.bot }}.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sim-${{ matrix.bot }}
+          path: sim-${{ matrix.bot }}.log
+
+  tables:
+    if: inputs.tables
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/godot
+      - name: Run the tables
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout 290m godot --headless --path . res://tools/sim_runs.tscn -- \
+            --bots=work --runs=1 --seed=${{ inputs.seed }} ${{ inputs.extra_args }} 2>&1 | tee sim-tables.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sim-tables
+          path: sim-tables.log
+
+  summary:
+    needs: [plan, bot, tables]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sim-*
+          merge-multiple: true
+      - name: Put the table together
+        shell: bash
+        run: |
+          {
+            echo "## Simulator: ${{ inputs.runs }} runs a bot, seed ${{ inputs.seed }}, ref ${{ github.ref_name }} @ ${GITHUB_SHA::7}"
+            echo '```'
+            first=$(ls sim-*.log 2>/dev/null | grep -v sim-tables.log | head -1)
+            if [ -n "$first" ]; then
+              grep -m1 '^work line:' "$first" || true
+              grep '^CONFIG:' "$first" || true
+              grep -m1 '^bot ' "$first" || true
+            fi
+            for b in $(echo '${{ needs.plan.outputs.bots }}' | jq -r '.[]'); do
+              if [ -f "sim-$b.log" ]; then
+                grep -E "^$b +[0-9]" "sim-$b.log" || echo "$b: no row (see the sim-$b log)"
+              else
+                echo "$b: no log (the job failed or was cancelled)"
+              fi
+            done
+            echo '```'
+            if [ -f sim-tables.log ]; then
+              echo "### Tables"
+              echo '```'
+              sed -n '/^return per dollar/,$p' sim-tables.log
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: all-logs
+          path: sim-*.log
