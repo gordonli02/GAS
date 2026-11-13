@@ -53,7 +53,8 @@ extends Node
 ## M9.8 step 1 stage 3, "用得上") for the line bots of --bots= (default the five): each
 ## seed played by the line bot holding its core (SimBots.GIVEN) and buying no perks, and
 ## by blind holding the same; per line the numbers of both arms and PASS / FAIL for each
-## of the three criteria and the line. Exit code 0 either way: it is a report.
+## of the two criteria (fired, play) and the line, and the signature ratio as a reading
+## (no verdict). Exit code 0 either way: it is a report.
 ## With --variants the table is of every named variant of the line bots of --bots=
 ## (SimBots.VARIANTS; default the five), a row each (<bot>/<variant>) beside the bot's
 ## own spec, paired with it on the same seeds, and the best by clear rate named; on a tie
@@ -389,20 +390,30 @@ func _given(lines: Array, runs: int, prefix: String, forms: Array, config: RunCo
 			var a: Dictionary = g.arms[arm]
 			print("  %-8s %8.0f %7.3f %7.1f%% %12.3f" % [arm, a.tickets, a["return"], a.cleared * 100.0, a.signature])
 		var c1: Dictionary = g.criteria[0]
-		var rows := []
+		print("  1 fired: every given perk fired (or used) in >= %.0f%% of runs; a card the control is also under that is judged against the control" % (SimReport.FIRED_MIN * 100.0))
 		for row in c1.rows:
-			rows.append("%s %s %.0f%% (control %.0f%%)" % [row[0], row[3], row[1] * 100.0, row[2] * 100.0] if row[3] != "-"
-				else "%s not judged (no counter, no use to count)" % row[0])
-		print("  1 every given perk fired (or used) in >= %.0f%% of runs: %s" % [SimReport.FIRED_MIN * 100.0, "; ".join(rows)])
+			if row.how == "-":
+				print("    %-12s not judged (no counter, no use to count)" % row.id)
+			elif row.rule == "90%":
+				print("    %-12s %s, rule 90%%: line %.0f%% (control %.0f%%)  %s" % [row.id, row.how, row.line * 100.0, row.control * 100.0, "PASS" if row.pass else "FAIL"])
+			else:
+				print("    %-12s %s, rule against the control: line %.0f%%, control %.0f%%, paired %+.3f, 95%% %+.3f to %+.3f  %s" % [row.id, row.how,
+					row.line * 100.0, row.control * 100.0, row.diff, row.low, row.high, "PASS" if row.pass else "FAIL"])
 		print("    %s%s" % ["PASS" if c1.pass else "FAIL", "" if c1.missing.is_empty() else " (short: %s)" % ", ".join(c1.missing)])
 		var c2: Dictionary = g.criteria[1]
-		print("  2 %s %s per 100 tickets: line %.3f, control %.3f, x%.2f (needs x%.1f)" % [sig[1], "percent added" if sig[0] == "fired_pct" else "firings",
-			c2.line, c2.control, c2.x, SimReport.SIGNATURE_X])
+		var how_play := "level with the control"
+		if c2.verdict == "better":
+			how_play = "better by %+.4f, 95%% %+.4f to %+.4f" % [c2.mean, c2.low, c2.high]
+		elif c2.verdict == "worse":
+			how_play = "worse by %+.4f, 95%% %+.4f to %+.4f" % [c2.mean, c2.low, c2.high]
+		elif c2.verdict == "none":
+			how_play = "no seed to pair"
+		print("  2 play: return per dollar: line %.3f, control %.3f; paired by seed (%d): mean %+.4f, 95%% %+.4f to %+.4f: %s" % [c2.line,
+			c2.control, c2.n, c2.mean, c2.low, c2.high, how_play])
 		print("    %s" % ("PASS" if c2.pass else "FAIL"))
-		var c3: Dictionary = g.criteria[2]
-		print("  3 return per dollar: line %.3f, control %.3f; paired by seed (%d): mean %+.4f, 95%% %+.4f to %+.4f" % [c3.line,
-			c3.control, c3.n, c3.mean, c3.low, c3.high])
-		print("    %s" % ("PASS" if c3.pass else "FAIL"))
+		var rd: Dictionary = g.reading
+		print("  reading (no verdict), how much play at the machine weighs: %s %s per 100 tickets, line %.3f, control %.3f, x%.2f" % [sig[1],
+			"percent added" if sig[0] == "fired_pct" else "firings", rd.line, rd.control, rd.x])
 		var marks := []
 		for c in g.criteria:
 			marks.append("%s %s" % [c.name, "PASS" if c.pass else "FAIL"])

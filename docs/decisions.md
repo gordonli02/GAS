@@ -1459,3 +1459,48 @@ The plan is `docs/roadmap.md` M9.8 step 1 (five stages, G's nod 2026-11-13).
   FLARE 0%; batch MAGNET 15%, STREAK 3%, ALL IN 0%; money SAVINGS 100%, NET WORTH and
   MIDDLE CUT 0%. Not checked: `hunt` on against off with the core given (in normal
   runs they are the same run, JACKPOT HUNTER is never held).
+
+## M9.8 step 1, stage 4: the probes, the acceptance restated, the table the step ends on
+
+- **The adversarial layer's shell** (`SimProbes`, `sim_runs --probes`, exit 1 when one
+  fails; the CI's tables job runs it). A probe is a name, the rule it attacks, how it
+  is run and a check. One so far, `churn` (FIRST PULL x REGULAR): at fixed perks
+  (`SimData.churn_return` at each of `CHURN_SETS`), and in whole runs of the churn bot
+  holding FIRST PULL 2 and REGULAR 2 from the start (before `given` it never held
+  FIRST PULL in a run, so that half tested nothing). 300 runs: with fees 0.307 / 0.532
+  / 0.518 / 0.576 at fixed perks, 0.868 in whole runs (return 1.825 before the fees):
+  under 1, and well over blind's 0.76, so the fee's floor is what holds it. `churn`
+  left the strategy bots: `SimBots.NAMES` is 12, `SimBots.PROBES` names the probe bots;
+  the fixture still freezes all 13.
+- **Defaults from the variants pass**: clearing without the stop-loss (layer 1 8.0% to
+  12.3%), money with a floor of $150 (9.0% to 16.3%). `--variants` breaks a tie on the
+  clear rate by the layer-1 rate, then the return, and says which decided.
+- **The acceptance restated** (G, 2026-11-13, passed on by a side session; roadmap,
+  stage 3): (1) fired: every core perk fires in 90% of the line arm's runs, a card the
+  control is also under that (it waits on a rare prize) judged against the control,
+  the paired interval not wholly below 0; (2) play: the return not under the
+  control's, the paired interval not wholly below 0, "better" when it is wholly
+  above. The x1.5 is a reading now ("how much play at the machine weighs"), not a
+  criterion. `SimReport.judge_fired`, `judge_return`. 300 runs, all five pass: fired
+  yes everywhere (MIDDLE CUT 58% in both arms, level); play better for jackpot (+7.49),
+  small (+0.28), batch (+0.26), level for clearing (+0.12, -0.26 to +0.50) and money
+  (+0.04, -0.03 to +0.10). Cleared with the core given (line / control): small 100.0%
+  / 99.3%, jackpot 95.7% / 3.7%, clearing 56.3% / 60.3%, batch 12.3% / 11.3%, money
+  11.7% / 1.3%. The readings: jackpot x10.2, money x2.19, small x1.19, clearing and
+  batch x1.15. Two limits G set on reading these: until the bots use items, "careful
+  play is about level with blind play off the jackpot line" says only that play
+  without information does not pull ahead, not that there is no decision at the
+  machine; until they borrow, layer 1's clear rates are a low floor, not something to
+  set layer 1's debt by.
+- **The table the step ends on** (300 runs, SIM seeds; cleared, L1 / L2 / L3, return):
+  small 22.0% (28.0 / 89.3 / 88.0) 1.249; build 8.0% (25.3 / 46.1 / 68.6) 1.141; perks
+  5.3% (25.0 / 36.0 / 59.3) 1.077; jackpot 2.0% (27.7 / 33.7 / 21.4) 0.805; batch 1.3%
+  (6.3 / 31.6 / 66.7) 0.933; money 0.7% (16.3 / 12.2 / 33.3) 0.816; borrow 0.3% (19.7 /
+  10.2 / 16.7) 0.828; clearing 0.0% (12.3 / 2.7 / 0) 0.754; gamble 0.0% (14.7 / 6.8 / 0)
+  0.749; blind 0.0% (14.7 / 4.5 / 0) 0.758; skip 0.0% (14.7 / 4.5 / 0) 0.760; work
+  100%. The seven bots this step did not touch read exactly as in stage 2. Against
+  "数值方向" 一: the four unbuilt are under 5%; of the lines only small is in 20 to 30;
+  jackpot, batch, money and clearing are under build, so the ordering fails there.
+  What is left is for the numbers (step 8) and the dealing (step 2): the cores are
+  not held (layer 1: PENNY JAR 34%, CLOSER 19%, DUE A WIN 19%, MAGNET 15%, BIG FISH 6%,
+  the rest 0 to 3%), and held they are far apart.

@@ -327,7 +327,7 @@ func test_intervals_and_pairs() -> void:
 
 ## The given-cards test's mechanics (M9.8 step 1 stage 3), not its verdicts: given perks
 ## are held from day 1 and cost nothing, with what they require; the line arm buys no
-## perk; the control is blind holding the same; the report carries its three criteria.
+## perk; the control is blind holding the same; the report carries its two criteria (and the signature as a reading).
 func test_given_cards() -> void:
 	var run := RunState.start(RunConfig.standard(), "GV", ["diner", "bar", "bingo"])
 	SimRun.give(run, {"hunter": 1})
@@ -351,7 +351,8 @@ func test_given_cards() -> void:
 		eq(c, SimRun.play(SimBots.spec("blind", {"params": {"given": SimBots.GIVEN[line]}}), pack.forms, "GV-0"),
 			"%s: the control is blind holding the same" % line)
 	var g := SimReport.given("money", pack.forms, 2, "GV")
-	eq(g.criteria.map(func(x): return x.name), ["fired", "signature", "return"], "three criteria")
+	eq(g.criteria.map(func(x): return x.name), ["fired", "play"], "two criteria")
+	check(g.reading.has("x"), "the signature ratio is a reading")
 	eq(g.arms.keys(), ["line", "control"], "two arms")
 	eq(g.criteria[0].rows.size(), SimBots.GIVEN.money.size(), "a row per given perk")
 	# The paired mean: [1, 2, 3] has mean 2, sd 1, half 1.96 / sqrt(3).
@@ -359,6 +360,32 @@ func test_given_cards() -> void:
 	check(absf(pm.mean - 2.0) < 1e-9 and absf(pm.sd - 1.0) < 1e-9, "mean 2, sd 1 (%s)" % str(pm))
 	check(absf(pm.low - (2.0 - 1.96 / sqrt(3.0))) < 1e-9 and absf(pm.high - (2.0 + 1.96 / sqrt(3.0))) < 1e-9, "the interval")
 	eq(SimReport.paired_mean([]).n, 0, "none: n 0")
+	# The new judging, on hand-made inputs: 20 seeds.
+	var yes := []
+	var no := []
+	var some := []   # fired in 5 of 20
+	for i in 20:
+		yes.append(true)
+		no.append(false)
+		some.append(i < 5)
+	var j := SimReport.judge_fired(yes, yes)
+	check(j.pass and j.rule == "90%", "fired in all: passes by the 90 percent rule")
+	j = SimReport.judge_fired(some, some)
+	check(j.pass and j.rule == "against the control", "a rare card level with its control passes (%s)" % str(j))
+	j = SimReport.judge_fired(no, some)
+	check(not j.pass and j.rule == "against the control", "a rare card the line never gets, the control sometimes: fails (%s)" % str(j))
+	j = SimReport.judge_fired(some, yes)
+	check(not j.pass and j.rule == "90%", "under 90 percent with the control at 100 percent: fails by the 90 percent rule (%s)" % str(j))
+	var low := []
+	for i in 20:
+		low.append(-0.1 + (0.001 if i % 2 == 0 else -0.001))
+	var jr := SimReport.judge_return(low)
+	check(not jr.pass and jr.verdict == "worse", "a return interval wholly below 0 fails (%s)" % str(jr))
+	jr = SimReport.judge_return([0.1, -0.1, 0.05, -0.05])
+	check(jr.pass and jr.verdict == "level", "a return interval spanning 0 passes (%s)" % str(jr))
+	jr = SimReport.judge_return([0.1, 0.11, 0.09, 0.1])
+	check(jr.pass and jr.verdict == "better", "a return interval wholly above 0: better (%s)" % str(jr))
+	check(not SimReport.judge_return([]).pass, "no seed: no pass")
 
 
 ## The line bots' blocks (M9.8 step 1 stage 3), on states set by hand.

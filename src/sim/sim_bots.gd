@@ -160,8 +160,9 @@ const GIVEN := {
 	"money": {"savings": 1, "worth": 1, "middle": 1},
 }
 
-## Each line's signature measure in the given-cards test: [table, key] of a run's
-## `fired` or `fired_pct` (SimRun.play), counted per 100 tickets: boxes cleared (CLOSER
+## Each line's signature measure in the given-cards test, a reading only (how much play
+## at the machine weighs; no longer a criterion, which are fired and play): [table, key]
+## of a run's `fired` or `fired_pct` (SimRun.play), counted per 100 tickets: boxes cleared (CLOSER
 ## firings), top prizes hit (BIG FISH firings), PENNY JAR firings, STREAK's percent
 ## added, NET WORTH's percent added.
 const SIGNATURE := {

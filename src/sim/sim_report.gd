@@ -3,7 +3,8 @@ extends RefCounted
 ## What the simulator says about many runs: a bot's summary (the shares and means a
 ## balance pass looks at, and the measures of docs/roadmap.md 七.3, 七.5, 七.6 and
 ## 十二.6), the paired comparison of two summaries on the same seeds, the given-cards
-## test of a line (given) with its paired mean (paired_mean), the row the baseline
+## test of a line (given: two criteria, fired and play, judged by judge_fired and
+## judge_return, and the signature as a reading), the paired mean (paired_mean), the row the baseline
 ## fixture keeps of one run, percentiles, the Wilson interval.
 
 const BEST_PCT := [50, 90, 99]   ## the percentiles of each run's best prize summary gives
@@ -12,7 +13,7 @@ const CHUNK := 100               ## runs between the early stop's looks (summary
 const OFTEN := 0.10              ## a perk off the bot's list is in the trigger table when held in this share of runs
 const DEATHS_MIN := 5            ## a layer gets a death block when at least this many runs died there
 const FIRED_MIN := 0.9           ## given: a given core perk fires in at least this share of the line arm's runs
-const SIGNATURE_X := 1.5         ## given: the line's signature per 100 tickets at least this times the control's
+							## (a card the control arm also misses is judged against the control instead)
 
 
 ## `runs` runs of the bot `spec` (SimBots.spec), seeds `seed_prefix`-0 ... Returns:
@@ -233,14 +234,18 @@ static func paired(a: Dictionary, b: Dictionary) -> Dictionary:
 			out.only_b += 1
 		else:
 			out.neither += 1
-	var n := float(out.n)
-	var split := float(int(out.only_a) - int(out.only_b))
-	var diff := split / n
-	var se := sqrt(maxf(0.0, float(int(out.only_a) + int(out.only_b)) - split * split / n)) / n
-	out.diff = diff
-	out.low = diff - Z95 * se
-	out.high = diff + Z95 * se
+	out.merge(_wald(int(out.only_a), int(out.only_b), int(out.n)))
 	return out
+
+
+## The Wald interval for paired proportions (see `paired`): b runs only A, c only B, of
+## n: {diff, low, high}.
+static func _wald(b: int, c: int, n: int) -> Dictionary:
+	var nf := float(maxi(1, n))
+	var split := float(b - c)
+	var diff := split / nf
+	var se := sqrt(maxf(0.0, float(b + c) - split * split / nf)) / nf
+	return {"diff": diff, "low": diff - Z95 * se, "high": diff + Z95 * se}
 
 
 ## The mean of paired differences (one a seed: the same seed played two ways) with its
@@ -271,17 +276,17 @@ static func paired_mean(diffs: Array) -> Dictionary:
 ## core), the same boxes and dice. Returns {line, runs, given, arms: {line, control},
 ## each {tickets (per run), return (won / spent, pooled), signature (per 100 tickets,
 ## pooled), fired (perk id -> share of runs it fired in, or was used in), cleared},
-## criteria: [three {name, pass, ...}], pass}:
-##   1 fired    every given perk RunState.FIRED counts fired in FIRED_MIN of the line
-##              arm's runs or more; REGULAR is judged by use (a box changed in the run)
-##              and READ THE FLARE by use (a box left because its flare said the top was
-##              gone, SimCtx.counters "flare_left"); any other is not judged. {rows:
-##              [[id, line share, control share, how ("fired", "used", "-")]], missing}
-##   2 signature  the line's signature per 100 tickets at least SIGNATURE_X times the
-##              control's (more than 0 when the control's is 0). {line, control, x}
-##   3 return   the paired mean of each seed's return difference (line less control;
-##              a seed where either arm spent nothing is dropped): paired_mean, its
-##              interval above 0. {line, control, n, mean, low, high}
+## criteria: [two {name, pass, ...}], pass (both), reading}:
+##   1 fired    judge_fired of each given perk RunState.FIRED counts (REGULAR is judged by
+##              use, a box changed in the run; READ THE FLARE by use, a box left because
+##              its flare said the top was gone, SimCtx.counters "flare_left"; any other
+##              is not judged). {rows: [{id, how ("fired", "used", "-"), rule, line,
+##              control, diff, low, high, pass}], missing}
+##   2 play     judge_return of each seed's return difference (line less control; a seed
+##              where either arm spent nothing is dropped). {line, control, n, mean, low,
+##              high, verdict}
+## `reading` (no verdict): the signature per 100 tickets of both arms and their ratio,
+## how much play at the machine weighs (机器前决策分量): {line, control, x}.
 static func given(line: String, base_forms: Array, runs: int, seed_prefix := "GV", config: RunConfig = null,
 		overrides: Dictionary = {}) -> Dictionary:
 	if config == null:
@@ -291,7 +296,9 @@ static func given(line: String, base_forms: Array, runs: int, seed_prefix := "GV
 	var sig: Array = SimBots.SIGNATURE.get(line, ["fired", ""])
 	var acc := {}
 	for arm in specs:
-		acc[arm] = {"tickets": 0, "spent": 0, "won": 0, "sig": 0, "cleared": 0, "fired": {}, "ret": []}
+		acc[arm] = {"tickets": 0, "spent": 0, "won": 0, "sig": 0, "cleared": 0, "fired": {}, "flags": {}}
+		for id in core:
+			acc[arm].flags[id] = []
 	var diffs := []
 	for i in runs:
 		var rets := {}
@@ -305,7 +312,9 @@ static func given(line: String, base_forms: Array, runs: int, seed_prefix := "GV
 			if r.status == RunState.CLEARED:
 				a.cleared += 1
 			for id in core:
-				if _used(id, r):
+				var used := _used(id, r)
+				a.flags[id].append(used)
+				if used:
 					a.fired[id] = int(a.fired.get(id, 0)) + 1
 			rets[arm] = float(r.won) / r.spent if int(r.spent) > 0 else -1.0
 		if rets.line >= 0.0 and rets.control >= 0.0:
@@ -323,21 +332,66 @@ static func given(line: String, base_forms: Array, runs: int, seed_prefix := "GV
 	var missing := []
 	for id in core:
 		var how := "fired" if RunState.FIRED.has(id) else ("used" if ["regular", "read1"].has(id) else "-")
-		rows.append([id, arms.line.fired[id], arms.control.fired[id], how])
-		if how != "-" and arms.line.fired[id] < FIRED_MIN:
-			missing.append(id)
+		var row := {"id": id, "how": how}
+		if how == "-":
+			row.merge({"rule": "-", "line": arms.line.fired[id], "control": arms.control.fired[id], "pass": true})
+		else:
+			row.merge(judge_fired(acc.line.flags[id], acc.control.flags[id]))
+			if not row.pass:
+				missing.append(id)
+		rows.append(row)
 	var ls: float = arms.line.signature
 	var cs: float = arms.control.signature
 	var x := ls / cs if cs > 0.0 else (INF if ls > 0.0 else 0.0)
-	var pm := paired_mean(diffs)
-	var criteria := [
-		{"name": "fired", "pass": missing.is_empty(), "rows": rows, "missing": missing},
-		{"name": "signature", "pass": x >= SIGNATURE_X, "line": ls, "control": cs, "x": x},
-		{"name": "return", "pass": pm.n > 0 and pm.low > 0.0, "line": arms.line["return"], "control": arms.control["return"],
-			"n": pm.n, "mean": pm.mean, "low": pm.low, "high": pm.high},
-	]
+	var play := judge_return(diffs)
+	play.merge({"name": "play", "line": arms.line["return"], "control": arms.control["return"]})
+	var criteria := [{"name": "fired", "pass": missing.is_empty(), "rows": rows, "missing": missing}, play]
 	return {"line": line, "runs": runs, "given": core.duplicate(), "arms": arms, "criteria": criteria,
-		"pass": criteria.all(func(c): return c.pass)}
+		"pass": criteria.all(func(c): return c.pass), "reading": {"line": ls, "control": cs, "x": x}}
+
+
+## Criterion 1 of `given` for one card: `line` and `control` are per-seed flags (the card
+## fired or was used in that seed's run, true / false) of the two arms. PASS when the line
+## arm has it in FIRED_MIN of its runs or more (rule "90%"). When the control arm is also
+## under FIRED_MIN the card waits on a rare prize and is judged against the control
+## (rule "against the control"): PASS when the line arm is not lower, the 95% interval of
+## the paired difference (per seed: line 1/0 less control 1/0, the Wald interval of
+## `paired`) not wholly below 0. Returns {rule, line, control (the shares), diff, low,
+## high (the paired difference), pass}.
+static func judge_fired(line: Array, control: Array) -> Dictionary:
+	var n := mini(line.size(), control.size())
+	var lk := 0
+	var ck := 0
+	var only_l := 0
+	var only_c := 0
+	for i in n:
+		lk += 1 if line[i] else 0
+		ck += 1 if control[i] else 0
+		if line[i] and not control[i]:
+			only_l += 1
+		elif control[i] and not line[i]:
+			only_c += 1
+	var ls := float(lk) / maxi(1, n)
+	var cs := float(ck) / maxi(1, n)
+	var w := _wald(only_l, only_c, n)
+	var out := {"rule": "90%", "line": ls, "control": cs, "diff": w.diff, "low": w.low, "high": w.high, "pass": ls >= FIRED_MIN}
+	if not out.pass and cs < FIRED_MIN:
+		out.rule = "against the control"
+		out.pass = n > 0 and w.high >= 0.0
+	return out
+
+
+## Criterion 2 of `given` (play): `diffs` the per-seed return differences (line less
+## control). PASS when the 95% interval of their paired mean is not wholly below 0.
+## Returns {pass, n, mean, low, high, verdict}: verdict "better" (wholly above 0),
+## "level" (spans 0), "worse" (wholly below 0), "none" (no seed).
+static func judge_return(diffs: Array) -> Dictionary:
+	var pm := paired_mean(diffs)
+	var verdict := "none"
+	if pm.n > 0:
+		verdict = "better" if pm.low > 0.0 else ("worse" if pm.high < 0.0 else "level")
+	return {"pass": verdict != "none" and verdict != "worse", "n": pm.n, "mean": pm.mean, "low": pm.low,
+		"high": pm.high, "verdict": verdict}
 
 
 ## Whether a given perk did its work in run `r` (given's criterion 1): fired (RunState
