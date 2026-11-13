@@ -142,7 +142,7 @@ const CONSOLATION := [5, 10]
 ## ALL IN's bar (G, 2026-11-07: a push wins about half the time on every form; the x3
 ## stays): the next window wins when its printed prizes reach this percentage of the
 ## staked window's, each ticket of the staked window counted at its own form's share
-## (form uid -> percent). Measured with RunSim.push_odds on the run's small boxes at the
+## (form uid -> percent). Measured with SimData.push_odds on the run's small boxes at the
 ## run's payout 0.735 (M9.7 item 10, windows of ten, 1000 boxes a form): Hot Plate 0.48,
 ## Lucky Spur 0.45, Pecking Order 0.50, One Flock 0.51, Nugget Rush 0.53, Peckeye 0.47.
 ## P is flat between bars and jumps at the window's price steps (Lucky Spur: 0.56 up to

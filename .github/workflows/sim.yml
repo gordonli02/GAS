@@ -38,8 +38,10 @@ jobs:
         shell: bash
         run: |
           if [ "${{ inputs.bots }}" = "all" ]; then
-            # RunSim.BOTS, read from the source so the list never goes stale.
-            list=$(sed -n '/^const BOTS := \[/,/\]/p' src/core/run_sim.gd | grep -o '"[a-z_]*"' | tr -d '"')
+            # SimBots.NAMES (RunSim.BOTS), read from the source so the list never goes stale
+            # (no Godot in this job for `sim_runs --list-bots`). It depends on that constant
+            # staying on one line, `const NAMES := [...]`, in src/sim/sim_bots.gd.
+            list=$(sed -n 's/^const NAMES := \[\(.*\)\]$/\1/p' src/sim/sim_bots.gd | grep -o '"[a-z_]*"' | tr -d '"')
           else
             list=$(echo "${{ inputs.bots }}" | tr ',' '\n' | tr -d ' ')
           fi

@@ -68,6 +68,7 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 - `tools/sim_runs.tscn` plays bots through whole runs and prints clear rates, for the numbers in
   `src/core/run_config.gd`, then what a dollar of tickets pays back at some perk levels
   (`src/core/catalog.gd`): `godot --headless --path . res://tools/sim_runs.tscn -- --runs=200`
+  (`--list-bots` prints the bots' names; the simulator itself is `src/sim/`)
 - `tools/drive_game.tscn` plays the full loop (bills, PLAY ALL, camera swing, leaving rules, cash out, loan,
   menu, language, developer panel, save and reload) and checks the money identity every frame; its save file
   goes under the output dir. `tools/preview_pile.tscn` renders the discard pile at several sizes;
@@ -87,8 +88,10 @@ Start with `MIGRATION.md`. It holds the rules, tear physics, milestones and acce
 ### Layout
 
 - `src/core/`: plain logic with no scene access (random numbers, box generator, economy, machine, tray, navigation rules,
-  the run: `run_state.gd`, `run_config.gd`, `run_sim.gd`; the phone's shop: `catalog.gd`, `box_reading.gd`)
+  the run: `run_state.gd`, `run_config.gd`; the phone's shop: `catalog.gd`, `box_reading.gd`)
 - `src/data/`: data pack loading and validation
+- `src/sim/`: the run simulator (`RunSim`, the front door): the bots' table, a day's blocks, the run's loop,
+  the reports and the data layer; `tools/sim_runs.tscn` runs it
 - `src/rooms/`: the three rooms, built from code with a port of the web build's low-poly kit (`room_kit.gd`)
 - `src/platform/`: thin platform layer (`Platform` autoload); offline backend only for now
 - `src/save/`: the save file (`SaveFile`, `Save` autoload); `src/core/session_state.gd` says what a session keeps

@@ -998,8 +998,9 @@ func test_batch_perks_wait_for_m13() -> void:
 				check(not parked.has(id), "layer %d: %s dealt" % [l + 1, id])
 	check(not r.offerable().has("multi") and r.missing("allin").is_empty(), "with STREAK 1 ALL IN can be offered")
 	# The simulator's bots do not buy them.
-	for line in RunSim.LINES:
-		for id in RunSim.LINES[line].perks + RunSim.LINES[line].shelf:
+	for line in SimBots.NAMES:
+		var spec := SimBots.spec(line)
+		for id in spec.params.perks + spec.params.shelf:
 			check(not parked.has(id), "the %s bot buys %s" % [line, id])
 	# Held (a save, the developer panel, M13): they still work.
 	r.perks = {"multi": 1}
@@ -1486,7 +1487,7 @@ func test_all_in_every_window() -> void:
 	var bought := []
 	for k in 25:
 		bought.append(_entry(3 if k == 0 else -1))
-	RunSim._open(r2, e2, bought)
+	SimRun.open_tickets(SimCtx.of(r2, e2, null, SimBots.spec("batch")), bought)
 	eq(int(r2.stats.staked), 25, "the bot staked the first window's $25")
 	eq(int(r2.stats.push_lost), 25, "the second printed nothing: lost")
 	eq(r2.window_n, 5, "five into the third window")

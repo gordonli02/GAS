@@ -16,7 +16,7 @@ extends Node
 ## Then what a dollar of tickets pays back at some perk levels (whole boxes bought
 ## out; --ev-boxes=N boxes of each form, 0 to skip), each form alone without perks and
 ## with DUE A WIN 2, and the churn exploit at fixed perks (--churn-boxes=N boxes a
-## column, 0 to skip). Then ALL IN's odds on each form (RunSim.push_odds: of the
+## column, 0 to skip). Then ALL IN's odds on each form (SimData.push_odds: of the
 ## windows of ten after one that paid, the share whose printed prizes reach its bar,
 ## the form's Catalog.ALL_IN_SHARE of it; --push-boxes=N boxes a form, 0 to skip). Then each form's boxes in the run's model (its shape): return,
 ## winners per 100 tickets, top prizes a box and how bumpy one ticket's prize is
@@ -26,6 +26,8 @@ extends Node
 ## config and writes the rows (RunSim.baseline_row) as JSON to <path> (res://, user:// or
 ## a file path; a relative path is from the project folder), printing one timing line a
 ## bot. That file, tests/fixtures/sim_baseline.json, freezes the bots (test_run_sim.gd).
+## With --list-bots it prints the bots' names (RunSim.BOTS, src/sim/sim_bots.gd), one a
+## line, and quits.
 
 ## The roadmap's targets (docs/roadmap.md, the bots' table): [text, low, high] in
 ## percent of runs cleared.
@@ -70,6 +72,11 @@ func _run() -> void:
 			ev_boxes = maxi(0, a.trim_prefix("--ev-boxes=").to_int())
 		elif a.begins_with("--seed="):
 			prefix = a.trim_prefix("--seed=")
+		elif a == "--list-bots":
+			for b in RunSim.BOTS:
+				print(b)
+			get_tree().quit(0)
+			return
 	var res := PackLoader.load_dir("res://packs/core")
 	if not res.ok():
 		push_error("core pack failed to load: " + "; ".join(res.errors))
@@ -122,27 +129,27 @@ func _run() -> void:
 		print("ordering build > gamble > perks > borrow >= blind ~ skip: %s" % ("holds" if held else "fails at " + ", ".join(broken)))
 	if ev_boxes > 0:
 		print("\nreturn per dollar of tickets, %d boxes of each form bought out:" % ev_boxes)
-		for levels in RunSim.EV_SETS:
+		for levels in SimData.EV_SETS:
 			var label := "no perks" if levels.is_empty() else ", ".join(levels.keys().map(func(k): return "%s %s" % [k, str(levels[k])]))
-			print("  %-60s %.3f" % [label, RunSim.box_return(res.pack.forms, levels, ev_boxes)])
+			print("  %-60s %.3f" % [label, SimData.box_return(res.pack.forms, levels, ev_boxes)])
 		var pity_boxes := ev_boxes * 4
 		print("\neach form alone, %d boxes: no perks / DUE A WIN 2 (pity 2):" % pity_boxes)
 		for f: FormDef in res.pack.forms:
-			print("  %-10s %7.3f %7.3f" % [f.id, RunSim.box_return([f], {}, pity_boxes), RunSim.box_return([f], {"pity": 2}, pity_boxes)])
+			print("  %-10s %7.3f %7.3f" % [f.id, SimData.box_return([f], {}, pity_boxes), SimData.box_return([f], {"pity": 2}, pity_boxes)])
 	if churn_boxes > 0:
-		print("\nchurn: %d tickets a box then NEW BOX, %d boxes a column, stake 1 (return / with fees / the fee):" % [RunSim.CHURN, churn_boxes])
-		for levels in RunSim.CHURN_SETS:
+		print("\nchurn: %d tickets a box then NEW BOX, %d boxes a column, stake 1 (return / with fees / the fee):" % [SimData.CHURN, churn_boxes])
+		for levels in SimData.CHURN_SETS:
 			var label := "no perks" if levels.is_empty() else ", ".join(levels.keys().map(func(k): return "%s %d" % [k, levels[k]]))
-			var c := RunSim.churn_return(res.pack.forms, levels, churn_boxes)
+			var c := SimData.churn_return(res.pack.forms, levels, churn_boxes)
 			print("  %-28s %7.3f %7.3f %6d" % [label, c["return"], c.return_fees, c.fee])
 	if push_boxes > 0:
 		print("\nALL IN: windows of %d, %d boxes a form, no perks (P: the next window's printed prizes reach the bar, the form's share of one that paid):" % [Catalog.WINDOW, push_boxes])
-		for row in RunSim.push_odds(res.pack.forms, push_boxes):
+		for row in SimData.push_odds(res.pack.forms, push_boxes):
 			print("  %-10s share %3d%%  P %.3f  (%d windows)" % [row.form, row.share, row.p, row.windows])
 	if form_boxes > 0:
 		print("\neach form in the run's model (its shape), %d boxes, no perks:" % form_boxes)
 		print("  %-10s %7s %9s %7s %8s" % ["form", "return", "win/100", "tops", "sd $"])
-		for row in RunSim.form_table(res.pack.forms, form_boxes):
+		for row in SimData.form_table(res.pack.forms, form_boxes):
 			print("  %-10s %7.3f %9.1f %7.2f %8.2f" % [row.form, row["return"], row.winners, row.tops, row.sd])
 	get_tree().quit(0 if problems.is_empty() else 1)
 

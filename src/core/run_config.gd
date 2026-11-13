@@ -25,7 +25,7 @@ const STANDARD := {
 	## Every run box's prize total times this (BoxModel.payout). G, 2026-11-07: a dollar of
 	## tickets bought blind, whole boxes bought out, the last sale included, pays back about
 	## 0.78 in the run (1.216 before: the last sale was a quarter of a small box). Free play
-	## keeps the web build's boxes. Measured with tools/sim_runs (4000 boxes a form, two seeds):
+	## keeps the web build's boxes. Measured with tools/sim_runs (SimData.box_return, 4000 boxes a form, two seeds):
 	## no perks 0.783 and 0.780 averaged, each form within 0.77 to 0.80.
 	"payout": 0.735,
 	"layers": [

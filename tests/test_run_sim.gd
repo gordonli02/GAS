@@ -1,5 +1,5 @@
 extends "res://tests/test_case.gd"
-## The run simulator (RunSim): bots play whole runs by the game's own rules.
+## The run simulator (RunSim and src/sim/): bots play whole runs by the game's own rules.
 ## The numbers themselves are looked at with tools/sim_runs; here, that the bots end
 ## every run with a balanced ledger, that the work-only rule holds through them, that
 ## the churn exploit (FIRST PULL x REGULAR) does not pay, and that summary() carries
@@ -22,9 +22,10 @@ func test_bots_finish_and_balance() -> void:
 	if pack == null:
 		return
 	check(RunSim.BOTS.has("gamble") and not RunSim.BOTS.has("mixed"), "mixed became gamble")
-	for line in RunSim.LINES:
+	for line in SimBots.SPECS:
 		check(RunSim.BOTS.has(line), "%s is a bot" % line)
-		for id in RunSim.LINES[line].perks + RunSim.LINES[line].shelf:
+		var s := SimBots.spec(line)
+		for id in s.params.perks + s.params.shelf:
 			check(not Catalog.standard().perk(id).is_empty(), "%s: %s is in the catalog" % [line, id])
 			check(not Catalog.meta(Catalog.standard().perk(id)), "%s: %s is sold in a run (not parked for M13)" % [line, id])
 	var n := 6 if full else 2
@@ -89,16 +90,16 @@ func test_bots_never_stand_at_the_machine_unable_to_buy() -> void:
 	var e := Economy.new()
 	e.bills = RunConfig.bills(5)
 	e.cash = 24
-	check(RunSim._can_buy(e, 5), "$24 under a $25 bill: four tickets of coins")
+	check(SimRun.can_buy(e, 5), "$24 under a $25 bill: four tickets of coins")
 	e.cash = 4
-	check(not RunSim._can_buy(e, 5), "$4 under a $5 ticket: nothing")
+	check(not SimRun.can_buy(e, 5), "$4 under a $5 ticket: nothing")
 	e.credit = 1
-	check(RunSim._can_buy(e, 5), "$4 of coins and $1 of credit: one ticket")
+	check(SimRun.can_buy(e, 5), "$4 of coins and $1 of credit: one ticket")
 	var fed := Economy.new()
 	fed.bills = RunConfig.bills(5)
 	fed.cash = 24
 	fed.start_cash = 24
-	RunSim._feed(fed, 125, 5)
+	SimRun.feed(fed, 125, 5)
 	eq(fed.credit, 20, "the bot feeds the coins: four tickets")
 	eq(fed.cash, 4, "the rest stays in the pocket")
 	check(fed.balanced(), "balanced")
@@ -114,7 +115,7 @@ func test_churn_does_not_pay() -> void:
 	note("churn bot: return %.3f, with fees %.3f, fees $%.0f a run" % [s["return"], s.return_fees, s.fees])
 	check(s.return_fees <= 1.0, "the churn bot's return with fees is 1 or under (%.3f)" % s.return_fees)
 	var boxes := 60 if full else 20
-	var fixed := RunSim.churn_return(pack.forms, {"firstpull": 2, "regular": 2}, boxes)
+	var fixed := SimData.churn_return(pack.forms, {"firstpull": 2, "regular": 2}, boxes)
 	note("churn at FIRST PULL 2 + REGULAR 2: return %.3f, with fees %.3f, fee $%d" % [fixed["return"], fixed.return_fees, fixed.fee])
 	eq(fixed.fee, 100, "the fee is the floor")
 	check(fixed["return"] > 2.0, "FIRST PULL pays on the first twenty (%.3f)" % fixed["return"])
@@ -135,8 +136,8 @@ func test_summary_carries_the_targets_numbers() -> void:
 	eq(s.best.size(), 3, "the 50th, 90th and 99th percentiles of the best prize")
 	check(s.best[0] <= s.best[1] and s.best[1] <= s.best[2], "they do not decrease: %s" % str(s.best))
 	check(s.best[0] > 0, "every run wins something")
-	eq(RunSim.percentiles([5, 1, 4, 2, 3], [50, 90, 99]), [3, 5, 5], "nearest rank")
-	eq(RunSim.percentiles([], [50]), [0], "nothing: 0")
+	eq(SimReport.percentiles([5, 1, 4, 2, 3], [50, 90, 99]), [3, 5, 5], "nearest rank")
+	eq(SimReport.percentiles([], [50]), [0], "nothing: 0")
 
 
 func test_all_in_wins_about_half() -> void:
@@ -154,7 +155,7 @@ func test_all_in_wins_about_half() -> void:
 	# and 0.19 (0.30 and 0.16 on other seeds), so their floors have margin.
 	const LOW := 0.45
 	var capped := {"catch": 0.2, "kabawk": 0.12}
-	var rows := RunSim.push_odds(pack.forms, 400 if full else 250, "PT")
+	var rows := SimData.push_odds(pack.forms, 400 if full else 250, "PT")
 	eq(rows.size(), pack.forms.size(), "a row per form")
 	for row in rows:
 		note("ALL IN on %s: share %d%%, P %.3f (%d windows)" % [row.form, row.share, row.p, row.windows])
@@ -167,7 +168,7 @@ func test_all_in_wins_about_half() -> void:
 	var old := {}
 	for f in pack.forms:
 		old[f.id] = 101
-	for row in RunSim.push_odds(pack.forms, 60, "PT", old):
+	for row in SimData.push_odds(pack.forms, 60, "PT", old):
 		check(row.p < 0.4, "%s: more than the window was P %.3f" % [row.form, row.p])
 
 
@@ -177,10 +178,10 @@ func test_perks_raise_the_return() -> void:
 	if pack == null:
 		return
 	var n := 20 if full else 8
-	var none := RunSim.box_return(pack.forms, {}, n)
-	var prizes := RunSim.box_return(pack.forms, {"prizes": 3}, n)
-	var luck := RunSim.box_return(pack.forms, {"luck": 3}, n)
-	var all := RunSim.box_return(pack.forms, {"prizes": 3, "luck": 3, "closer": 2}, n)
+	var none := SimData.box_return(pack.forms, {}, n)
+	var prizes := SimData.box_return(pack.forms, {"prizes": 3}, n)
+	var luck := SimData.box_return(pack.forms, {"luck": 3}, n)
+	var all := SimData.box_return(pack.forms, {"prizes": 3, "luck": 3, "closer": 2}, n)
 	note("return per dollar: none %.3f, FAT PRIZES 3 %.3f, LUCKY STREAK 3 %.3f, all %.3f" % [none, prizes, luck, all])
 	# G, 2026-11-07: blind, whole boxes bought out, the last sale included, about 0.78 a
 	# dollar (the run's payout, RunConfig "payout", and a last sale of about 5% of a box).
@@ -188,5 +189,52 @@ func test_perks_raise_the_return() -> void:
 	check(prizes > none * 1.2, "FAT PRIZES 3 pays about 30%% more (%.3f)" % prizes)
 	check(luck > none, "LUCKY STREAK pays more (%.3f)" % luck)
 	check(all > prizes and all > luck, "together more still (%.3f)" % all)
-	var snow := RunSim.box_return(pack.forms, {"snowball": 1, "snow": 10}, n)
+	var snow := SimData.box_return(pack.forms, {"snowball": 1, "snow": 10}, n)
 	check(snow > none * 2.0, "SNOWBALL after ten boxes: about x2.6 (%.3f)" % snow)
+
+
+## The bots' table (SimBots): every bot has a spec, every spec names only blocks and
+## variants that exist (SimBlocks.VARIANTS) and only params a block reads (PARAMS); a
+## spec is plain data, a fresh copy, and can be overridden by a named variant.
+func test_bot_specs_are_data() -> void:
+	eq(RunSim.BOTS, SimBots.NAMES, "RunSim.BOTS is the table's names")
+	eq(SimBots.NAMES.size(), 13, "thirteen bots")
+	for bot in SimBots.SPECS:
+		check(SimBots.NAMES.has(bot), "%s: a spec for a named bot" % bot)
+	for bot in SimBots.NAMES:
+		var own: Dictionary = SimBots.SPECS.get(bot, {})
+		check(SimBots.SPECS.has(bot), "%s has a spec" % bot)
+		for k in own:
+			check(["blocks", "params"].has(k), "%s: %s is blocks or params" % [bot, k])
+		var blocks: Dictionary = own.get("blocks", {})
+		for b in blocks:
+			check(SimBlocks.VARIANTS.has(b), "%s: %s is a block" % [bot, b])
+			check(SimBlocks.VARIANTS.get(b, []).has(blocks[b]), "%s: %s=%s is a variant" % [bot, b, blocks[b]])
+		var params: Dictionary = own.get("params", {})
+		for k in params:
+			check(SimBots.PARAMS.has(k), "%s: %s is a param" % [bot, k])
+		var s := SimBots.spec(bot)
+		eq(s.name, bot, "%s: the spec carries its name" % bot)
+		eq(s.blocks.size(), SimBlocks.VARIANTS.size(), "%s: every block resolved" % bot)
+		eq(s.params.size(), SimBots.PARAMS.size(), "%s: every param resolved" % bot)
+		check(SimBots.describe(s).begins_with(bot + ": "), "%s: printable (%s)" % [bot, SimBots.describe(s)])
+	# A fresh copy; overrides lay a variant over the bot.
+	var a := SimBots.spec("jackpot")
+	a.params.forms.append("spur")
+	eq(SimBots.spec("jackpot").params.forms, ["catch", "kabawk"], "changing a spec changes nothing in the table")
+	var v := SimBots.spec("jackpot", {"params": {"share": 0.4}, "blocks": {"box": "churn"}})
+	eq(v.params.share, 0.4, "an override's param")
+	eq(v.blocks.box, "churn", "an override's block")
+	eq(v.params.perks, ["bigfish", "pity", "hunter"], "the rest kept")
+	eq(SimBots.describe(SimBots.spec("blind")), "blind: defaults", "blind is all defaults")
+	# An unknown name: every default, as RunSim.play always treated one (blind's rules).
+	var u := SimBots.spec("nobody")
+	eq(u.blocks, SimBots.spec("blind").blocks, "unknown: blind's blocks")
+	eq(u.params, SimBots.spec("blind").params, "unknown: blind's params")
+	var pack := core_pack()
+	if pack == null:
+		return
+	var r := RunSim.play("nobody", pack.forms, "U-0")
+	check([RunState.CLEARED, RunState.FAILED].has(r.status) and r.balanced, "an unknown bot plays a whole run")
+	var blind := SimBots.spec("blind")
+	eq(SimRun.play(blind, pack.forms, "U-1"), RunSim.play("blind", pack.forms, "U-1"), "RunSim.play is SimRun.play of the spec")
