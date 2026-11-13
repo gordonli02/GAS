@@ -43,6 +43,10 @@ var packed := 0
 ## Asked with the box before a ticket is taken: whether this one has to win (a sure
 ## win is a winner of the box moved onto it). The run's rule (STAKEOUT, INSURANCE).
 var sure_next: Callable
+## What the perks did here (RunState.fired: luck, fortune, assembly, packed, magnet,
+## consolation, crumbs): key -> times. RunState.apply makes it the run's own table.
+## Counting changes nothing. Not saved.
+var fired := {}
 var boxes: Array[TicketBox] = []
 var loaded: PackedFloat32Array = []   ## tickets loaded in each box (restocking boxes fill up)
 var queue: Array = []                 ## [{form: index, n: tickets left}]
@@ -78,8 +82,13 @@ func _build(f: FormDef, seed_text: String) -> TicketBox:
 func _load(f: FormDef, seed_text: String, after_clear := false) -> TicketBox:
 	var box := _pick(f, seed_text, after_clear)
 	if packed > 0:
-		box.pack(packed)
+		if box.pack(packed) > 0:
+			_fire("packed")
 	return box
+
+
+func _fire(key: String) -> void:
+	fired[key] = int(fired.get(key, 0)) + 1
 
 
 func _pick(f: FormDef, seed_text: String, after_clear: bool) -> TicketBox:
@@ -91,11 +100,17 @@ func _pick(f: FormDef, seed_text: String, after_clear: bool) -> TicketBox:
 			s = next_seed(s)
 			box = _build(f, s)
 			tries += 1
+		if tries > 0:
+			_fire("assembly")
 		return box
 	while luck > 0.0 and tries < luck_tries and losing(box) and SeededRng.new(s + "|luck").next_float() < luck:
 		s = next_seed(s)
 		box = _build(f, s)
 		tries += 1
+	if tries > 0:
+		_fire("luck")
+	if tries > 1:
+		_fire("fortune")
 	return box
 
 
@@ -204,11 +219,14 @@ func _take(i: int, economy: Economy) -> Dictionary:
 				dry = false
 				break
 		if dry:
-			box.pull_winner(at, "small")
+			if box.pull_winner(at, "small"):
+				_fire("magnet")
 	if consolation > 0 and not box.wins(at):
-		box.console(at, consolation)
+		if box.console(at, consolation):
+			_fire("consolation")
 	if crumbs > 0 and box.wins(at):
-		box.crumble(at, crumbs)
+		if box.crumble(at, crumbs) > 0:
+			_fire("crumbs")
 	var t: Dictionary = box.tickets[at]
 	box.cursor += 1
 	economy.buy(price(i))

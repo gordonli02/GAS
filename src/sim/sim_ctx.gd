@@ -8,7 +8,8 @@ extends RefCounted
 var run: RunState
 var e: Economy
 var m: MachineLogic
-## The bot's own dice, seeded by the seed and the bot's name (SimRun.play). Drawn only
+## The bot's dice, seeded by the seed alone (SimRun.play: every bot on a seed draws the
+## same dice, docs/roadmap.md 七.6). Drawn only
 ## when a column is picked (SimBlocks.column): the order and the number of draws are
 ## part of every run's replay (tests/fixtures/sim_baseline.json).
 var rng: RandomNumberGenerator

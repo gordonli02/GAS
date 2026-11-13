@@ -19,15 +19,24 @@ const DAY_CAP := 6000
 
 
 ## One run of the bot `spec` (SimBots.spec). Returns {status, layer (0-based, where it
-## ended), days, tickets, cash, spent, won, balanced, stats, idle_days}. The same spec,
-## forms, seed and config always give the same run.
+## ended), days, tickets, cash, spent, won, balanced, stats, idle_days} and the
+## measures (docs/roadmap.md 七.3, 七.5, 十二.6):
+##   perks   {perk id: {level, day (the run's day it was bought, 1-based), tickets
+##           (bought while it was held)}} for every perk held at the end
+##   fired, fired_pct  RunState's (what the perks did; the percents they added)
+##   carry   for each layer paid but the last: the cash carried into the next layer
+##           over that layer's due (index 0: 1 to 2, 1: 2 to 3)
+##   death   a failed run's: {layer (1-based), day (of the layer), cash, due, short (due
+##           less what the cash and credit could pay), loan (owed), perks ({id: level}),
+##           shifts, play_days, tickets (these three in that layer), last_day_tickets};
+##           {} for a run that did not fail
+## The same spec, forms, seed and config always give the same run.
 static func play(spec: Dictionary, base_forms: Array, seed_text: String, config: RunConfig = null) -> Dictionary:
 	if config == null:
 		config = RunConfig.standard()
 	var ctx := SimCtx.new()
 	ctx.spec = spec
-	ctx.rng = RandomNumberGenerator.new()
-	ctx.rng.seed = hash(seed_text + "|" + str(spec.name))
+	ctx.rng = dice(seed_text)
 	ctx.run = RunState.start(config, seed_text, ["diner", "bar", "bingo"])
 	ctx.e = ctx.run.new_economy()
 	ctx.m = ctx.run.new_machine(base_forms, true)
@@ -35,11 +44,15 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 	var e := ctx.e
 	var guard := 0
 	var idle := 0   # days the bot went to the machine (it chose to) and bought nothing
+	var held := {}  # perk id -> {day, tickets: stats.tickets when it was bought}
+	var carry := []
+	var at_layer := _layer_mark(run)
 	while run.playing() and guard < 1000:
 		guard += 1
 		ctx.start_day()
 		var layer := run.layer
 		SimBlocks.perks(ctx)
+		_note_perks(run, held)
 		SimBlocks.items(ctx, "morning")
 		if SimBlocks.enter(ctx) and can_buy(e, ctx.m.min_price()):
 			run.play(e)
@@ -47,14 +60,51 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 				idle += 1
 		elif not run.work(e) and run.play(e):
 			day(ctx)
+		_note_perks(run, held)
 		if run.playing() and run.layer == layer:
 			run.end_day(e)
 		if run.playing() and run.layer != layer:
+			carry.append(float(e.cash) / maxi(1, run.due()))
+			at_layer = _layer_mark(run)
 			ctx.m = run.new_machine(base_forms, true)
 		assert(e.balanced(), "the ledger must balance")
+	var perks := {}
+	for id in run.perks:
+		var h: Dictionary = held.get(id, {"day": 0, "tickets": 0})
+		perks[id] = {"level": run.level(id), "day": int(h.day), "tickets": int(run.stats.tickets) - int(h.tickets)}
+	var death := {}
+	if run.status == RunState.FAILED:
+		death = {"layer": run.layer + 1, "day": run.day, "cash": e.cash, "due": run.due(),
+			"short": run.due() - (e.cash + e.credit - e.tab), "loan": run.loan_due, "perks": run.perks.duplicate(),
+			"shifts": run.shifts, "play_days": int(run.stats.play_days) - int(at_layer.play_days),
+			"tickets": int(run.stats.tickets) - int(at_layer.tickets), "last_day_tickets": ctx.bought}
 	return {"status": run.status, "layer": run.layer, "days": int(run.stats.days), "tickets": int(run.stats.tickets),
 		"cash": e.cash, "spent": e.spent, "won": e.won, "balanced": e.balanced(), "stats": run.stats.duplicate(),
-		"idle_days": idle}
+		"idle_days": idle, "perks": perks, "fired": run.fired.duplicate(), "fired_pct": run.fired_pct.duplicate(),
+		"carry": carry, "death": death}
+
+
+## A run's dice for the bot (SimCtx.rng). Common random numbers (docs/roadmap.md 七.6):
+## they are the seed's alone, not the bot's, so two bots (or two variants of one) on a
+## seed draw the same dice, as they already load the same boxes; a difference between
+## them is then their play's.
+static func dice(seed_text: String) -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(seed_text + "|bot")
+	return rng
+
+
+## The stats a layer's death report counts from (where they stood when it began).
+static func _layer_mark(run: RunState) -> Dictionary:
+	return {"play_days": int(run.stats.play_days), "tickets": int(run.stats.tickets)}
+
+
+## Perks the run holds that `held` has not seen: bought today (the run's day, 1-based,
+## and the tickets bought before it, so a report can count the tickets it was held for).
+static func _note_perks(run: RunState, held: Dictionary) -> void:
+	for id in run.perks:
+		if not held.has(id) and run.level(id) > 0:
+			held[id] = {"day": int(run.stats.days) + 1, "tickets": int(run.stats.tickets)}
 
 
 ## A day at the machine: one column (SimBlocks.column), then batches until the layer

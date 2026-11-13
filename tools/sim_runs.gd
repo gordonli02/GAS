@@ -8,11 +8,26 @@ extends Node
 ## it (the three multiply to the overall); days and tickets per run; prizes won per
 ## dollar of tickets, and per dollar of tickets and NEW BOX fees; perk levels bought;
 ## the 50th / 90th / 99th percentile of each run's biggest single prize, in dollars.
-## Beside it the roadmap's target for the bots that have one, whether it is met
-## (build 20 to 30%; gamble and perks within 5 points of theirs; borrow, blind and skip
-## under theirs), and whether the bot keeps its place in the ordering
-## build > gamble > perks > borrow >= blind ~ skip (against the next bot down; blind
-## and skip within 3 points of each other count as equal).
+## Beside it the target of docs/roadmap.md 一 for the bots that have one and whether it
+## is met (the five lines, clearing, jackpot, small, batch and money, 25%: 20 to 30;
+## gamble, borrow, blind and skip under 5%; build and perks none yet, "量完再定"), and
+## whether the bot keeps its place in the ordering: every line > build > perks > each
+## of gamble, borrow, blind and skip, and borrow <= gamble (a bot is compared with the
+## bots of the nearest rank below that was run; the line under the table names every
+## comparison that fails and the bots not run).
+## Under the table, a few lines a bot: its spec (SimBots.describe), the 95% Wilson
+## interval of its clear rate, the share of runs that died in each layer, and the cash
+## carried into the next layer over its due (median, share at 1 or more). With
+## --detail also the trigger table (what each perk did: RunState.fired) and a block a
+## layer of how the runs died there (SimReport.summary says what each number is).
+## --early: runs in chunks of 100 and stops a bot with a target once the Wilson interval
+## lies wholly outside the target's band ("(stopped at N)"). Off by default: the death
+## report wants every run.
+## --save=<path>: writes each bot's per-seed outcomes and headline numbers as JSON.
+## --against=<path>: reads such a file and, for each bot in both with the same seed
+## prefix and run count, prints the paired comparison (SimReport.paired: the same bot
+## before and after a number change; the bots' dice are seeded by the seed alone, so the
+## same seeds play the same boxes and draw the same dice).
 ## Then what a dollar of tickets pays back at some perk levels (whole boxes bought
 ## out; --ev-boxes=N boxes of each form, 0 to skip), each form alone without perks and
 ## with DUE A WIN 2, and the churn exploit at fixed perks (--churn-boxes=N boxes a
@@ -29,14 +44,16 @@ extends Node
 ## With --list-bots it prints the bots' names (RunSim.BOTS, src/sim/sim_bots.gd), one a
 ## line, and quits.
 
-## The roadmap's targets (docs/roadmap.md, the bots' table): [text, low, high] in
-## percent of runs cleared.
+## The roadmap's targets (docs/roadmap.md 一): [text, low, high] in percent of runs
+## cleared ("<": under high). build and perks have none yet.
 const TARGETS := {
-	"build": ["25%", 20.0, 30.0], "gamble": ["15%", 10.0, 20.0], "perks": ["10%", 5.0, 15.0],
-	"borrow": ["<8%", 0.0, 8.0], "blind": ["<5%", 0.0, 5.0], "skip": ["<5%", 0.0, 5.0],
+	"clearing": ["25%", 20.0, 30.0], "jackpot": ["25%", 20.0, 30.0], "small": ["25%", 20.0, 30.0],
+	"batch": ["25%", 20.0, 30.0], "money": ["25%", 20.0, 30.0],
+	"gamble": ["<5%", 0.0, 5.0], "borrow": ["<5%", 0.0, 5.0], "blind": ["<5%", 0.0, 5.0], "skip": ["<5%", 0.0, 5.0],
 }
-const ORDER := ["build", "gamble", "perks", "borrow", "blind", "skip"]
-const EVEN := 3.0   ## blind and skip within this many points count as equal
+## The ordering (docs/roadmap.md 一.3), rank by rank, highest first: every bot of a rank
+## clears more than every bot of the next rank run. And borrow <= gamble (一.2).
+const RANKS := [["clearing", "jackpot", "small", "batch", "money"], ["build"], ["perks"], ["gamble", "borrow", "blind", "skip"]]
 
 
 func _ready() -> void:
@@ -53,8 +70,20 @@ func _run() -> void:
 	var push_boxes := 100
 	var baseline := ""
 	var baseline_runs := 20
+	var detail := false
+	var early := false
+	var save := ""
+	var against := ""
 	for a in OS.get_cmdline_user_args():
-		if a.begins_with("--baseline-runs="):
+		if a == "--detail":
+			detail = true
+		elif a == "--early":
+			early = true
+		elif a.begins_with("--save="):
+			save = a.trim_prefix("--save=")
+		elif a.begins_with("--against="):
+			against = a.trim_prefix("--against=")
+		elif a.begins_with("--baseline-runs="):
 			baseline_runs = maxi(1, a.trim_prefix("--baseline-runs=").to_int())
 		elif a.begins_with("--baseline="):
 			baseline = a.trim_prefix("--baseline=")
@@ -100,9 +129,13 @@ func _run() -> void:
 			print("unknown bot: " + str(bot))
 			continue
 		var t0 := Time.get_ticks_msec()
-		var s := RunSim.summary(bot, res.pack.forms, runs, prefix, config)
+		var band := []
+		if early and TARGETS.has(bot):
+			band = [float(TARGETS[bot][1]) / 100.0, float(TARGETS[bot][2]) / 100.0]
+		var s := RunSim.summary(bot, res.pack.forms, runs, prefix, config, band)
 		rates[bot] = s.cleared * 100.0
 		rows.append([bot, s, (Time.get_ticks_msec() - t0) / 1000.0])
+	var order := _ordering(rates)
 	for row in rows:
 		var bot: String = row[0]
 		var s: Dictionary = row[1]
@@ -113,20 +146,18 @@ func _run() -> void:
 			var r: float = rates[bot]
 			var under := str(target[0]).begins_with("<")
 			met = "yes" if r >= float(target[1]) and (r < float(target[2]) if under else r <= float(target[2])) else "no"
-		print("%-8s %6.1f%% %6.1f%% %6.1f%% %6.1f%% %6.1f %7.0f %7.3f %7.3f %5.1f %8d %8d %9d  %-6s %-4s %-5s (%.1f s)" % [bot,
+		var stop := " (stopped at %d)" % s.stopped if int(s.stopped) > 0 else ""
+		print("%-8s %6.1f%% %6.1f%% %6.1f%% %6.1f%% %6.1f %7.0f %7.3f %7.3f %5.1f %8d %8d %9d  %-6s %-4s %-5s (%.1f s)%s" % [bot,
 			s.cleared * 100.0, l[0] * 100.0, l[1] * 100.0, l[2] * 100.0, s.days, s.tickets, s["return"], s.return_fees,
-			s.perks, s.best[0], s.best[1], s.best[2], target[0], met, _order(bot, rates), row[2]])
-	var held := true
-	var known := true
-	for b in ORDER:
-		known = known and rates.has(b)
-	if known:
-		var broken := []
-		for b in ORDER:
-			if _order(b, rates) == "no":
-				held = false
-				broken.append(b)
-		print("ordering build > gamble > perks > borrow >= blind ~ skip: %s" % ("holds" if held else "fails at " + ", ".join(broken)))
+			s.perks, s.best[0], s.best[1], s.best[2], target[0], met, order.marks.get(bot, ""), row[2], stop])
+	for line in order.lines:
+		print(line)
+	for row in rows:
+		_print_bot(row[1], detail)
+	if save != "":
+		_save(save, prefix, runs, rows)
+	if against != "":
+		_against(against, prefix, rows)
 	if ev_boxes > 0:
 		print("\nreturn per dollar of tickets, %d boxes of each form bought out:" % ev_boxes)
 		for levels in SimData.EV_SETS:
@@ -168,9 +199,7 @@ func _write_baseline(path: String, bots: Array, runs: int, forms: Array, config:
 			rows.append(RunSim.baseline_row(RunSim.play(bot, forms, "BASE-%d" % i, config)))
 		out[bot] = rows
 		print("baseline %s: %d runs, %.1f s" % [bot, runs, (Time.get_ticks_msec() - t0) / 1000.0])
-	var file_path := path
-	if not path.contains("://") and path.is_relative_path():
-		file_path = ProjectSettings.globalize_path("res://").path_join(path)
+	var file_path := _file_path(path)
 	var f := FileAccess.open(file_path, FileAccess.WRITE)
 	if f == null:
 		push_error("cannot write " + file_path)
@@ -181,17 +210,144 @@ func _write_baseline(path: String, bots: Array, runs: int, forms: Array, config:
 	return 0
 
 
-## Whether `bot` keeps its place in the ordering against the next bot down: "yes",
-## "no", or "" when it is not in the ordering or the next bot was not run.
-static func _order(bot: String, rates: Dictionary) -> String:
-	var k := ORDER.find(bot)
-	if k < 0 or k == ORDER.size() - 1 or not rates.has(bot) or not rates.has(ORDER[k + 1]):
-		return ""
-	var a: float = rates[bot]
-	var b: float = rates[ORDER[k + 1]]
-	match bot:
-		"borrow":
-			return "yes" if a >= b else "no"
-		"blind":
-			return "yes" if absf(a - b) <= EVEN else "no"
-	return "yes" if a > b else "no"
+## The ordering's comparisons among the bots run (`rates`: bot -> percent cleared):
+## each bot of a rank against every bot of the nearest rank below that was run, and
+## borrow <= gamble. Returns {marks: {bot: "yes" / "no"} (no: one of its comparisons
+## fails; a bot in none has no mark), lines: what to print (the comparisons that fail,
+## the ones that could not be made)}.
+static func _ordering(rates: Dictionary) -> Dictionary:
+	var marks := {}
+	var fails := []
+	var made := 0
+	var mark := func(bot: String, ok: bool) -> void:
+		if not ok:
+			marks[bot] = "no"
+		elif not marks.has(bot):
+			marks[bot] = "yes"
+	for i in RANKS.size():
+		var below := []
+		for j in range(i + 1, RANKS.size()):
+			below = RANKS[j].filter(func(b): return rates.has(b))
+			if not below.is_empty():
+				break
+		for a in RANKS[i]:
+			if not rates.has(a):
+				continue
+			for b in below:
+				var ok: bool = rates[a] > rates[b]
+				made += 1
+				mark.call(a, ok)
+				mark.call(b, ok)
+				if not ok:
+					fails.append("%s %.1f%% <= %s %.1f%%" % [a, rates[a], b, rates[b]])
+	if rates.has("borrow") and rates.has("gamble"):
+		var ok: bool = rates.borrow <= rates.gamble
+		made += 1
+		mark.call("borrow", ok)
+		mark.call("gamble", ok)
+		if not ok:
+			fails.append("borrow %.1f%% > gamble %.1f%%" % [rates.borrow, rates.gamble])
+	var lines := []
+	var missing := []
+	for rank in RANKS:
+		for b in rank:
+			if not rates.has(b):
+				missing.append(b)
+	if made > 0:
+		lines.append("ordering lines > build > perks > gamble, borrow, blind, skip; borrow <= gamble: %s" % (
+			"holds (%d comparisons)" % made if fails.is_empty() else "fails: " + "; ".join(fails)))
+	if not missing.is_empty():
+		lines.append("ordering: not run, so not compared: %s%s" % [", ".join(missing),
+			"" if made > 0 else " (no comparison could be made)"])
+	return {"marks": marks, "lines": lines}
+
+
+## A bot's lines under the table: its spec, the Wilson interval, the deaths by layer,
+## the carry; with `detail` the trigger table and the death blocks.
+func _print_bot(s: Dictionary, detail: bool) -> void:
+	print("\n" + SimBots.describe(SimBots.spec(s.bot)))
+	var stop := ", stopped at %d" % s.stopped if int(s.stopped) > 0 else ""
+	print("  cleared %.1f%%, 95%% interval %.1f-%.1f%% (%d runs%s)" % [s.cleared * 100.0, s.wilson[0] * 100.0,
+		s.wilson[1] * 100.0, s.runs, stop])
+	var d := []
+	for l in s.deaths.size():
+		d.append("L%d %.1f%%" % [l + 1, s.deaths[l] * 100.0])
+	print("  died: " + ", ".join(d))
+	var c := []
+	for k in s.carry.size():
+		var row: Dictionary = s.carry[k]
+		if int(row.n) > 0:
+			c.append("%d>%d median %.2f, >=1 in %.0f%% (%d)" % [k + 1, k + 2, row.median, row.at_least_1 * 100.0, row.n])
+		else:
+			c.append("%d>%d none" % [k + 1, k + 2])
+	print("  carry (cash / next due): " + "; ".join(c))
+	if not detail:
+		return
+	if not s.triggers.is_empty():
+		print("  %-12s %5s %5s %8s %8s %6s" % ["perk", "held", "day", "fired/r", "/100 tk", "mean%"])
+	for t in s.triggers:
+		if t.held <= 0.0:
+			print("  %-12s %4.0f%% %5s %8s %8s" % [t.id, 0.0, "-", "-", "-"])
+			continue
+		var fired := "-" if t.per_run < 0 else "%.1f" % t.per_run
+		var per := "-" if t.per_100 < 0 else "%.2f" % t.per_100
+		var pct := "" if t.pct < 0 else "%.1f" % t.pct
+		var won := "" if t.won < 0 else "  won %.1f/r" % t.won
+		print("  %-12s %4.0f%% %5.1f %8s %8s %6s%s" % [t.id, t.held * 100.0, t.day, fired, per, pct, won])
+	for b in s.death_blocks:
+		var sets := []
+		for st in b.sets:
+			sets.append("%s %.0f%%" % [st[0], st[1] * 100.0])
+		print("  died in L%d (%d): median cash $%d, short $%d, shifts %d, tickets %d; perks: %s" % [b.layer, b.n,
+			b.cash, b.short, b.shifts, b.tickets, " | ".join(sets)])
+
+
+## A path from the command line as a file path (res://, user:// or a file path; a
+## relative path is from the project folder).
+static func _file_path(path: String) -> String:
+	if not path.contains("://") and path.is_relative_path():
+		return ProjectSettings.globalize_path("res://").path_join(path)
+	return path
+
+
+## --save: every bot's per-seed outcomes and headline numbers, as JSON.
+func _save(path: String, prefix: String, runs: int, rows: Array) -> void:
+	var bots := {}
+	for row in rows:
+		var s: Dictionary = row[1]
+		bots[row[0]] = {"runs": s.runs, "layers": s.layers, "outcomes": s.outcomes, "cleared": s.cleared,
+			"wilson": s.wilson, "layer_rates": s.layer_rates, "days": s.days, "tickets": s.tickets,
+			"return": s["return"], "return_fees": s.return_fees, "perks": s.perks, "stopped": s.stopped}
+	var f := FileAccess.open(_file_path(path), FileAccess.WRITE)
+	if f == null:
+		push_error("cannot write " + _file_path(path))
+		return
+	f.store_string(JSON.stringify({"seed_prefix": prefix, "runs": runs, "bots": bots}, "\t") + "\n")
+	f.close()
+	print("\nsaved " + _file_path(path))
+
+
+## --against: each bot run now and in the saved file, on the same seeds, paired.
+func _against(path: String, prefix: String, rows: Array) -> void:
+	var saved = JSON.parse_string(FileAccess.get_file_as_string(_file_path(path)))
+	if not saved is Dictionary or not saved.has("bots"):
+		print("\nagainst %s: cannot read it" % path)
+		return
+	print("\nagainst %s (A: now, B: saved; seeds %s):" % [path, saved.get("seed_prefix", "?")])
+	for row in rows:
+		var bot: String = row[0]
+		var s: Dictionary = row[1]
+		var old = saved.bots.get(bot)
+		if old == null:
+			print("  %-8s not in the file" % bot)
+			continue
+		if str(saved.get("seed_prefix", "")) != prefix or int(old.get("runs", 0)) != int(s.runs):
+			print("  %-8s not paired: seeds %s, %d runs there" % [bot, saved.get("seed_prefix", "?"), int(old.get("runs", 0))])
+			continue
+		var p := SimReport.paired(s, old)
+		if p.is_empty():
+			print("  %-8s not paired" % bot)
+			continue
+		print("  %-8s %.1f%% vs %.1f%%: only A %d, only B %d, both %d, neither %d; A - B %+.1f points, 95%% %+.1f to %+.1f" % [
+			bot, s.cleared * 100.0, float(old.get("cleared", 0.0)) * 100.0, p.only_a, p.only_b, p.both, p.neither,
+			p.diff * 100.0, p.low * 100.0, p.high * 100.0])

@@ -89,7 +89,8 @@ const SPECS := {
 ## The bot `name`'s spec, whole: {name, blocks: every block's variant, params: every
 ## param}. `overrides` ({blocks: {...}, params: {...}}, either optional) is laid over
 ## it: a named variant of the bot. A name not in the table gets every default (it plays
-## as blind does, with its own dice). A fresh copy: changing it changes nothing here.
+## as blind does; the dice are the seed's, SimRun.play). A fresh copy: changing it
+## changes nothing here.
 static func spec(name: String, overrides: Dictionary = {}) -> Dictionary:
 	var own: Dictionary = SPECS.get(name, {})
 	var blocks := {}

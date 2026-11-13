@@ -97,6 +97,35 @@ var stats := {"days": 0, "play_days": 0, "shifts": 0, "tickets": 0, "wages": 0, 
 	"rerolls": 0, "skipped_offers": 0, "savings": 0, "insured": 0, "boxes_cleared": 0, "best_prize": 0,
 	"sure_wins": 0, "refunded": 0, "sealed": 0,   ## sure_wins: prizes moved forward; refunded: tickets given back
 	"staked": 0, "push_won": 0, "push_lost": 0}   ## ALL IN: stakes put up, what came back (x3), stakes lost
+## What the perks did this run, for the simulator's reports (docs/roadmap.md 七.3: a
+## line's core perk that fires rarely means the bot is broken, not the line weak): key
+## -> times. A perk fires when it changes a number (a prize it multiplied or lifted, a
+## loser it paid back, a box it changed, a morning it grew the cash), never for being
+## held. Keyed by perk id, so two perks on one effect (FAT PRIZES and SHORT WEEK on
+## prize_pct, BIG FISH and FLARE ONLY on top_x) count apart; FIRED lists the keys.
+## The machine counts what acts there (MachineLogic.fired, the same table once apply
+## has run). Counting draws nothing and changes nothing. Not saved, never shown.
+var fired := {}
+## The percents the "+%" perks added, summed over their firings (key -> sum), so a
+## report can give the mean size: NET WORTH, DUE A WIN, TRASH KING, JACKPOT HUNTER,
+## STREAK, SNOWBALL (its x as a percent).
+var fired_pct := {}
+## What `fired` counts, and where:
+##   pay_ticket  a winner: bigfish, flare (a top prize multiplied), middle, penny (a mid
+##               or small prize multiplied; PACKED's pieces are not), stacker,
+##               firstpull, snowball, prizes, shortweek, worth, pity, trashking, hunter,
+##               streak (each when it added to that prize); a loser: scrap (SCRAP
+##               DEALER's share put by)
+##   cleared_box closer (a last sale paid at CLOSER's x)
+##   end_day     savings (a morning it grew the cash)
+##   push / the window  allin (a push made), allin_won (a push won)
+##   MachineLogic  luck (a losing box passed over), fortune (passed over again),
+##               assembly (a box after a sell-out passed over until it does not lose),
+##               packed (a box loaded with prizes broken), magnet (a winner moved in),
+##               consolation (a loser made a winner), crumbs (a prize split)
+const FIRED := ["closer", "firstpull", "assembly", "snowball", "bigfish", "flare", "pity", "hunter", "penny", "stacker",
+	"scrap", "trashking", "streak", "allin", "allin_won", "magnet", "worth", "middle", "savings", "consolation", "packed",
+	"crumbs", "luck", "fortune", "prizes", "shortweek"]
 
 
 static func start(run_config: RunConfig, seed_text: String, layer_scenes: Array) -> RunState:
@@ -156,6 +185,18 @@ func apply(m: MachineLogic) -> void:
 	m.packed = effect("packed")
 	m.sure_next = claim_sure if effect("stakeout") > 0 or effect("insure") > 0 else Callable()
 	m.bet = bet()
+	# The machine counts into the run's table (what it counted while it was made first).
+	if not is_same(m.fired, fired):
+		for k in m.fired:
+			fired[k] = int(fired.get(k, 0)) + int(m.fired[k])
+		m.fired = fired
+
+
+## One firing of `key` (FIRED), adding `pct` to its sum of percents when given.
+func _fire(key: String, pct := 0) -> void:
+	fired[key] = int(fired.get(key, 0)) + 1
+	if pct != 0:
+		fired_pct[key] = int(fired_pct.get(key, 0)) + pct
 
 
 ## Whether tickets can be opened today (not on a day of work: MOONLIGHTING's tickets
@@ -393,6 +434,8 @@ func count_sales(n: int, last_sales := 0, form_uid := "") -> void:
 func cleared_box(m: MachineLogic) -> void:
 	stats.boxes_cleared += 1
 	stats.best_prize = maxi(int(stats.best_prize), m.last_sale)
+	if m.last_sale > 0 and effect_x("last_sale_x") > 1:
+		_fire("closer")
 	if effect("snowball") > 0:
 		snow += 1
 	apply(m)
@@ -501,6 +544,8 @@ func end_day(e: Economy) -> void:
 		var grown := roundi(e.cash * pct / 100.0)
 		e.earn(grown)
 		stats.savings += grown
+		if grown > 0:
+			_fire("savings")
 	_new_day()
 
 
@@ -693,6 +738,8 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 		if back > 0:
 			e.bonus(back)
 			stats.bonus += back
+		if effect("scrap_pct") > 0:
+			_fire("scrap")
 		_count_window(e, t, form, back, false)
 		return back
 	var base := 0.0
@@ -704,6 +751,7 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 	var packed := int(t.get("packed", 0)) if int(t.get("prize", 0)) > 0 else 0
 	var low := smallest_tier(form)
 	var counted := won_tiers.size()
+	var roles := {}   # the roles multiplied on this ticket (for `fired`)
 	for tier in won_tiers:
 		var p := float(form.tiers[tier].prize)
 		if cut > 0 and tier == int(t.tier):
@@ -718,10 +766,13 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 			"top":
 				p *= effect_x("top_x")
 				tops += 1
+				roles.top = true
 			"mid":
 				p *= effect_x("mid_x")
+				roles.mid = true
 			"low":
 				p *= effect_x("low_x")
+				roles.low = true
 		base += p
 	var mult := x * snow_x()
 	if counted >= 2:
@@ -738,6 +789,7 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 	var total := roundi(base * ticket_bet * (1.0 + prize_pct(e, cash) / 100.0) * mult)
 	if again:
 		total *= 2
+	_fire_prize(e, cash, roles, counted, int(t.get("no", 0)))
 	dry = 0
 	layer_tops += tops
 	e.open_ticket(total)
@@ -745,6 +797,47 @@ func pay_ticket(e: Economy, t: Dictionary, form: FormDef, ticket_bet := 1, x := 
 	stats.best_prize = maxi(int(stats.best_prize), total)
 	_count_window(e, t, form, total, true)
 	return total
+
+
+## A winner was paid (pay_ticket, before its counters move on): every perk that changed
+## its prize fires (`fired`), the "+%" ones with what they added, by prize_pct's own
+## terms. `roles`: the roles multiplied on it; `counted`: its prizes STACKER counts;
+## `no`: its place in the box.
+func _fire_prize(e: Economy, cash: int, roles: Dictionary, counted: int, no: int) -> void:
+	if roles.has("top"):
+		for id in ["bigfish", "flare"]:
+			if level(id) > 0:
+				_fire(id)
+	if roles.has("mid") and effect_x("mid_x") > 1:
+		_fire("middle")
+	if roles.has("low") and effect_x("low_x") > 1:
+		_fire("penny")
+	if counted >= 2 and effect_x("stack_x") > 1:
+		_fire("stacker")
+	if no <= Catalog.FIRST_TICKETS and effect_x("first_x") > 1:
+		_fire("firstpull")
+	if snow > 0 and effect("snowball") > 0:
+		_fire("snowball", roundi((snow_x() - 1.0) * 100.0))
+	for id in ["prizes", "shortweek"]:
+		if level(id) > 0:
+			_fire(id)
+	if cash < 0 and e != null:
+		cash = e.cash
+	if effect("worth_pct") > 0 and cash > 0:
+		var worth := effect("worth_pct") * (cash / (Catalog.WORTH_STEP * stake()))
+		if worth > 0:
+			_fire("worth", worth)
+	var pity := effect("pity_pct") * dry
+	if pity > 0:
+		_fire("pity", pity)
+	var trash := effect("trash_pct") * (layer_losers / 100)
+	if trash > 0:
+		_fire("trashking", trash)
+	var hunt := effect("hunter_pct") * layer_tops
+	if hunt > 0:
+		_fire("hunter", hunt)
+	if streak_pct() > 0:
+		_fire("streak", streak_pct())
 
 
 ## A tray entry ({form, ticket, box, bet}) opened by hand.
@@ -836,6 +929,7 @@ func _close_window(e: Economy) -> void:
 			var back := push_stake * 3
 			e.bonus(back)
 			stats.push_won += back
+			_fire("allin_won")
 			stats.best_prize = maxi(int(stats.best_prize), back)
 		else:
 			stats.push_lost += push_stake
@@ -910,6 +1004,7 @@ func push(e: Economy) -> bool:
 	push_stake = stake
 	push_printed = int(last_window.get("printed", 0))
 	stats.staked += stake
+	_fire("allin")
 	return true
 
 

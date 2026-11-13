@@ -2,8 +2,10 @@ extends "res://tests/test_case.gd"
 ## The run simulator (RunSim and src/sim/): bots play whole runs by the game's own rules.
 ## The numbers themselves are looked at with tools/sim_runs; here, that the bots end
 ## every run with a balanced ledger, that the work-only rule holds through them, that
-## the churn exploit (FIRST PULL x REGULAR) does not pay, and that summary() carries
-## what the roadmap's bots table is measured by.
+## the churn exploit (FIRST PULL x REGULAR) does not pay, that summary() carries
+## what the roadmap's bots table is measured by, and the measuring tools of M9.8 step 1
+## stage 2 (the perks' trigger counts, the deaths, the carry, the common dice, the
+## Wilson interval and the paired comparison).
 
 
 func test_work_bot_clears_on_the_last_day() -> void:
@@ -191,6 +193,139 @@ func test_perks_raise_the_return() -> void:
 	check(all > prizes and all > luck, "together more still (%.3f)" % all)
 	var snow := SimData.box_return(pack.forms, {"snowball": 1, "snow": 10}, n)
 	check(snow > none * 2.0, "SNOWBALL after ten boxes: about x2.6 (%.3f)" % snow)
+
+
+## RunState.fired (docs/roadmap.md 七.3): a perk fires when it changes a number, never
+## for being held; the table is not saved.
+func test_perks_fire_where_they_act() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var form: FormDef = null
+	var top := -1
+	var low := -1
+	for f: FormDef in pack.forms:
+		top = -1
+		low = -1
+		for i in f.tiers.size():
+			if str(f.tiers[i].role) == "top" and top < 0:
+				top = i
+			if str(f.tiers[i].role) == "low" and low < 0:
+				low = i
+		if top >= 0 and low >= 0:
+			form = f
+			break
+	if not check(form != null, "a form with a top and a small prize"):
+		return
+	var run := RunState.start(RunConfig.standard(), "FIRE", ["diner", "bar", "bingo"])
+	var e := run.new_economy()
+	var loser := {"no": 50, "prize": 0, "tier": -1}
+	var jackpot := {"no": 50, "prize": int(form.tiers[top].prize), "tier": top}
+	var small := {"no": 50, "prize": int(form.tiers[low].prize), "tier": low}
+	run.pay_ticket(e, jackpot, form)
+	run.pay_ticket(e, loser, form)
+	check(run.fired.is_empty(), "no perk held: nothing fires (%s)" % str(run.fired))
+	run.perks["bigfish"] = 1
+	run.pay_ticket(e, small, form)
+	run.pay_ticket(e, loser, form)
+	eq(run.fired.get("bigfish", 0), 0, "BIG FISH held: a small prize and a loser do not fire it")
+	run.pay_ticket(e, jackpot, form)
+	eq(run.fired.get("bigfish", 0), 1, "BIG FISH: a top prize fires it")
+	eq(run.fired.get("flare", 0), 0, "FLARE ONLY (the same effect) is counted apart")
+	run.perks["scrap"] = 1
+	run.pay_ticket(e, small, form)
+	eq(run.fired.get("scrap", 0), 0, "SCRAP DEALER: a winner does not fire it")
+	run.pay_ticket(e, loser, form)
+	eq(run.fired.get("scrap", 0), 1, "SCRAP DEALER: a loser fires it")
+	run.perks["pity"] = 1
+	run.pay_ticket(e, loser, form)
+	run.pay_ticket(e, loser, form)
+	run.pay_ticket(e, small, form)
+	eq(run.fired.get("pity", 0), 1, "DUE A WIN: a prize after losers fires it")
+	eq(run.fired_pct.get("pity", 0), 3, "with what it added: three losers in a row at 1%")
+	var m := run.new_machine(pack.forms, true)
+	if check(m.last_sale > 0, "the first layer has a last-sale prize"):
+		run.cleared_box(m)
+		eq(run.fired.get("closer", 0), 0, "a last sale without CLOSER")
+		run.perks["closer"] = 1
+		run.apply(m)
+		run.cleared_box(m)
+		eq(run.fired.get("closer", 0), 1, "CLOSER: a last sale fires it")
+	check(is_same(m.fired, run.fired), "the machine counts into the run's table")
+	var d := run.to_dict()
+	check(not d.has("fired") and not d.has("fired_pct"), "the counts are not saved")
+	check(RunState.from_dict(d, RunConfig.standard()).fired.is_empty(), "a loaded run starts counting afresh")
+	var blind := RunSim.play("blind", pack.forms, "FI-0")
+	check(blind.fired.is_empty() and blind.perks.is_empty(), "blind holds nothing and nothing fires (%s)" % str(blind.fired))
+	var small_bot := RunSim.play("small", pack.forms, "FI-0")
+	for id in small_bot.perks:
+		check(int(small_bot.perks[id].day) >= 1 and int(small_bot.perks[id].tickets) >= 0, "small: %s has its day and tickets" % id)
+
+
+## SimRun.play's death report (七.5) and carry (十二.6).
+func test_deaths_and_carry() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var died := RunSim.play("blind", pack.forms, "DE-0")
+	if check(died.status == RunState.FAILED, "blind dies on DE-0"):
+		check(int(died.death.layer) >= 1 and int(died.death.layer) <= 3, "a layer (%s)" % str(died.death.get("layer")))
+		check(int(died.death.short) > 0, "it was short of what was due (%s)" % str(died.death.get("short")))
+		check(int(died.death.day) >= 1, "a day of the layer")
+		eq(died.carry.size(), int(died.death.layer) - 1, "a carry for each layer paid")
+	var work := RunSim.play("work", pack.forms, "W-1")
+	eq(work.status, RunState.CLEARED, "work clears")
+	check(work.death.is_empty(), "a cleared run has no death")
+	eq(work.carry.size(), 2, "two layers carried into")
+	for c in work.carry:
+		check(c >= 0.0 and c < 1.0, "the work line carries its few dollars (%.3f)" % c)
+
+
+## The Wilson interval, the paired comparison, the early stop (七.6), on known answers.
+func test_intervals_and_pairs() -> void:
+	var w0 := SimReport.wilson(0, 10)
+	check(absf(w0[0]) < 1e-9 and absf(w0[1] - 0.2775) < 1e-3, "0 of 10: 0 to 0.2775 (%s)" % str(w0))
+	var w5 := SimReport.wilson(5, 10)
+	check(absf(w5[0] - 0.2366) < 1e-3 and absf(w5[1] - 0.7634) < 1e-3, "5 of 10: 0.2366 to 0.7634 (%s)" % str(w5))
+	eq(SimReport.wilson(0, 0), [0.0, 1.0], "no runs: anything")
+	var a := {"layers": 3, "outcomes": [3, 3, 3, 0, 0, 0, 3, 0, 1, 2]}
+	var b := {"layers": 3, "outcomes": [3, 0, 0, 3, 0, 0, 3, 0, 0, 0]}
+	var p := SimReport.paired(a, b)
+	eq([p.n, p.only_a, p.only_b, p.both, p.neither], [10, 2, 1, 2, 5], "the four counts (1 or 2 layers is not cleared)")
+	# diff = (2 - 1) / 10; se = sqrt(3 - 1 / 10) / 10
+	check(absf(p.diff - 0.1) < 1e-9, "A's rate less B's: 0.1")
+	var half := 1.96 * sqrt(2.9) / 10.0
+	check(absf(p.low - (0.1 - half)) < 1e-9 and absf(p.high - (0.1 + half)) < 1e-9, "the paired interval (%.4f, %.4f)" % [p.low, p.high])
+	eq(SimReport.paired(a, {"layers": 3, "outcomes": [3]}), {}, "other seeds do not pair")
+	var same := SimReport.paired(a, a)
+	check(same.only_a == 0 and same.only_b == 0 and same.low == 0.0 and same.high == 0.0, "a summary against itself: no difference")
+	var pack := core_pack()
+	if pack == null:
+		return
+	# work clears every run: an interval wholly over a band of 0 to 50% stops at 100.
+	var s := RunSim.summary("work", pack.forms, 150, "EA", null, [0.0, 0.5])
+	eq(s.stopped, 100, "the early stop after the first chunk")
+	eq(s.runs, 100, "every number of the runs played")
+	eq(s.outcomes.size(), 100, "an outcome a run")
+
+
+## Common random numbers (七.6): the bots' dice are the seed's, so two bots on a seed
+## draw the same column, and an unknown name plays blind's run exactly.
+func test_bots_share_the_dice() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	for seed_text in ["CR-0", "CR-1", "CR-2"]:
+		var cols := []
+		for bot in ["blind", "borrow", "gamble"]:
+			var run := RunState.start(RunConfig.standard(), seed_text, ["diner", "bar", "bingo"])
+			var e := run.new_economy()
+			var ctx := SimCtx.of(run, e, run.new_machine(pack.forms, true), SimBots.spec(bot))
+			ctx.rng = SimRun.dice(seed_text)
+			cols.append(SimBlocks.column(ctx))
+		eq(cols[1], cols[0], "%s: borrow draws blind's first column" % seed_text)
+		eq(cols[2], cols[0], "%s: gamble draws blind's first column" % seed_text)
+	eq(RunSim.play("nobody", pack.forms, "CR-0"), RunSim.play("blind", pack.forms, "CR-0"), "an unknown bot plays blind's run")
 
 
 ## The bots' table (SimBots): every bot has a spec, every spec names only blocks and
