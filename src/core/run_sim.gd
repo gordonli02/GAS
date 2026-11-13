@@ -416,6 +416,18 @@ static func summary(bot: String, base_forms: Array, runs: int, seed_prefix := "S
 		"days_spared": spared / n, "perks": perks / n, "best": percentiles(bests, BEST_PCT)}
 
 
+## One run as the row tests/fixtures/sim_baseline.json keeps (written by
+## `sim_runs --baseline=`, compared by test_bots_match_the_baseline): the run's
+## outcome and the few stats that show how it was played. status is RunState's
+## string ("cleared" / "failed"); everything else is an int.
+static func baseline_row(result: Dictionary) -> Dictionary:
+	var s: Dictionary = result.stats
+	return {"status": str(result.status), "layer": int(result.layer), "days": int(result.days),
+		"tickets": int(result.tickets), "cash": int(result.cash), "spent": int(result.spent),
+		"won": int(result.won), "idle_days": int(result.idle_days), "perks": int(s.perks),
+		"layers_cleared": int(s.layers_cleared), "best_prize": int(s.best_prize), "fees": int(s.fees)}
+
+
 ## The nearest-rank percentiles `pcts` of `values` (non-decreasing in `pcts`).
 static func percentiles(values: Array, pcts: Array) -> Array:
 	var v := values.duplicate()

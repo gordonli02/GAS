@@ -1304,3 +1304,27 @@ ranks last among the things the numbers must serve.
   over.
 - **Saves**: neither the debt nor the wage is saved; both come from the config at load,
   so no version bump (version 4 already dropped runs in progress today).
+
+## M9.8 step 1, stage 0: the bots frozen before the refactor
+
+The plan is `docs/roadmap.md` M9.8 step 1 (five stages, G's nod 2026-11-13).
+
+- **The fixture.** `sim_runs --baseline=<path>` plays seeds BASE-0..BASE-19 for each of
+  the 13 bots and writes a row a run (`RunSim.baseline_row`: status, layer, days,
+  tickets, cash, spent, won, idle days, perks, layers cleared, best prize, fees) to
+  `tests/fixtures/sim_baseline.json`. `test_bots_match_the_baseline` replays the first
+  3 seeds of each bot (all 20 with `--full`) and compares field by field. Stage 1
+  (the split into `src/sim/`) has to leave the file byte-identical.
+- **Time.** 300 runs take 8 to 82 seconds a bot (small the longest), about 7.5 minutes
+  for all 13 in one process. So "start from a typical layer-2 state" (七.6) is not
+  needed and is left out.
+- **The table at the debts of M9.7 item 11** ($700 / $3500 / $15000; 300 runs, seeds
+  SIM-0..SIM-299; cleared, then L1 / L2 / L3 conditional, then the return):
+  work 100%; blind 0.0% (13.0 / 2.6 / 0) 0.772; borrow 0.0% (16.0 / 4.2 / 0) 0.765;
+  gamble 0.3% (12.3 / 8.1 / 33.3) 0.788; skip 0.0% (13.0 / 5.1 / 0) 0.770;
+  perks 4.7% (23.0 / 30.4 / 66.7) 1.078; build 5.7% (24.3 / 42.5 / 54.8) 1.090;
+  small 17.0% (25.0 / 78.7 / 86.4) 1.192; batch 1.7% (18.7 / 17.9 / 50.0) 0.969;
+  clearing 0.0% (11.7 / 8.6 / 0) 0.784; jackpot 0.0% (19.3 / 12.1 / 0) 0.617;
+  money 0.0% (14.0 / 4.8 / 0) 0.777; churn 0.0%, 0.504 with fees.
+  clearing and money return what blind does, and jackpot less: their perks do nothing
+  for the way these bots play, which is what stages 2 and 3 are for.

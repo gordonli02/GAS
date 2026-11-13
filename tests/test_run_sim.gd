@@ -42,6 +42,34 @@ func test_bots_finish_and_balance() -> void:
 	eq(b, a, "the same seed plays the same run")
 
 
+## This fixture freezes the bots before the M9.8 refactor (docs/roadmap.md, M9.8 step 1,
+## stage 0): each bot's first runs, seeds BASE-0 .., must replay exactly. If a number
+## change is meant, regenerate it (a run is deterministic) with
+##   godot --headless --path . res://tools/sim_runs.tscn -- --baseline=tests/fixtures/sim_baseline.json
+## (--baseline-runs=N for another count) and say why in the commit.
+func test_bots_match_the_baseline() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var fixture = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/sim_baseline.json"))
+	if not check(fixture is Dictionary, "sim_baseline.json parses"):
+		return
+	var prefix: String = fixture.seed_prefix
+	var k := int(fixture.runs) if full else mini(3, int(fixture.runs))
+	for bot in fixture.bots:
+		var rows: Array = fixture.bots[bot]
+		for i in mini(k, rows.size()):
+			var got := RunSim.baseline_row(RunSim.play(bot, pack.forms, "%s-%d" % [prefix, i]))
+			var want: Dictionary = rows[i]
+			for field in want:
+				var a = got.get(field)
+				var b = want[field]
+				if b is float:
+					b = int(b)
+				eq(a, b, "%s %s-%d: %s" % [bot, prefix, i, field])
+			eq(got.size(), want.size(), "%s %s-%d: same fields" % [bot, prefix, i])
+
+
 ## G, 2026-11-07: the slot takes coins under the smallest bill, and every bot asks the
 ## slot's rule before going to the machine, so no bot spends a day there buying nothing
 ## (before, the coins under a bill kept the plain bots at the machine for nothing).

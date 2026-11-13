@@ -21,6 +21,11 @@ extends Node
 ## the form's Catalog.ALL_IN_SHARE of it; --push-boxes=N boxes a form, 0 to skip). Then each form's boxes in the run's model (its shape): return,
 ## winners per 100 tickets, top prizes a box and how bumpy one ticket's prize is
 ## (--form-boxes=N, 0 to skip).
+## With --baseline=<path> the tool does only this: for each bot of --bots= (default all)
+## it plays seeds BASE-0 .. BASE-(N-1) (--baseline-runs=N, default 20) with the standard
+## config and writes the rows (RunSim.baseline_row) as JSON to <path> (res://, user:// or
+## a file path; a relative path is from the project folder), printing one timing line a
+## bot. That file, tests/fixtures/sim_baseline.json, freezes the bots (test_run_sim.gd).
 
 ## The roadmap's targets (docs/roadmap.md, the bots' table): [text, low, high] in
 ## percent of runs cleared.
@@ -44,8 +49,14 @@ func _run() -> void:
 	var churn_boxes := 200
 	var form_boxes := 300
 	var push_boxes := 100
+	var baseline := ""
+	var baseline_runs := 20
 	for a in OS.get_cmdline_user_args():
-		if a.begins_with("--push-boxes="):
+		if a.begins_with("--baseline-runs="):
+			baseline_runs = maxi(1, a.trim_prefix("--baseline-runs=").to_int())
+		elif a.begins_with("--baseline="):
+			baseline = a.trim_prefix("--baseline=")
+		elif a.begins_with("--push-boxes="):
 			push_boxes = maxi(0, a.trim_prefix("--push-boxes=").to_int())
 		elif a.begins_with("--form-boxes="):
 			form_boxes = maxi(0, a.trim_prefix("--form-boxes=").to_int())
@@ -65,6 +76,9 @@ func _run() -> void:
 		get_tree().quit(1)
 		return
 	var config := RunConfig.standard()
+	if baseline != "":
+		get_tree().quit(_write_baseline(baseline, bots, baseline_runs, res.pack.forms, config))
+		return
 	var problems := config.problems()
 	for p in problems:
 		print("CONFIG: " + p)
@@ -131,6 +145,33 @@ func _run() -> void:
 		for row in RunSim.form_table(res.pack.forms, form_boxes):
 			print("  %-10s %7.3f %9.1f %7.2f %8.2f" % [row.form, row["return"], row.winners, row.tops, row.sd])
 	get_tree().quit(0 if problems.is_empty() else 1)
+
+
+## Plays seeds BASE-0 .. BASE-(runs-1) for each bot and writes the fixture at `path`.
+## Returns the exit code.
+func _write_baseline(path: String, bots: Array, runs: int, forms: Array, config: RunConfig) -> int:
+	var out := {}
+	for bot in bots:
+		if not RunSim.BOTS.has(bot):
+			print("unknown bot: " + str(bot))
+			return 1
+		var t0 := Time.get_ticks_msec()
+		var rows := []
+		for i in runs:
+			rows.append(RunSim.baseline_row(RunSim.play(bot, forms, "BASE-%d" % i, config)))
+		out[bot] = rows
+		print("baseline %s: %d runs, %.1f s" % [bot, runs, (Time.get_ticks_msec() - t0) / 1000.0])
+	var file_path := path
+	if not path.contains("://") and path.is_relative_path():
+		file_path = ProjectSettings.globalize_path("res://").path_join(path)
+	var f := FileAccess.open(file_path, FileAccess.WRITE)
+	if f == null:
+		push_error("cannot write " + file_path)
+		return 1
+	f.store_string(JSON.stringify({"seed_prefix": "BASE", "runs": runs, "bots": out}, "\t") + "\n")
+	f.close()
+	print("wrote " + file_path)
+	return 0
 
 
 ## Whether `bot` keeps its place in the ordering against the next bot down: "yes",
