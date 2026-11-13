@@ -18,7 +18,14 @@ var spec: Dictionary
 var col := -1        ## today's column (-1 before one is picked)
 var bought := 0      ## tickets bought today
 var day_layer := 0   ## the layer the day began in
-## Room for what a bot or a report wants to count over the run (nothing today).
+## The cash and credit the bot came to the machine with today (SimRun.day sets it; the
+## line bots' stop-loss, SimBlocks.stopped).
+var day_money := 0
+## The tickets bought today when the layer could first be paid and the bot played on
+## instead (SimBlocks.pay, stay "hunt"); -1 before.
+var payable_at := -1
+## What a bot's blocks count over the run (SimRun.play returns it): "flare_left", the
+## boxes the jackpot line left because READ THE FLARE said their top prize was gone.
 var counters := {}
 
 
@@ -48,4 +55,6 @@ func param(key: String) -> Variant:
 func start_day() -> void:
 	col = -1
 	bought = 0
+	day_money = 0
+	payable_at = -1
 	day_layer = run.layer

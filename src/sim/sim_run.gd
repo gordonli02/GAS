@@ -8,10 +8,13 @@ extends RefCounted
 ##   enter     to the machine when the bot wants it and the slot can sell it a ticket
 ##             (can_buy), else work (a bot that cannot work plays)
 ##   machine   a column; then, until the layer is paid or the bot leaves: pay the layer
-##             when it can be, else stay (the next batch's size, 0 leaves), items
-##             ("machine"), feed the slot (refill when it cannot buy: borrow or leave),
-##             sell and open the batch (push after every opening), box
+##             when it can be and the stay block's pay agrees, else stay (the next batch's size, 0 leaves), items
+##             ("machine"), feed the slot (the stay block's feed; refill when it cannot
+##             buy: borrow or leave), sell and open the batch (push after every
+##             opening), box
 ##   evening   the day ends; a layer paid brings a new machine
+## A spec's `given` perks ({id: level}) are held from the start, free (the "given
+## cards" test, docs/roadmap.md M9.8 step 1 stage 3; only the simulator does this).
 
 ## A day at the machine has no limit; a bot stops after this many tickets so that a
 ## run always ends.
@@ -30,6 +33,9 @@ const DAY_CAP := 6000
 ##           less what the cash and credit could pay), loan (owed), perks ({id: level}),
 ##           shifts, play_days, tickets (these three in that layer), last_day_tickets};
 ##           {} for a run that did not fail
+##   held_by for each layer the run played: the perks held ({id: level}) when it ended
+##           there (paid, or the run failed in it)
+##   counters  what the bot's blocks counted (SimCtx.counters)
 ## The same spec, forms, seed and config always give the same run.
 static func play(spec: Dictionary, base_forms: Array, seed_text: String, config: RunConfig = null) -> Dictionary:
 	if config == null:
@@ -38,6 +44,7 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 	ctx.spec = spec
 	ctx.rng = dice(seed_text)
 	ctx.run = RunState.start(config, seed_text, ["diner", "bar", "bingo"])
+	give(ctx.run, spec.params.get("given", {}))
 	ctx.e = ctx.run.new_economy()
 	ctx.m = ctx.run.new_machine(base_forms, true)
 	var run := ctx.run
@@ -46,6 +53,7 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 	var idle := 0   # days the bot went to the machine (it chose to) and bought nothing
 	var held := {}  # perk id -> {day, tickets: stats.tickets when it was bought}
 	var carry := []
+	var held_by := []
 	var at_layer := _layer_mark(run)
 	while run.playing() and guard < 1000:
 		guard += 1
@@ -63,6 +71,8 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 		_note_perks(run, held)
 		if run.playing() and run.layer == layer:
 			run.end_day(e)
+		if not run.playing() or run.layer != layer:
+			held_by.append(run.perks.duplicate())
 		if run.playing() and run.layer != layer:
 			carry.append(float(e.cash) / maxi(1, run.due()))
 			at_layer = _layer_mark(run)
@@ -81,7 +91,35 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 	return {"status": run.status, "layer": run.layer, "days": int(run.stats.days), "tickets": int(run.stats.tickets),
 		"cash": e.cash, "spent": e.spent, "won": e.won, "balanced": e.balanced(), "stats": run.stats.duplicate(),
 		"idle_days": idle, "perks": perks, "fired": run.fired.duplicate(), "fired_pct": run.fired_pct.duplicate(),
-		"carry": carry, "death": death}
+		"carry": carry, "death": death, "held_by": held_by, "counters": ctx.counters.duplicate()}
+
+
+## The `given` perks ({id: level}) put on a run before its first day, free (nothing is
+## paid or counted as bought), with the requirements they lack at the level asked (of
+## `requires_any`, the first), so the state is one a run could reach; the day's offers
+## are dealt again for what it now holds. Only the simulator does this.
+static func give(run: RunState, given: Dictionary) -> void:
+	if given.is_empty():
+		return
+	for id in given:
+		run.perks[id] = maxi(run.level(id), int(given[id]))
+	var guard := 0
+	var short := true
+	while short and guard < 10:
+		guard += 1
+		short = false
+		for id in run.perks.keys():
+			var p := run.catalog.perk(id)
+			var need: Dictionary = p.get("requires", {}).duplicate()
+			var any: Dictionary = p.get("requires_any", {})
+			if not any.is_empty() and not any.keys().any(func(k): return run.level(k) >= int(any[k])):
+				need[any.keys()[0]] = any[any.keys()[0]]
+			for k in need:
+				if run.level(k) < int(need[k]):
+					run.perks[k] = int(need[k])
+					short = true
+	run.offers = run.deal_offers()
+	run.offers_open = not run.offers.is_empty()
 
 
 ## A run's dice for the bot (SimCtx.rng). Common random numbers (docs/roadmap.md 七.6):
@@ -108,16 +146,17 @@ static func _note_perks(run: RunState, held: Dictionary) -> void:
 
 
 ## A day at the machine: one column (SimBlocks.column), then batches until the layer
-## can be paid (and is), the bot leaves (stay 0, or the money runs out and it does not
+## can be paid (and is, when SimBlocks.pay says so), the bot leaves (stay 0, or the money runs out and it does not
 ## refill), or DAY_CAP. Returns the tickets bought.
 static func day(ctx: SimCtx) -> int:
 	var run := ctx.run
 	var e := ctx.e
+	ctx.day_money = e.cash + e.credit
 	ctx.col = SimBlocks.column(ctx)
 	var layer := run.layer
 	while ctx.bought < DAY_CAP:
 		var m := ctx.m
-		if run.can_pay(e):
+		if run.can_pay(e) and SimBlocks.pay(ctx):
 			run.pay(e, m)
 			return ctx.bought
 		var per := SimBlocks.stay(ctx)
@@ -126,7 +165,7 @@ static func day(ctx: SimCtx) -> int:
 		SimBlocks.items(ctx, "machine")
 		var col := ctx.col
 		var price := m.price(col)
-		feed(e, price * per, m.min_price())
+		SimBlocks.feed(ctx, price * per)
 		if e.credit < price:
 			if SimBlocks.refill(ctx):
 				continue

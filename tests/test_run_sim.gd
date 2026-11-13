@@ -5,7 +5,8 @@ extends "res://tests/test_case.gd"
 ## the churn exploit (FIRST PULL x REGULAR) does not pay, that summary() carries
 ## what the roadmap's bots table is measured by, and the measuring tools of M9.8 step 1
 ## stage 2 (the perks' trigger counts, the deaths, the carry, the common dice, the
-## Wilson interval and the paired comparison).
+## Wilson interval and the paired comparison) and stage 3 (the given-cards test's
+## mechanics, the line bots' blocks, their variants).
 
 
 func test_work_bot_clears_on_the_last_day() -> void:
@@ -136,6 +137,10 @@ func test_summary_carries_the_targets_numbers() -> void:
 		product *= r
 	check(absf(product - s.cleared) < 1e-6, "the three multiply to the overall (%.4f, %.4f)" % [product, s.cleared])
 	eq(s.best.size(), 3, "the 50th, 90th and 99th percentiles of the best prize")
+	var line := RunSim.summary("small", pack.forms, 4, "SU")
+	for t in line.triggers:
+		eq(t.by_layer.size(), 3, "%s: a holding share a layer (拿得到)" % t.id)
+		check(t.by_layer[0] >= 0.0 and t.by_layer[0] <= 1.0, "%s: layer 1 was played by every run (%.2f)" % [t.id, t.by_layer[0]])
 	check(s.best[0] <= s.best[1] and s.best[1] <= s.best[2], "they do not decrease: %s" % str(s.best))
 	check(s.best[0] > 0, "every run wins something")
 	eq(SimReport.percentiles([5, 1, 4, 2, 3], [50, 90, 99]), [3, 5, 5], "nearest rank")
@@ -309,6 +314,91 @@ func test_intervals_and_pairs() -> void:
 	eq(s.outcomes.size(), 100, "an outcome a run")
 
 
+## The given-cards test's mechanics (M9.8 step 1 stage 3), not its verdicts: given perks
+## are held from day 1 and cost nothing, with what they require; the line arm buys no
+## perk; the control is blind holding the same; the report carries its three criteria.
+func test_given_cards() -> void:
+	var run := RunState.start(RunConfig.standard(), "GV", ["diner", "bar", "bingo"])
+	SimRun.give(run, {"hunter": 1})
+	for id in ["hunter", "bigfish", "read1"]:
+		eq(run.level(id), 1, "JACKPOT HUNTER given: %s held" % id)
+	for id in run.perks:
+		check(run.missing(id).is_empty(), "%s: its requirements are held" % id)
+	eq(int(run.stats.perks), 0, "nothing counted as bought")
+	var pack := core_pack()
+	if pack == null:
+		return
+	for line in SimBots.GIVEN:
+		var r := SimRun.play(SimBots.given_spec(line), pack.forms, "GV-0")
+		for id in SimBots.GIVEN[line]:
+			check(r.perks.has(id) and int(r.perks[id].day) == 1, "%s: %s held from day 1" % [line, id])
+			check(r.held_by.size() >= 1 and r.held_by[0].has(id), "%s: %s held at the end of layer 1" % [line, id])
+		eq(int(r.stats.perks), 0, "%s: the line arm buys no perk" % line)
+		eq(int(r.stats.shop), 0, "%s: the given perks cost nothing" % line)
+		check(r.balanced, "%s: the ledger balances" % line)
+		var c := SimRun.play(SimBots.control_spec(line), pack.forms, "GV-0")
+		eq(c, SimRun.play(SimBots.spec("blind", {"params": {"given": SimBots.GIVEN[line]}}), pack.forms, "GV-0"),
+			"%s: the control is blind holding the same" % line)
+	var g := SimReport.given("money", pack.forms, 2, "GV")
+	eq(g.criteria.map(func(x): return x.name), ["fired", "signature", "return"], "three criteria")
+	eq(g.arms.keys(), ["line", "control"], "two arms")
+	eq(g.criteria[0].rows.size(), SimBots.GIVEN.money.size(), "a row per given perk")
+	# The paired mean: [1, 2, 3] has mean 2, sd 1, half 1.96 / sqrt(3).
+	var pm := SimReport.paired_mean([1.0, 2.0, 3.0])
+	check(absf(pm.mean - 2.0) < 1e-9 and absf(pm.sd - 1.0) < 1e-9, "mean 2, sd 1 (%s)" % str(pm))
+	check(absf(pm.low - (2.0 - 1.96 / sqrt(3.0))) < 1e-9 and absf(pm.high - (2.0 + 1.96 / sqrt(3.0))) < 1e-9, "the interval")
+	eq(SimReport.paired_mean([]).n, 0, "none: n 0")
+
+
+## The line bots' blocks (M9.8 step 1 stage 3), on states set by hand.
+func test_line_blocks() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var run := RunState.start(RunConfig.standard(), "LB", ["diner", "bar", "bingo"])
+	var e := run.new_economy()
+	var m := run.new_machine(pack.forms, true)
+	# clearing: the box already started (the fewest tickets left).
+	var ctx := SimCtx.of(run, e, m, SimBots.spec("clearing"))
+	m.boxes[3].cursor = 50
+	eq(SimBlocks.column(ctx), 3, "clearing plays the started box")
+	m.boxes[5].cursor = m.boxes[5].size - 10
+	eq(SimBlocks.column(ctx), 5, "the one nearest its end")
+	ctx.col = 5
+	eq(SimBlocks.stay(ctx), 10, "never past the end of the box")
+	# money: nothing over the floor ($100 here, at stake 1), nothing bought.
+	var mc := SimCtx.of(run, e, m, SimBots.spec("money", {"params": {"floor": 100}}))
+	mc.col = 0
+	e.cash = 100
+	eq(SimBlocks.stay(mc), 0, "money leaves at its floor")
+	check(not SimBlocks.enter(mc), "and works rather than go to the machine at it")
+	e.cash = 103
+	eq(SimBlocks.stay(mc), 3, "and buys only what keeps the floor")
+	e.cash = 200
+	eq(SimBlocks.stay(mc), 5, "its batch above it")
+	SimBlocks.feed(mc, 5)
+	check(e.credit == 5 and e.cash == 195, "small bills: $5 fed for five tickets (credit %d, cash %d)" % [e.credit, e.cash])
+	e.cash_out()
+	# batch: the window closed, not half open.
+	var bc := SimCtx.of(run, e, m, SimBots.spec("batch"))
+	run.window_n = 3
+	eq(SimBlocks.stay(bc), Catalog.WINDOW - 3, "batch buys the rest of the window")
+	run.window_n = 0
+	# The stop-loss: only while buying perks, never in the endgame.
+	var sc := SimCtx.of(run, e, m, SimBots.spec("clearing", {"params": {"stop": 0.5}}))
+	sc.day_money = 200
+	e.cash = 90
+	check(SimBlocks.stopped(sc), "lost more than half the day's money: stopped")
+	run.day = run.days()
+	check(not SimBlocks.stopped(sc), "the layer's last day: no stop-loss")
+	run.day = 1
+	var off := SimCtx.of(run, e, m, SimBots.given_spec("clearing", {"params": {"stop": 0.5}}))
+	off.day_money = 200
+	check(not SimBlocks.stopped(off), "perks off: no stop-loss")
+	sc.spec = SimBots.spec("clearing", {"params": {"stop": 1.0}})
+	check(not SimBlocks.stopped(sc), "stop 1: never")
+
+
 ## Common random numbers (七.6): the bots' dice are the seed's, so two bots on a seed
 ## draw the same column, and an unknown name plays blind's run exactly.
 func test_bots_share_the_dice() -> void:
@@ -373,3 +463,22 @@ func test_bot_specs_are_data() -> void:
 	check([RunState.CLEARED, RunState.FAILED].has(r.status) and r.balanced, "an unknown bot plays a whole run")
 	var blind := SimBots.spec("blind")
 	eq(SimRun.play(blind, pack.forms, "U-1"), RunSim.play("blind", pack.forms, "U-1"), "RunSim.play is SimRun.play of the spec")
+	# The line bots' named variants (七.4), the given-cards sets and signatures.
+	for line in SimBots.VARIANTS:
+		check(SimBots.NAMES.has(line), "%s: variants of a bot" % line)
+		var vs: Dictionary = SimBots.VARIANTS[line]
+		check(vs.size() >= 3 and vs.size() <= 5, "%s: 3 to 5 variants (%d)" % [line, vs.size()])
+		for name in vs:
+			var o: Dictionary = vs[name]
+			for k in o:
+				check(["blocks", "params"].has(k), "%s/%s: %s is blocks or params" % [line, name, k])
+			for b in o.get("blocks", {}):
+				check(SimBlocks.VARIANTS.get(b, []).has(o.blocks[b]), "%s/%s: %s=%s is a variant" % [line, name, b, o.blocks[b]])
+			for k in o.get("params", {}):
+				check(SimBots.PARAMS.has(k), "%s/%s: %s is a param" % [line, name, k])
+	for line in ["clearing", "jackpot", "small", "batch", "money"]:
+		check(SimBots.VARIANTS.has(line) and SimBots.GIVEN.has(line) and SimBots.SIGNATURE.has(line), "%s: variants, given set, signature" % line)
+		for id in SimBots.GIVEN.get(line, {}):
+			check(not Catalog.standard().perk(id).is_empty(), "%s: given %s is in the catalog" % [line, id])
+		var sig: Array = SimBots.SIGNATURE.get(line, ["", ""])
+		check(["fired", "fired_pct"].has(sig[0]) and RunState.FIRED.has(sig[1]), "%s: the signature is a counted perk (%s)" % [line, str(sig)])

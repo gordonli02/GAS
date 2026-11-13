@@ -43,6 +43,16 @@ extends Node
 ## bot. That file, tests/fixtures/sim_baseline.json, freezes the bots (test_run_sim.gd).
 ## With --list-bots it prints the bots' names (RunSim.BOTS, src/sim/sim_bots.gd), one a
 ## line, and quits.
+## With --given the tool does only the given-cards test (SimReport.given; docs/roadmap.md
+## M9.8 step 1 stage 3, "用得上") for the line bots of --bots= (default the five): each
+## seed played by the line bot holding its core (SimBots.GIVEN) and buying no perks, and
+## by blind holding the same; per line the numbers of both arms and PASS / FAIL for each
+## of the three criteria and the line. Exit code 0 either way: it is a report.
+## With --variants the table is of every named variant of the line bots of --bots=
+## (SimBots.VARIANTS; default the five), a row each (<bot>/<variant>) beside the bot's
+## own spec, paired with it on the same seeds, and the best by clear rate named.
+## In --detail's trigger table, L1 / L2 / L3 ("拿得到", roadmap 十三.10): of the runs
+## that played the layer, the share holding the perk when it ended there.
 
 ## The roadmap's targets (docs/roadmap.md 一): [text, low, high] in percent of runs
 ## cleared ("<": under high). build and perks have none yet.
@@ -74,9 +84,16 @@ func _run() -> void:
 	var early := false
 	var save := ""
 	var against := ""
+	var given := false
+	var variants := false
+	var bots_set := false
 	for a in OS.get_cmdline_user_args():
 		if a == "--detail":
 			detail = true
+		elif a == "--given":
+			given = true
+		elif a == "--variants":
+			variants = true
 		elif a == "--early":
 			early = true
 		elif a.begins_with("--save="):
@@ -97,6 +114,7 @@ func _run() -> void:
 			runs = maxi(1, a.trim_prefix("--runs=").to_int())
 		elif a.begins_with("--bots="):
 			bots = Array(a.trim_prefix("--bots=").split(","))
+			bots_set = true
 		elif a.begins_with("--ev-boxes="):
 			ev_boxes = maxi(0, a.trim_prefix("--ev-boxes=").to_int())
 		elif a.begins_with("--seed="):
@@ -114,6 +132,15 @@ func _run() -> void:
 	var config := RunConfig.standard()
 	if baseline != "":
 		get_tree().quit(_write_baseline(baseline, bots, baseline_runs, res.pack.forms, config))
+		return
+	var lines: Array = (bots if bots_set else SimBots.GIVEN.keys()).filter(func(b): return SimBots.GIVEN.has(b))
+	if given:
+		_given(lines, runs, prefix, res.pack.forms, config)
+		get_tree().quit(0)
+		return
+	if variants:
+		_variants(lines, runs, prefix, res.pack.forms, config, detail)
+		get_tree().quit(0)
 		return
 	var problems := config.problems()
 	for p in problems:
@@ -284,22 +311,96 @@ func _print_bot(s: Dictionary, detail: bool) -> void:
 	if not detail:
 		return
 	if not s.triggers.is_empty():
-		print("  %-12s %5s %5s %8s %8s %6s" % ["perk", "held", "day", "fired/r", "/100 tk", "mean%"])
+		print("  %-12s %5s %5s %8s %8s %6s  %5s %5s %5s" % ["perk", "held", "day", "fired/r", "/100 tk", "mean%", "L1", "L2", "L3"])
 	for t in s.triggers:
+		var by := []
+		for v in t.by_layer:
+			by.append("%4.0f%%" % (v * 100.0) if v >= 0.0 else "    -")
+		var layers := "  " + " ".join(by)
 		if t.held <= 0.0:
-			print("  %-12s %4.0f%% %5s %8s %8s" % [t.id, 0.0, "-", "-", "-"])
+			print("  %-12s %4.0f%% %5s %8s %8s %6s%s" % [t.id, 0.0, "-", "-", "-", "", layers])
 			continue
 		var fired := "-" if t.per_run < 0 else "%.1f" % t.per_run
 		var per := "-" if t.per_100 < 0 else "%.2f" % t.per_100
 		var pct := "" if t.pct < 0 else "%.1f" % t.pct
 		var won := "" if t.won < 0 else "  won %.1f/r" % t.won
-		print("  %-12s %4.0f%% %5.1f %8s %8s %6s%s" % [t.id, t.held * 100.0, t.day, fired, per, pct, won])
+		print("  %-12s %4.0f%% %5.1f %8s %8s %6s%s%s" % [t.id, t.held * 100.0, t.day, fired, per, pct, layers, won])
 	for b in s.death_blocks:
 		var sets := []
 		for st in b.sets:
 			sets.append("%s %.0f%%" % [st[0], st[1] * 100.0])
 		print("  died in L%d (%d): median cash $%d, short $%d, shifts %d, tickets %d; perks: %s" % [b.layer, b.n,
 			b.cash, b.short, b.shifts, b.tickets, " | ".join(sets)])
+
+
+## --given: the given-cards test of each line in `lines` (SimReport.given), printed.
+func _given(lines: Array, runs: int, prefix: String, forms: Array, config: RunConfig) -> void:
+	print("given cards (docs/roadmap.md M9.8 step 1 stage 3): %d runs a line, seeds %s-0 .. %s-%d" % [runs, prefix, prefix, runs - 1])
+	print("line arm: the line bot holding its core, buying no perks; control: blind holding the same")
+	var verdicts := []
+	for line in lines:
+		var t0 := Time.get_ticks_msec()
+		var g := SimReport.given(line, forms, runs, prefix, config)
+		var core := []
+		for id in g.given:
+			core.append("%s %d" % [id, g.given[id]])
+		print("\n%s: %s (%.1f s)" % [line, ", ".join(core), (Time.get_ticks_msec() - t0) / 1000.0])
+		var sig: Array = SimBots.SIGNATURE[line]
+		print("  %-8s %8s %7s %8s %12s" % ["arm", "tickets", "return", "cleared", "%s %s/100" % [sig[1], "pct" if sig[0] == "fired_pct" else "fired"]])
+		for arm in ["line", "control"]:
+			var a: Dictionary = g.arms[arm]
+			print("  %-8s %8.0f %7.3f %7.1f%% %12.3f" % [arm, a.tickets, a["return"], a.cleared * 100.0, a.signature])
+		var c1: Dictionary = g.criteria[0]
+		var rows := []
+		for row in c1.rows:
+			rows.append("%s %s %.0f%% (control %.0f%%)" % [row[0], row[3], row[1] * 100.0, row[2] * 100.0] if row[3] != "-"
+				else "%s not judged (no counter, no use to count)" % row[0])
+		print("  1 every given perk fired (or used) in >= %.0f%% of runs: %s" % [SimReport.FIRED_MIN * 100.0, "; ".join(rows)])
+		print("    %s%s" % ["PASS" if c1.pass else "FAIL", "" if c1.missing.is_empty() else " (short: %s)" % ", ".join(c1.missing)])
+		var c2: Dictionary = g.criteria[1]
+		print("  2 %s %s per 100 tickets: line %.3f, control %.3f, x%.2f (needs x%.1f)" % [sig[1], "percent added" if sig[0] == "fired_pct" else "firings",
+			c2.line, c2.control, c2.x, SimReport.SIGNATURE_X])
+		print("    %s" % ("PASS" if c2.pass else "FAIL"))
+		var c3: Dictionary = g.criteria[2]
+		print("  3 return per dollar: line %.3f, control %.3f; paired by seed (%d): mean %+.4f, 95%% %+.4f to %+.4f" % [c3.line,
+			c3.control, c3.n, c3.mean, c3.low, c3.high])
+		print("    %s" % ("PASS" if c3.pass else "FAIL"))
+		var marks := []
+		for c in g.criteria:
+			marks.append("%s %s" % [c.name, "PASS" if c.pass else "FAIL"])
+		verdicts.append("%-8s %s  (%s)" % [line, "PASS" if g.pass else "FAIL", ", ".join(marks)])
+	print("\nverdicts:")
+	for v in verdicts:
+		print("  " + v)
+
+
+## --variants: each line in `lines` by its own spec and by every named variant
+## (SimBots.VARIANTS), a row each, paired with the bot's own spec; the best by clear
+## rate (then return) named.
+func _variants(lines: Array, runs: int, prefix: String, forms: Array, config: RunConfig, detail: bool) -> void:
+	print("variants: %d runs each, seeds %s-0 .. %s-%d (paired: the variant less the bot's own spec)" % [runs, prefix, prefix, runs - 1])
+	for line in lines:
+		print("\n%-20s %7s %13s %7s %7s %5s  %s" % ["bot", "cleared", "95%", "L1", "return", "perks", "paired"])
+		var own := SimReport.summary(SimBots.spec(line), forms, runs, prefix, config)
+		var rows := [[line + "/own", own, {}]]
+		var names: Array = SimBots.VARIANTS.get(line, {}).keys()
+		for v in names:
+			var s := SimReport.summary(SimBots.spec(line, SimBots.VARIANTS[line][v]), forms, runs, prefix, config)
+			rows.append(["%s/%s" % [line, v], s, SimBots.VARIANTS[line][v]])
+		var best: Array = rows[0]
+		for row in rows:
+			var s: Dictionary = row[1]
+			var p := SimReport.paired(s, own)
+			var pair := "" if row[0] == line + "/own" else "%+.1f points, 95%% %+.1f to %+.1f" % [p.diff * 100.0, p.low * 100.0, p.high * 100.0]
+			print("%-20s %6.1f%% %5.1f-%5.1f%% %6.1f%% %7.3f %5.1f  %s" % [row[0], s.cleared * 100.0, s.wilson[0] * 100.0,
+				s.wilson[1] * 100.0, s.layer_rates[0] * 100.0, s["return"], s.perks, pair])
+			var b: Dictionary = best[1]
+			if s.cleared > b.cleared or s.cleared == b.cleared and s["return"] > b["return"]:
+				best = row
+		print("best of %s by clear rate: %s" % [line, best[0]])
+		if detail:
+			for row in rows:
+				print("  %s: %s" % [row[0], str(row[2]) if not row[2].is_empty() else SimBots.describe(SimBots.spec(line))])
 
 
 ## A path from the command line as a file path (res://, user:// or a file path; a

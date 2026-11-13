@@ -2,14 +2,17 @@ class_name SimReport
 extends RefCounted
 ## What the simulator says about many runs: a bot's summary (the shares and means a
 ## balance pass looks at, and the measures of docs/roadmap.md 七.3, 七.5, 七.6 and
-## 十二.6), the paired comparison of two summaries on the same seeds, the row the
-## baseline fixture keeps of one run, percentiles, the Wilson interval.
+## 十二.6), the paired comparison of two summaries on the same seeds, the given-cards
+## test of a line (given) with its paired mean (paired_mean), the row the baseline
+## fixture keeps of one run, percentiles, the Wilson interval.
 
 const BEST_PCT := [50, 90, 99]   ## the percentiles of each run's best prize summary gives
 const Z95 := 1.96                ## the normal quantile of a two-sided 95% interval
 const CHUNK := 100               ## runs between the early stop's looks (summary's `band`)
 const OFTEN := 0.10              ## a perk off the bot's list is in the trigger table when held in this share of runs
 const DEATHS_MIN := 5            ## a layer gets a death block when at least this many runs died there
+const FIRED_MIN := 0.9           ## given: a given core perk fires in at least this share of the line arm's runs
+const SIGNATURE_X := 1.5         ## given: the line's signature per 100 tickets at least this times the control's
 
 
 ## `runs` runs of the bot `spec` (SimBots.spec), seeds `seed_prefix`-0 ... Returns:
@@ -22,12 +25,15 @@ const DEATHS_MIN := 5            ## a layer gets a death block when at least thi
 ##   outcomes   layers paid (0 .. layers) of each run, by its index (the seed's number):
 ##              what `paired` compares; `layers` the config's count
 ##   wilson     [low, high]: the 95% Wilson interval of `cleared`
-##   triggers   the trigger table (七.3), one row a perk: the bot's own (params.perks and
-##              params.shelf) and any other held at the end of OFTEN of the runs:
-##              {id, held (share of runs), day (mean day bought, of holders), per_run
+##   triggers   the trigger table (七.3), one row a perk: the bot's own (params.engine,
+##              perks, shelf and given) and any other held at the end of OFTEN of the
+##              runs: {id, held (share of runs), day (mean day bought, of holders), per_run
 ##              (fired per holder; -1 for a perk RunState.FIRED does not count), per_100
 ##              (fired per 100 tickets bought while held), pct (mean percent added a
-##              firing, -1 when it adds none), won (ALL IN only: pushes won per holder)}
+##              firing, -1 when it adds none), won (ALL IN only: pushes won per holder),
+##              by_layer ("拿得到", roadmap 十三.10: for each layer, of the runs that
+##              played it, the share holding the perk when it ended there, paid or
+##              failed; -1 when none played it)}
 ##   deaths     share of all runs that failed in each layer
 ##   death_blocks  per layer with DEATHS_MIN deaths or more: {layer (1-based), n, cash,
 ##              short, shifts, tickets (medians), sets ([[perk ids joined, share of the
@@ -59,6 +65,10 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 	var bests := []
 	var outcomes := []
 	var held := {}   # perk id -> {n, day, tickets, fired, pct, won}
+	var played_in := []   # runs that played each layer
+	played_in.resize(layers)
+	played_in.fill(0)
+	var held_in := {}     # perk id -> [runs holding it when each layer ended]
 	var dead := []   # the death of each failed run
 	var carry := []
 	carry.resize(maxi(0, layers - 1))
@@ -94,6 +104,14 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 			if id == "allin":
 				h.won += int(r.fired.get("allin_won", 0))
 			held[id] = h
+		for l in mini(layers, r.held_by.size()):
+			played_in[l] += 1
+			for id in r.held_by[l]:
+				if not held_in.has(id):
+					held_in[id] = []
+					held_in[id].resize(layers)
+					held_in[id].fill(0)
+				held_in[id][l] += 1
 		if not r.death.is_empty():
 			dead.append(r.death)
 		for k in mini(carry.size(), r.carry.size()):
@@ -121,14 +139,15 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 		"layer_rates": rates, "days": days / n, "tickets": tickets / n, "return": float(won) / spent if spent > 0 else 0.0,
 		"return_fees": float(won) / (spent + fees) if spent + fees > 0 else 0.0, "fees": fees / n,
 		"days_spared": spared / n, "perks": perks / n, "best": percentiles(bests, BEST_PCT), "outcomes": outcomes,
-		"wilson": wilson(cleared, played), "triggers": _triggers(spec, held, played), "deaths": _deaths(dead, layers, played),
+		"wilson": wilson(cleared, played), "triggers": _triggers(spec, held, played, played_in, held_in),
+		"deaths": _deaths(dead, layers, played),
 		"death_blocks": _death_blocks(dead, layers), "carry": carry_rows, "stopped": stopped}
 
 
 ## The trigger table's rows (summary's `triggers`).
-static func _triggers(spec: Dictionary, held: Dictionary, runs: int) -> Array:
+static func _triggers(spec: Dictionary, held: Dictionary, runs: int, played_in: Array, held_in: Dictionary) -> Array:
 	var ids := []
-	for id in spec.params.perks + spec.params.shelf:
+	for id in spec.params.engine + spec.params.perks + spec.params.shelf + spec.params.given.keys():
 		if not ids.has(id):
 			ids.append(id)
 	var others := []
@@ -141,11 +160,15 @@ static func _triggers(spec: Dictionary, held: Dictionary, runs: int) -> Array:
 		var h: Dictionary = held.get(id, {"n": 0, "day": 0, "tickets": 0, "fired": 0, "pct": 0, "won": 0})
 		var counted := RunState.FIRED.has(id)
 		var hn := maxi(1, int(h.n))
+		var by := []
+		for l in played_in.size():
+			by.append(float(held_in.get(id, [])[l]) / played_in[l] if held_in.has(id) and played_in[l] > 0
+				else (0.0 if played_in[l] > 0 else -1.0))
 		rows.append({"id": id, "held": float(h.n) / maxi(1, runs), "day": float(h.day) / hn,
 			"per_run": float(h.fired) / hn if counted else -1.0,
 			"per_100": float(h.fired) * 100.0 / h.tickets if counted and h.tickets > 0 else (0.0 if counted else -1.0),
 			"pct": float(h.pct) / h.fired if h.pct != 0 and h.fired > 0 else -1.0,
-			"won": float(h.won) / hn if id == "allin" else -1.0})
+			"won": float(h.won) / hn if id == "allin" else -1.0, "by_layer": by})
 	return rows
 
 
@@ -218,6 +241,116 @@ static func paired(a: Dictionary, b: Dictionary) -> Dictionary:
 	out.low = diff - Z95 * se
 	out.high = diff + Z95 * se
 	return out
+
+
+## The mean of paired differences (one a seed: the same seed played two ways) with its
+## normal 95% interval: {n, mean, sd, low, high}. With d_i the differences,
+##   mean = sum(d_i) / n,   sd = sqrt(sum((d_i - mean)^2) / (n - 1)),
+##   mean +- 1.96 sd / sqrt(n)
+## (sd 0 and the interval the mean itself for fewer than two; n 0: everything 0).
+static func paired_mean(diffs: Array) -> Dictionary:
+	var n := diffs.size()
+	if n == 0:
+		return {"n": 0, "mean": 0.0, "sd": 0.0, "low": 0.0, "high": 0.0}
+	var sum := 0.0
+	for d in diffs:
+		sum += float(d)
+	var mean := sum / n
+	var sq := 0.0
+	for d in diffs:
+		sq += (float(d) - mean) * (float(d) - mean)
+	var sd := sqrt(sq / (n - 1)) if n > 1 else 0.0
+	var half := Z95 * sd / sqrt(float(n))
+	return {"n": n, "mean": mean, "sd": sd, "low": mean - half, "high": mean + half}
+
+
+## The given-cards test of a line (docs/roadmap.md M9.8 step 1 stage 3, "用得上";
+## SimBots.GIVEN, SIGNATURE): `runs` seeds `seed_prefix`-0 .., each played by the line
+## arm (SimBots.given_spec: the line bot, `overrides` laid over it, holding its core,
+## buying no perks) and by the control (SimBots.control_spec: blind holding the same
+## core), the same boxes and dice. Returns {line, runs, given, arms: {line, control},
+## each {tickets (per run), return (won / spent, pooled), signature (per 100 tickets,
+## pooled), fired (perk id -> share of runs it fired in, or was used in), cleared},
+## criteria: [three {name, pass, ...}], pass}:
+##   1 fired    every given perk RunState.FIRED counts fired in FIRED_MIN of the line
+##              arm's runs or more; REGULAR is judged by use (a box changed in the run)
+##              and READ THE FLARE by use (a box left because its flare said the top was
+##              gone, SimCtx.counters "flare_left"); any other is not judged. {rows:
+##              [[id, line share, control share, how ("fired", "used", "-")]], missing}
+##   2 signature  the line's signature per 100 tickets at least SIGNATURE_X times the
+##              control's (more than 0 when the control's is 0). {line, control, x}
+##   3 return   the paired mean of each seed's return difference (line less control;
+##              a seed where either arm spent nothing is dropped): paired_mean, its
+##              interval above 0. {line, control, n, mean, low, high}
+static func given(line: String, base_forms: Array, runs: int, seed_prefix := "GV", config: RunConfig = null,
+		overrides: Dictionary = {}) -> Dictionary:
+	if config == null:
+		config = RunConfig.standard()
+	var specs := {"line": SimBots.given_spec(line, overrides), "control": SimBots.control_spec(line)}
+	var core: Dictionary = SimBots.GIVEN.get(line, {})
+	var sig: Array = SimBots.SIGNATURE.get(line, ["fired", ""])
+	var acc := {}
+	for arm in specs:
+		acc[arm] = {"tickets": 0, "spent": 0, "won": 0, "sig": 0, "cleared": 0, "fired": {}, "ret": []}
+	var diffs := []
+	for i in runs:
+		var rets := {}
+		for arm in specs:
+			var r := SimRun.play(specs[arm], base_forms, "%s-%d" % [seed_prefix, i], config)
+			var a: Dictionary = acc[arm]
+			a.tickets += int(r.tickets)
+			a.spent += int(r.spent)
+			a.won += int(r.won)
+			a.sig += int(r[sig[0]].get(sig[1], 0))
+			if r.status == RunState.CLEARED:
+				a.cleared += 1
+			for id in core:
+				if _used(id, r):
+					a.fired[id] = int(a.fired.get(id, 0)) + 1
+			rets[arm] = float(r.won) / r.spent if int(r.spent) > 0 else -1.0
+		if rets.line >= 0.0 and rets.control >= 0.0:
+			diffs.append(rets.line - rets.control)
+	var n := maxf(1.0, runs)
+	var arms := {}
+	for arm in acc:
+		var a: Dictionary = acc[arm]
+		var fired := {}
+		for id in core:
+			fired[id] = float(a.fired.get(id, 0)) / n
+		arms[arm] = {"tickets": a.tickets / n, "return": float(a.won) / a.spent if a.spent > 0 else 0.0,
+			"signature": 100.0 * a.sig / a.tickets if a.tickets > 0 else 0.0, "fired": fired, "cleared": a.cleared / n}
+	var rows := []
+	var missing := []
+	for id in core:
+		var how := "fired" if RunState.FIRED.has(id) else ("used" if ["regular", "read1"].has(id) else "-")
+		rows.append([id, arms.line.fired[id], arms.control.fired[id], how])
+		if how != "-" and arms.line.fired[id] < FIRED_MIN:
+			missing.append(id)
+	var ls: float = arms.line.signature
+	var cs: float = arms.control.signature
+	var x := ls / cs if cs > 0.0 else (INF if ls > 0.0 else 0.0)
+	var pm := paired_mean(diffs)
+	var criteria := [
+		{"name": "fired", "pass": missing.is_empty(), "rows": rows, "missing": missing},
+		{"name": "signature", "pass": x >= SIGNATURE_X, "line": ls, "control": cs, "x": x},
+		{"name": "return", "pass": pm.n > 0 and pm.low > 0.0, "line": arms.line["return"], "control": arms.control["return"],
+			"n": pm.n, "mean": pm.mean, "low": pm.low, "high": pm.high},
+	]
+	return {"line": line, "runs": runs, "given": core.duplicate(), "arms": arms, "criteria": criteria,
+		"pass": criteria.all(func(c): return c.pass)}
+
+
+## Whether a given perk did its work in run `r` (given's criterion 1): fired (RunState
+## FIRED), or for REGULAR a box changed, for READ THE FLARE a box left on its word.
+static func _used(id: String, r: Dictionary) -> bool:
+	if RunState.FIRED.has(id):
+		return int(r.fired.get(id, 0)) > 0
+	match id:
+		"regular":
+			return int(r.stats.box_changes) > 0
+		"read1":
+			return int(r.counters.get("flare_left", 0)) > 0
+	return false
 
 
 ## The 95% Wilson score interval of `k` successes in `n`: [low, high] ([0, 1] for none).

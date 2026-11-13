@@ -1394,3 +1394,68 @@ The plan is `docs/roadmap.md` M9.8 step 1 (five stages, G's nod 2026-11-13).
   day 1 (mean day 1.0): the bots play until they are broke every day, so no morning
   after the first has money. Deaths: 75 to 95% in layer 1, median cash $0, $700 short,
   two shifts. The carry is about 0 everywhere (a bot pays the moment it can).
+
+## M9.8 step 1, stage 3: the line bots' play, and the given-cards test
+
+- **The five lines' blocks** (`SimBots.SPECS`; every number a param). All five: enter
+  `line` and perks `core`: holding none of its `engine` perks a bot spends all its cash
+  on the first it is offered and works while its cash is under `work_below` (times the
+  stake) to afford one; holding one it plays, with a stop-loss (`stop`: the share of
+  the day's money it may lose) that is off on the layer's last day (`endgame`); the
+  slot is fed small bills. clearing: column `clear` (the box with the fewest tickets
+  left), stay `clear` (never past the box's end; the stop-loss gives way when the
+  money still finishes the box); REGULAR left its shelf. jackpot: column `top` and box
+  `flare` (with READ THE FLARE it plays a box whose top prize is still in and leaves
+  one whose top is gone, for another column or NEW BOX while the fee is at most
+  `fee_max` tickets), stay `hunt` (with JACKPOT HUNTER on and a top out, up to `hunt`
+  tickets more on the money over what is due before it pays). small: stay `stop` on
+  Hot Plate / Nugget Rush. batch: stay `windows` (whole windows of ten; it leaves only
+  after a window without a winner; ALL IN under `push` of the cash), box `magnet` (a
+  column whose next window MAGNET makes sure of a winner, from the tickets it has
+  opened). money: stay `floor` (keeps `floor` dollars times the stake, works when the
+  money over it buys no ticket). The eight other bots replay exactly (their fixture
+  rows are byte-identical; the five lines' rows moved).
+- **In the loop**: the layer is paid when `SimBlocks.pay` agrees (only `hunt` waits);
+  feeding goes through `SimBlocks.feed`; ALL IN's push is one rule for every stay.
+- **Variants** (`SimBots.VARIANTS`, `sim_runs --variants`): four or five named overrides
+  a line, each paired with the bot's own spec on the same seeds; the best by clear
+  rate is named. 300 runs: small own 22.0%, `nowork` 12.0% (-10.0 points, 95% -13.6 to
+  -6.4: working to afford an engine is worth ten points), `stop50` 20.3%, `plate`
+  21.0%; jackpot own 2.0%, `nowork` 0.0%, `nostop` 1.3%; batch own 1.3%, `work0` 0.0%;
+  clearing 0.0% in every variant (layer 1: 8.0% own, 12.3% `nostop` and `work`); money
+  0.0%, `floor150` 0.7%.
+- **The given-cards test** (`sim_runs --given`, `SimBots.GIVEN`, `SimReport.given`):
+  each line's core at level 1 held from the start, no perk bought, against blind
+  holding the same on the same seeds. 300 runs (line / control):
+
+  | line | cleared | return | every core perk fired in 90% | signature per 100 tickets | return, paired mean (95%) |
+  |---|---|---|---|---|---|
+  | jackpot | 95.7% / 3.7% | 6.511 / 1.100 | yes | 0.596 / 0.058, x10.2 | +7.49 (+6.82 to +8.16) |
+  | small | 100.0% / 99.3% | 2.605 / 2.235 | yes | 13.37 / 11.21, x1.19 | +0.28 (+0.13 to +0.44) |
+  | batch | 12.3% / 11.3% | 2.038 / 1.855 | yes | 370 / 322, x1.15 | +0.26 (+0.12 to +0.39) |
+  | clearing | 56.3% / 60.3% | 2.070 / 1.861 | yes | 0.318 / 0.276, x1.15 | +0.12 (-0.26 to +0.50) |
+  | money | 6.0% / 1.3% | 1.247 / 0.908 | MIDDLE CUT 56% (control 58%) | 42.6 / 20.5, x2.08 | +0.02 (-0.04 to +0.08) |
+
+  Against the three criteria G nodded at (roadmap, stage 3) only jackpot passes. What
+  the numbers say: held, every core fires in both arms (the stage-2 finding "the cores
+  hardly fire" was "the cores are hardly held"); the x1.5 on the signature cannot be
+  reached where the core is automatic multipliers both arms hold (small: Hot Plate
+  prints 12.4 small prizes in 100 tickets against 8.5 across the forms, so x1.46 at
+  most; clearing: a box is 200 tickets whoever buys them); MIDDLE CUT waits on a prize
+  that comes 0.2 times in 100 tickets. **Open for G**: the acceptance restated as
+  (1) every core fires in 90% of runs, a card on a rare prize judged against the
+  control instead; (2) the return not under the control's, the lead recorded; the
+  x1.5 kept as a reported number. Until then the tool prints the criteria as nodded.
+- **For the balance pass (step 8), from the same table.** Held, the lines are far
+  apart: small 100%, jackpot 96%, clearing about 58%, batch 12%, money 6%. Except on
+  the jackpot line, play at the machine changes little (clearing's own play clears 4
+  points under blind's, within noise): pre-sold boxes and the held column (step 4)
+  are what will make the clearing bot's choices matter; it is to be looked at again
+  then. READ THE FLARE with BIG FISH at level 1 clears 96% (a target for step 3).
+- **Normal runs** (300, SIM seeds): small 22.0% (16.0% before), jackpot 2.0% (0.0%),
+  batch 1.3% (0.3%), clearing 0.0%, money 0.0%. "拿得到" (the share of runs holding
+  the perk when layer 1 ended): small PENNY JAR 34%, SCRAP DEALER 29%, the rest 0%;
+  clearing CLOSER 26%, FIRST PULL 3%; jackpot DUE A WIN 19%, BIG FISH 6%, READ THE
+  FLARE 0%; batch MAGNET 15%, STREAK 3%, ALL IN 0%; money SAVINGS 100%, NET WORTH and
+  MIDDLE CUT 0%. Not checked: `hunt` on against off with the core given (in normal
+  runs they are the same run, JACKPOT HUNTER is never held).
