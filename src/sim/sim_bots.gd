@@ -54,7 +54,7 @@ extends RefCounted
 ##            Each has 3 to 5 named variants of its params (VARIANTS: a line's strength is
 ##            its best variant, roadmap 七.4), and a core set for the given-cards test
 ##            (GIVEN, SIGNATURE: tools/sim_runs --given)
-##   churn    the exploit check for FIRST PULL x REGULAR (docs/perk_research.md 5.11):
+##   churn    a probe bot (PROBES, SimProbes), not a strategy bot: the exploit check for FIRST PULL x REGULAR (docs/perk_research.md 5.11):
 ##            buys both whenever it can pay for them, and at the machine buys CHURN
 ##            tickets of a column, then changes the box, again and again. Its return
 ##            counted with the fees (summary's `return_fees`) must stay at 1 or under
@@ -65,7 +65,12 @@ extends RefCounted
 
 ## The bots, in the order the tools print them. Keep this declaration on one line, in
 ## this form: .github/workflows/sim.yml's `plan` job reads the names out of it with sed.
-const NAMES := ["work", "blind", "borrow", "gamble", "perks", "skip", "build", "clearing", "jackpot", "small", "batch", "money", "churn"]
+const NAMES := ["work", "blind", "borrow", "gamble", "perks", "skip", "build", "clearing", "jackpot", "small", "batch", "money"]
+
+## The probe bots (SimProbes): bots built to break a rule, not to win. Their specs are in
+## SPECS like any bot's, so the loop plays them; they stay out of NAMES (the tables and
+## the CI matrix) and are named when asked for (`--bots=churn`) and in the baseline fixture.
+const PROBES := ["churn"]
 
 ## Every param a block reads, with the value a bot gets when its spec leaves it out.
 const PARAMS := {
@@ -107,7 +112,7 @@ const SPECS := {
 		"stacker", "fortune", "pity", "middle"], "shelf": [], "share": 0.6, "reserve": 100, "forms": []}},
 	"clearing": {"blocks": {"enter": "line", "perks": "core", "column": "clear", "stay": "clear"},
 		"params": {"engine": ["closer", "firstpull"], "perks": ["closer", "firstpull", "assembly", "snowball"], "shelf": [],
-		"share": 0.6, "forms": [], "stop": 0.3}},
+		"share": 0.6, "forms": [], "stop": 1.0}},
 	"jackpot": {"blocks": {"enter": "line", "perks": "core", "column": "top", "stay": "hunt", "box": "flare"},
 		"params": {"engine": ["bigfish", "pity"], "perks": ["bigfish", "pity", "hunter"], "shelf": ["regular", "read1"],
 		"share": 0.6, "forms": ["catch", "kabawk"], "batch": 5, "stop": 0.5, "fee_max": 30, "hunt": 200, "work_below": 300}},
@@ -119,7 +124,7 @@ const SPECS := {
 		"shelf": ["bet"], "share": 0.6, "forms": ["plate", "peckeye", "nugget"], "stop": 1.0, "push": 0.5, "work_below": 300}},
 	"money": {"blocks": {"enter": "line", "perks": "core", "stay": "floor"},
 		"params": {"engine": ["savings", "middle"], "perks": ["worth", "middle"], "shelf": ["savings"], "share": 0.6,
-		"forms": ["spur"], "batch": 5, "floor": 100, "stop": 0.5}},
+		"forms": ["spur"], "batch": 5, "floor": 150, "stop": 0.5}},
 	"churn": {"blocks": {"perks": "line", "box": "churn"}, "params": {"perks": ["firstpull"], "shelf": ["regular"],
 		"share": 1.0, "forms": [], "batch": SimData.CHURN}},
 }
@@ -138,7 +143,7 @@ const VARIANTS := {
 	"batch": {"push50": {"params": {"push": 0.5}}, "push25": {"params": {"push": 0.25}},
 		"work0": {"params": {"work_below": 0}}, "paid5": {"params": {"push_paid": 5}}, "stop50": {"params": {"stop": 0.5}}},
 	"money": {"floor100": {"params": {"floor": 100}}, "floor50": {"params": {"floor": 50}},
-		"floor150": {"params": {"floor": 150}}, "nostop": {"params": {"stop": 1.0}}, "batch10": {"params": {"batch": 10}}},
+		"nostop": {"params": {"stop": 1.0}}, "batch10": {"params": {"batch": 10}}},
 }
 
 

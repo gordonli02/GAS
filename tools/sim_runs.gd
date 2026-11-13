@@ -41,8 +41,14 @@ extends Node
 ## config and writes the rows (RunSim.baseline_row) as JSON to <path> (res://, user:// or
 ## a file path; a relative path is from the project folder), printing one timing line a
 ## bot. That file, tests/fixtures/sim_baseline.json, freezes the bots (test_run_sim.gd).
-## With --list-bots it prints the bots' names (RunSim.BOTS, src/sim/sim_bots.gd), one a
-## line, and quits.
+## With --list-bots it prints the strategy bots' names (RunSim.BOTS, src/sim/sim_bots.gd;
+## not the probe bots, SimBots.PROBES), one a line, and quits. --bots=churn still plays
+## a probe bot in the table when asked for by name.
+## With --probes the tool does only the adversarial layer (SimProbes; docs/roadmap.md 七):
+## every probe is run (--probe-runs=N whole runs of its bot, default 100; --churn-boxes=N
+## boxes a column of its fixed-perk part, default 200) and printed with its rule, its
+## numbers and PASS / FAIL. Unlike the other modes this one is a check: the exit code is
+## 1 if any probe fails.
 ## With --given the tool does only the given-cards test (SimReport.given; docs/roadmap.md
 ## M9.8 step 1 stage 3, "用得上") for the line bots of --bots= (default the five): each
 ## seed played by the line bot holding its core (SimBots.GIVEN) and buying no perks, and
@@ -50,7 +56,8 @@ extends Node
 ## of the three criteria and the line. Exit code 0 either way: it is a report.
 ## With --variants the table is of every named variant of the line bots of --bots=
 ## (SimBots.VARIANTS; default the five), a row each (<bot>/<variant>) beside the bot's
-## own spec, paired with it on the same seeds, and the best by clear rate named.
+## own spec, paired with it on the same seeds, and the best by clear rate named; on a tie
+## the higher layer-1 rate decides, then the higher return, and the line says which.
 ## In --detail's trigger table, L1 / L2 / L3 ("拿得到", roadmap 十三.10): of the runs
 ## that played the layer, the share holding the perk when it ended there.
 
@@ -75,7 +82,7 @@ func _run() -> void:
 	var bots: Array = RunSim.BOTS
 	var prefix := "SIM"
 	var ev_boxes := 6
-	var churn_boxes := 200
+	var churn_boxes := SimProbes.BOXES
 	var form_boxes := 300
 	var push_boxes := 100
 	var baseline := ""
@@ -86,6 +93,8 @@ func _run() -> void:
 	var against := ""
 	var given := false
 	var variants := false
+	var probes := false
+	var probe_runs := SimProbes.RUNS
 	var bots_set := false
 	for a in OS.get_cmdline_user_args():
 		if a == "--detail":
@@ -94,6 +103,10 @@ func _run() -> void:
 			given = true
 		elif a == "--variants":
 			variants = true
+		elif a == "--probes":
+			probes = true
+		elif a.begins_with("--probe-runs="):
+			probe_runs = maxi(1, a.trim_prefix("--probe-runs=").to_int())
 		elif a == "--early":
 			early = true
 		elif a.begins_with("--save="):
@@ -131,7 +144,12 @@ func _run() -> void:
 		return
 	var config := RunConfig.standard()
 	if baseline != "":
-		get_tree().quit(_write_baseline(baseline, bots, baseline_runs, res.pack.forms, config))
+		# The fixture freezes the probe bots too (SimBots.PROBES), unless --bots= names some.
+		var frozen: Array = bots if bots_set else RunSim.BOTS + SimBots.PROBES
+		get_tree().quit(_write_baseline(baseline, frozen, baseline_runs, res.pack.forms, config))
+		return
+	if probes:
+		get_tree().quit(_probes(probe_runs, churn_boxes, res.pack.forms))
 		return
 	var lines: Array = (bots if bots_set else SimBots.GIVEN.keys()).filter(func(b): return SimBots.GIVEN.has(b))
 	if given:
@@ -152,7 +170,7 @@ func _run() -> void:
 	var rates := {}
 	var rows := []
 	for bot in bots:
-		if not RunSim.BOTS.has(bot):
+		if not RunSim.BOTS.has(bot) and not SimBots.PROBES.has(bot):
 			print("unknown bot: " + str(bot))
 			continue
 		var t0 := Time.get_ticks_msec()
@@ -217,7 +235,7 @@ func _run() -> void:
 func _write_baseline(path: String, bots: Array, runs: int, forms: Array, config: RunConfig) -> int:
 	var out := {}
 	for bot in bots:
-		if not RunSim.BOTS.has(bot):
+		if not RunSim.BOTS.has(bot) and not SimBots.PROBES.has(bot):
 			print("unknown bot: " + str(bot))
 			return 1
 		var t0 := Time.get_ticks_msec()
@@ -235,6 +253,26 @@ func _write_baseline(path: String, bots: Array, runs: int, forms: Array, config:
 	f.close()
 	print("wrote " + file_path)
 	return 0
+
+
+## --probes: every probe of SimProbes run and printed, PASS or FAIL each. Returns the
+## exit code: 1 if any failed.
+func _probes(runs: int, boxes: int, forms: Array) -> int:
+	print("probes (SimProbes, the adversarial layer): %d runs a probe bot, %d boxes a column at fixed perks" % [runs, boxes])
+	var failed := []
+	for p in SimProbes.all():
+		var t0 := Time.get_ticks_msec()
+		var r := SimProbes.run(p.name, forms, runs, boxes)
+		print("
+%s: %s" % [p.name, p.rule])
+		print("  how: " + p.how)
+		print(r.text)
+		print("  %s %s (%.1f s)" % [p.name, "PASS" if r.ok else "FAIL", (Time.get_ticks_msec() - t0) / 1000.0])
+		if not r.ok:
+			failed.append(p.name)
+	print("
+probes: %s" % ("all passed" if failed.is_empty() else "FAILED: " + ", ".join(failed)))
+	return 0 if failed.is_empty() else 1
 
 
 ## The ordering's comparisons among the bots run (`rates`: bot -> percent cleared):
@@ -388,6 +426,7 @@ func _variants(lines: Array, runs: int, prefix: String, forms: Array, config: Ru
 			var s := SimReport.summary(SimBots.spec(line, SimBots.VARIANTS[line][v]), forms, runs, prefix, config)
 			rows.append(["%s/%s" % [line, v], s, SimBots.VARIANTS[line][v]])
 		var best: Array = rows[0]
+		var decided := "clear rate"
 		for row in rows:
 			var s: Dictionary = row[1]
 			var p := SimReport.paired(s, own)
@@ -395,9 +434,18 @@ func _variants(lines: Array, runs: int, prefix: String, forms: Array, config: Ru
 			print("%-20s %6.1f%% %5.1f-%5.1f%% %6.1f%% %7.3f %5.1f  %s" % [row[0], s.cleared * 100.0, s.wilson[0] * 100.0,
 				s.wilson[1] * 100.0, s.layer_rates[0] * 100.0, s["return"], s.perks, pair])
 			var b: Dictionary = best[1]
-			if s.cleared > b.cleared or s.cleared == b.cleared and s["return"] > b["return"]:
+			var by := ""
+			if s.cleared > b.cleared:
+				by = "clear rate"
+			elif s.cleared == b.cleared:
+				if s.layer_rates[0] > b.layer_rates[0]:
+					by = "the layer-1 rate, a tie on clear rate"
+				elif s.layer_rates[0] == b.layer_rates[0] and s["return"] > b["return"]:
+					by = "the return, a tie on clear and layer-1 rate"
+			if by != "":
 				best = row
-		print("best of %s by clear rate: %s" % [line, best[0]])
+				decided = by
+		print("best of %s by clear rate: %s (decided by %s)" % [line, best[0], decided])
 		if detail:
 			for row in rows:
 				print("  %s: %s" % [row[0], str(row[2]) if not row[2].is_empty() else SimBots.describe(SimBots.spec(line))])

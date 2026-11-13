@@ -26,13 +26,13 @@ func test_bots_finish_and_balance() -> void:
 		return
 	check(RunSim.BOTS.has("gamble") and not RunSim.BOTS.has("mixed"), "mixed became gamble")
 	for line in SimBots.SPECS:
-		check(RunSim.BOTS.has(line), "%s is a bot" % line)
+		check(RunSim.BOTS.has(line) or SimBots.PROBES.has(line), "%s is a bot" % line)
 		var s := SimBots.spec(line)
 		for id in s.params.perks + s.params.shelf:
 			check(not Catalog.standard().perk(id).is_empty(), "%s: %s is in the catalog" % [line, id])
 			check(not Catalog.meta(Catalog.standard().perk(id)), "%s: %s is sold in a run (not parked for M13)" % [line, id])
 	var n := 6 if full else 2
-	for bot in RunSim.BOTS:
+	for bot in RunSim.BOTS + SimBots.PROBES:
 		if bot == "work":
 			continue
 		for i in n:
@@ -82,7 +82,7 @@ func test_bots_never_stand_at_the_machine_unable_to_buy() -> void:
 	if pack == null:
 		return
 	var n := 8 if full else 3
-	for bot in RunSim.BOTS:
+	for bot in RunSim.BOTS + SimBots.PROBES:
 		if bot == "work":
 			continue
 		var idle := 0
@@ -110,19 +110,30 @@ func test_bots_never_stand_at_the_machine_unable_to_buy() -> void:
 
 func test_churn_does_not_pay() -> void:
 	# FIRST PULL x REGULAR (docs/perk_research.md 5.11): 20 tickets a box, then a new
-	# box; the fee's floor keeps it at 1 or under, counted with the fees.
+	# box; the fee's floor keeps it at 1 or under, counted with the fees. Through
+	# SimProbes: the fixed perks, and whole runs of the churn bot holding both perks.
 	var pack := core_pack()
 	if pack == null:
 		return
-	var s := RunSim.summary("churn", pack.forms, 60 if full else 20, "CH")
-	note("churn bot: return %.3f, with fees %.3f, fees $%.0f a run" % [s["return"], s.return_fees, s.fees])
-	check(s.return_fees <= 1.0, "the churn bot's return with fees is 1 or under (%.3f)" % s.return_fees)
 	var boxes := 60 if full else 20
-	var fixed := SimData.churn_return(pack.forms, {"firstpull": 2, "regular": 2}, boxes)
-	note("churn at FIRST PULL 2 + REGULAR 2: return %.3f, with fees %.3f, fee $%d" % [fixed["return"], fixed.return_fees, fixed.fee])
+	var r := SimProbes.run("churn", pack.forms, 60 if full else 20, boxes)
+	note(r.text)
+	check(r.ok, "the churn probe holds")
+	var n: Dictionary = r.numbers
+	check(n.whole_return_fees <= 1.0, "the churn bot holding FIRST PULL 2 + REGULAR 2: return with fees is 1 or under (%.3f)" % n.whole_return_fees)
+	eq(n.sets.size(), SimData.CHURN_SETS.size(), "every churn set is checked")
+	for row in n.sets:
+		check(row.return_fees <= 1.0, "%s: return with fees is 1 or under (%.3f)" % [str(row.levels), row.return_fees])
+	var fixed: Dictionary = n.sets[n.sets.size() - 1]
+	eq(fixed.levels, {"firstpull": 2, "regular": 2}, "the last set is FIRST PULL 2 + REGULAR 2")
 	eq(fixed.fee, 100, "the fee is the floor")
 	check(fixed["return"] > 2.0, "FIRST PULL pays on the first twenty (%.3f)" % fixed["return"])
 	check(fixed.return_fees <= 1.0, "but not once the fee is counted (%.3f)" % fixed.return_fees)
+	# The bot really holds the perks (before `given`, it never held FIRST PULL in a run).
+	var spec := SimProbes.churn_given_spec()
+	eq(spec.params.given, {"firstpull": 2, "regular": 2}, "the probe's bot is given FIRST PULL 2 + REGULAR 2")
+	check(SimBots.PROBES.has("churn") and not SimBots.NAMES.has("churn"), "churn is a probe bot, not a strategy bot")
+	check(not SimProbes.find("churn").is_empty() and SimProbes.find("nobody").is_empty(), "find: a probe by name")
 
 
 func test_summary_carries_the_targets_numbers() -> void:
@@ -423,10 +434,13 @@ func test_bots_share_the_dice() -> void:
 ## spec is plain data, a fresh copy, and can be overridden by a named variant.
 func test_bot_specs_are_data() -> void:
 	eq(RunSim.BOTS, SimBots.NAMES, "RunSim.BOTS is the table's names")
-	eq(SimBots.NAMES.size(), 13, "thirteen bots")
+	eq(SimBots.NAMES.size(), 12, "twelve strategy bots")
+	eq(SimBots.PROBES, ["churn"], "one probe bot")
 	for bot in SimBots.SPECS:
-		check(SimBots.NAMES.has(bot), "%s: a spec for a named bot" % bot)
-	for bot in SimBots.NAMES:
+		check(SimBots.NAMES.has(bot) or SimBots.PROBES.has(bot), "%s: a spec for a named bot or a probe bot" % bot)
+	for bot in SimBots.PROBES:
+		check(not SimBots.NAMES.has(bot), "%s: a probe bot is not a strategy bot" % bot)
+	for bot in SimBots.NAMES + SimBots.PROBES:
 		var own: Dictionary = SimBots.SPECS.get(bot, {})
 		check(SimBots.SPECS.has(bot), "%s has a spec" % bot)
 		for k in own:

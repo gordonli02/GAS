@@ -85,6 +85,10 @@ jobs:
           set -o pipefail
           timeout 290m godot --headless --path . res://tools/sim_runs.tscn -- \
             --bots=work --runs=1 --seed=${{ inputs.seed }} ${{ inputs.extra_args }} 2>&1 | tee sim-tables.log
+          # the adversarial probes (SimProbes): the step fails when one fails, and its
+          # output goes to the same log, so the summary's Tables block shows it
+          timeout 290m godot --headless --path . res://tools/sim_runs.tscn -- \
+            --probes ${{ inputs.extra_args }} 2>&1 | tee -a sim-tables.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
