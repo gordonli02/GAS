@@ -32,7 +32,7 @@ const EV_SETS := [
 	# The combo table (docs/perk_research.md section 5 part 14), a row each, for its
 	# 期望回报 column.
 	{"read1": 1, "bet": 3, "bigfish": 2},                                 # 猎大奖 (REEL IN is an item: not here)
-	{"closer": 2, "firstpull": 2, "regular": 2, "read3": 1},              # 清盒
+	{"closer": 2, "firstpull": 2, "regular": 2, "readleft": 1},           # 清盒 (the chain's top; was HOT OR COLD)
 	{"magnet": 2, "penny": 2, "stacker": 1, "multi": 2, "combo": 2},      # 小奖 (M13)
 	{"magnet": 2, "penny": 2, "stacker": 1},                              # 小奖 in a run now
 	{"insurance": 2, "pity": 2, "form": "kabawk"},                        # 保险 (on Ka-Bawk!)
@@ -195,11 +195,9 @@ const FLOW_CUTS := [25, 50, 75]
 ## prize is still in the box (READ THE FLARE)}.
 static func flow_cut(box: TicketBox, cut: int) -> Dictionary:
 	cut = clampi(cut, 0, box.size)
-	var past_money := 0
-	for i in cut:
-		past_money += int(box.tickets[i].prize)
 	var was := box.cursor
 	box.cursor = cut
+	var past_money := int(BoxReading.flow(box).paid)   # what READ THE FLOW says it paid
 	var r := BoxReading.read(box)
 	box.cursor = was
 	var past_cost := cut * box.form.price

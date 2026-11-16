@@ -218,11 +218,11 @@ func _run() -> void:
 	await _shot("07b_shop_today")
 	cash = e.cash
 	# Perks for the checks below (the offers are random): LUCKY STREAK, REGULAR, CLOSER
-	# and the reading chain to HOT OR COLD.
-	for id in ["luck", "regular", "closer", "read1", "read2", "read3"]:
+	# and the reading chain to ROUGH COUNT.
+	for id in ["luck", "regular", "closer", "read1", "flow", "readleft"]:
 		run.perks[id] = 1
 	run.apply(game.machine)
-	_expect(game.machine.luck == 0.3 and run.change_fee() == 12 and run.reading() == 3, "the machine has the luck; NEW BOX half price; reading at 3")
+	_expect(game.machine.luck == 0.3 and run.change_fee() == 12 and run.reading() == BoxReading.LEFT, "the machine has the luck; NEW BOX half price; reading at ROUGH COUNT")
 	run.shelf = ["peek", "coin", "magnifier", "skip"]
 	game.phone.show_state(game.phone_state())
 	await _wait(0.2)
@@ -266,21 +266,21 @@ func _run() -> void:
 	_expect(run.held("peek") == 0 and game.tray.is_empty() and game.aim == "", "column 2 is read, nothing sold")
 	_expect(game.machine_view._lcd_sub.text.begins_with("NEXT 10"), "the LCD: %s" % game.machine_view._lcd_sub.text)
 	await _shot("07f_peek")
-	# Reading at level 3: how the rest feels, and whether a top prize is in.
+	# Reading at ROUGH COUNT: whether a top prize is in, and about how many are left.
 	await _wait(4.0)
 	game._info_column = 0
 	game._info_until = game._time + 6.0
 	await _wait(0.3)
 	var lcd: String = game.machine_view._lcd_sub.text
-	_expect(["HOT", "FAIR", "COLD"].any(func(w): return lcd.begins_with(w)) and lcd.contains("TOP"), "reading: %s" % lcd)
+	_expect(lcd.contains("TOP"), "reading: %s" % lcd)
 	await _shot("07g_reading")
-	# The top level: the notepad keeps a line for every box (developer panel: every perk at the top).
+	# Every perk at the top (developer panel).
 	game.dev_run("perks")
 	run.perks.erase("allin")   # its card would stop the drive (tests/test_perks has ALL IN)
 	_key(KEY_B)
 	await _wait(1.4)
-	_expect(run.reading() == 5 and not game.at_machine, "every perk at the top; at the table")
-	await _shot("07g2_notepad_boxes")
+	_expect(run.reading() == BoxReading.TOP_LEVEL and not game.at_machine, "every perk at the top; at the table")
+	await _shot("07g2_every_perk")
 	_key(KEY_SPACE)
 	await _wait(1.2)
 	# Calling the lender: one more day for this layer.
@@ -329,7 +329,7 @@ func _run() -> void:
 	_expect(e.cash + e.credit == before.cash + before.credit and run.due() == before.due and run.day == before.day, "money, debt and day as left")
 	_expect(run.stats.tickets == before.tickets and game.machine.boxes[2].seed == before.seed and game.piled() == before.pile, "tickets counted, boxes and pile as left")
 	_expect(e.balanced(), "ledger balanced after the reload")
-	_expect(run.reading() == 5 and run.held("coin") == 1 and run.extra_days == 1 and game.machine.luck == 0.9, "perks, items and the extra day kept")
+	_expect(run.reading() == BoxReading.TOP_LEVEL and run.held("coin") == 1 and run.extra_days == 1 and game.machine.luck == 0.9, "perks, items and the extra day kept")
 
 	# HIGH ROLLER is the bet (fixed, G): the panel's perks bought it to the top, x10, and
 	# there is no key to change it. The rest of the drive plays at x1 (the perk taken off).

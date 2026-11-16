@@ -48,7 +48,6 @@ var perks := {}            ## perk id -> level bought
 var items := {}            ## item id -> how many are held
 var extra_days := 0        ## days this layer was given on top of its own (a service)
 var services := {}         ## service id -> times bought in this layer
-var reports := {}          ## BOX REPORT: form uid -> seed of the box read in full
 var offers: Array = []     ## the cards of the round up now, perk ids (a held perk's id on a reward round is its free upgrade)
 var offers_open := false   ## a round is up (its cards in offers), waiting for its pick
 var offer_reward := false  ## the round up is a reward round (free pick, no reroll)
@@ -432,7 +431,6 @@ func change_box(e: Economy, machine: MachineLogic, i: int, form: FormDef = null)
 		return false
 	if not playing() or not e.pay(fee):
 		return false
-	reports.erase(machine.forms[i].uid())
 	machine.change_box(i, form)
 	stats.box_changes += 1
 	stats.fees += fee
@@ -471,7 +469,7 @@ func can_pay(e: Economy) -> bool:
 ## Pays the layer in full and moves on at once: the next layer starts on a new day,
 ## or the run is cleared. Days left over are counted as spared. With SEAL and the
 ## machine given, the boxes the player chose (`keep`: column indices) come along, or
-## the hottest when none were chosen (new_machine puts them in). A layer paid that is
+## the ones with the most tickets left when none were chosen (new_machine puts them in). A layer paid that is
 ## not the last gives reward rounds, before the new layer's morning round (deal_reward):
 ## one, and one more for every day paid early (early_days).
 func pay(e: Economy, m: MachineLogic = null, keep: Array = []) -> bool:
@@ -501,7 +499,6 @@ func pay(e: Economy, m: MachineLogic = null, keep: Array = []) -> bool:
 	loan_due = 0
 	extra_days = 0
 	services = {}
-	reports = {}
 	layer_losers = 0
 	layer_tops = 0
 	story = "twist"
@@ -531,14 +528,17 @@ func seal_choices(m: MachineLogic) -> Array:
 
 ## SEAL: up to the perk's count of boxes with tickets left are kept (form, seed, where
 ## they stand and their log) for the next layer's machine: the columns in `keep` first
-## (the player's choice), then the ones with the most prize money left per ticket.
+## (the player's choice), then the ones with the most tickets left (ties: the lower
+## column). Not by what the rest would pay: that would read what is left for the player
+## (docs/roadmap.md 数值方向 三.10).
 func _seal(m: MachineLogic, keep: Array = []) -> void:
 	var ranked := []
 	for i in m.boxes.size():
 		var box: TicketBox = m.boxes[i]
 		if box.cursor < box.size:
-			ranked.append({"i": i, "heat": float(BoxReading.read(box).heat), "kept": keep.has(i)})
-	ranked.sort_custom(func(a, b): return a.kept and not b.kept or a.kept == b.kept and a.heat > b.heat)
+			ranked.append({"i": i, "left": box.size - box.cursor, "kept": keep.has(i)})
+	ranked.sort_custom(func(a, b): return a.kept != b.kept and a.kept \
+		or a.kept == b.kept and (a.left > b.left or a.left == b.left and a.i < b.i))
 	sealed = []
 	for k in mini(effect("seal"), ranked.size()):
 		var box: TicketBox = m.boxes[ranked[k].i]
@@ -670,9 +670,15 @@ func luck() -> float:
 	return effect("luck") / 100.0
 
 
-## The box-reading level (BoxReading), 0 without the perk.
+## The box-reading level (BoxReading.FLARE, LEFT): the highest a perk of the chain held
+## reads at, 0 without one. The highest rather than the sum, so a level put between two
+## others later changes the numbers in BoxReading and nothing here.
 func reading() -> int:
-	return effect("reading")
+	var lv := 0
+	for p in catalog.perks:
+		if p.effect == "reading" and level(p.id) > 0:
+			lv = maxi(lv, int(p.levels[mini(level(p.id), p.levels.size()) - 1].value))
+	return lv
 
 
 ## The machine's bet: HIGH ROLLER's value at the level bought, 1 without it. Fixed
@@ -1546,8 +1552,7 @@ func peek_n() -> int:
 
 ## Uses up one item that is used on a column on column `i` of the machine. Returns what
 ## it found: PEEK {winners, of} (under MARKED the winners of the next few come first);
-## MAGNIFIER {wins}; BOX REPORT the reading (that box then reads at level 4 until it
-## leaves); FAST FORWARD {skipped}; SHUFFLE {shuffled}; LUCKY COIN {on}; MOVER
+## MAGNIFIER {wins}; FAST FORWARD {skipped}; SHUFFLE {shuffled}; LUCKY COIN {on}; MOVER
 ## {with: the other column}; SURE THING and REEL IN {moved: whether a prize was moved,
 ## wins: true}; QUEUE JUMP {moved: how many}; {} if none is held (a SURE item with no
 ## prize left to move is not used up).
@@ -1563,9 +1568,6 @@ func use_item(item_id: String, machine: MachineLogic, i: int) -> Dictionary:
 			out = {"winners": BoxReading.winners_next(box, peek_n()), "of": peek_n()}
 		"magnifier":
 			out = {"wins": BoxReading.winners_next(box, 1) > 0}
-		"report":
-			reports[box.form.uid()] = box.seed
-			out = BoxReading.read(box)
 		"skip":
 			out = {"skipped": machine.skip(i, int(catalog.item("skip").get("value", 10)))}
 		"shuffle":
@@ -1602,14 +1604,14 @@ func use_item(item_id: String, machine: MachineLogic, i: int) -> Dictionary:
 	return out
 
 
-## Can an item used from the phone be used now (TIP-OFF, HAPPY HOUR, SAFETY NET and a
-## RETURN SLIP on a day of play; OVERTIME before the day is chosen or after a shift,
-## once; COPIER with something to copy and room)?
+## Can an item used from the phone be used now (HAPPY HOUR, SAFETY NET and a RETURN
+## SLIP on a day of play; OVERTIME before the day is chosen or after a shift, once;
+## COPIER with something to copy and room)?
 func can_use_now(item_id: String) -> bool:
 	if not playing() or held(item_id) <= 0:
 		return false
 	match item_id:
-		"tip", "slip":
+		"slip":
 			return today == "play"
 		"happy":
 			return today == "play" and not happy
@@ -1622,19 +1624,15 @@ func can_use_now(item_id: String) -> bool:
 	return false
 
 
-## Uses an item from the phone. TIP-OFF returns {column: machine index of the hottest
-## box}; COPIER {copied: item id}; a RETURN SLIP {on: true} (the caller then gives the
-## tray back with refund_tickets at 100); OVERTIME {on: true} (a shift already worked is
-## paid again now, so `e` is needed then); the others {on: true}. {} when it cannot.
-func use_now(item_id: String, machine: MachineLogic = null, e: Economy = null) -> Dictionary:
+## Uses an item from the phone. COPIER returns {copied: item id}; a RETURN SLIP {on:
+## true} (the caller then gives the tray back with refund_tickets at 100); OVERTIME {on:
+## true} (a shift already worked is paid again now, so `e` is needed then); the others
+## {on: true}. {} when it cannot.
+func use_now(item_id: String, e: Economy = null) -> Dictionary:
 	if not can_use_now(item_id):
 		return {}
 	var out := {}
 	match item_id:
-		"tip":
-			if machine == null:
-				return {}
-			out = {"column": BoxReading.hottest(machine.boxes)}
 		"happy":
 			happy = true
 			out = {"on": true}
@@ -1656,15 +1654,6 @@ func use_now(item_id: String, machine: MachineLogic = null, e: Economy = null) -
 			out = {"copied": last_item}
 	_use_up(item_id)
 	return out
-
-
-## The reading level of the box in column `i`: the perk's, or level 4 for a box read by
-## a BOX REPORT.
-func reading_of(machine: MachineLogic, i: int) -> int:
-	var box: TicketBox = machine.boxes[i]
-	if str(reports.get(box.form.uid(), "")) == box.seed:
-		return maxi(reading(), 4)
-	return reading()
 
 
 # --- contacts --------------------------------------------------------------------------
@@ -1706,7 +1695,7 @@ const _BOOLS := ["offers_open", "offer_reward", "happy", "safety", "sure_armed",
 func to_dict() -> Dictionary:
 	var d := {"seed": seed, "scenes": scenes.duplicate(), "today": today, "status": status, "story": story, "scrap": scrap,
 		"stats": stats.duplicate(), "perks": perks.duplicate(), "items": items.duplicate(),
-		"services": services.duplicate(), "reports": reports.duplicate(), "offers": offers.duplicate(),
+		"services": services.duplicate(), "offers": offers.duplicate(),
 		"shelf": shelf.duplicate(), "upgrades": upgrades.duplicate(), "last_item": last_item, "forms_today": forms_today.duplicate(),
 		"coin_on": coin_on.duplicate(), "sealed": sealed.duplicate(true), "last_window": last_window.duplicate()}
 	for k in _INTS + _BOOLS:
@@ -1748,10 +1737,8 @@ static func from_dict(d: Dictionary, run_config: RunConfig) -> RunState:
 				if typeof(sizes) == TYPE_ARRAY and sizes.size() == 3:
 					kept.sizes = [int(sizes[0]), int(sizes[1]), int(sizes[2])]
 				r.sealed.append(kept)
-	var rep = d.get("reports", {})
-	if typeof(rep) == TYPE_DICTIONARY:
-		for k in rep:
-			r.reports[str(k)] = str(rep[k])
+	# Perks and items no longer in the catalog are dropped (READ THE BOX .. KEEP BOOKS,
+	# TIP-OFF and BOX REPORT left it at M9.8 step 3), and so is an old save's "reports".
 	for id in r.perks.keys():
 		var p := r.catalog.perk(id)
 		if p.is_empty():

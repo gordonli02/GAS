@@ -123,7 +123,7 @@ static func column(ctx: SimCtx) -> int:
 		"clear":
 			return _fewest_left(ctx, _cols(ctx, false))
 		"top":
-			if ctx.run.reading() < 1:
+			if ctx.run.reading() < BoxReading.FLARE:
 				return _pick(ctx)
 			var c := _top_column(ctx)
 			if c >= 0:
@@ -206,7 +206,7 @@ static func _top_column(ctx: SimCtx) -> int:
 	for any in [false, true]:
 		var cols := []
 		for i in _cols(ctx, any):
-			if ctx.run.reading_of(ctx.m, i) >= 1 and top_in(ctx, i):
+			if ctx.run.reading() >= BoxReading.FLARE and top_in(ctx, i):
 				cols.append(i)
 		if not cols.is_empty():
 			return _fewest_left(ctx, cols)
@@ -777,7 +777,7 @@ static func box(ctx: SimCtx) -> void:
 			return
 		"flare":
 			var m := ctx.m
-			if ctx.run.reading_of(m, ctx.col) < 1 or m.boxes[ctx.col].cursor >= m.boxes[ctx.col].size \
+			if ctx.run.reading() < BoxReading.FLARE or m.boxes[ctx.col].cursor >= m.boxes[ctx.col].size \
 					or top_in(ctx, ctx.col):
 				return
 			var c := _top_column(ctx)

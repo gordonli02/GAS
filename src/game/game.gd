@@ -94,7 +94,7 @@ var _leaving := false               ## run: the LEAVE card is up
 var _trashing := false              ## the card asking before tickets go in the trash can is up
 var _card_busy := false             ## run: a card key is being carried out
 var _day := {}                      ## run: the ledger when today's play began {spent, won}
-var aim := ""                       ## run: an item used on a column (PEEK, BOX REPORT) waits for a column press
+var aim := ""                       ## run: an item used on a column (PEEK, LUCKY COIN) waits for a column press
 var _picking := -1                  ## run, PICKY: the machine column whose new box waits for a form (the card is up)
 var _sealing := false               ## run, SEAL: the card asking which boxes come along is up
 var _seal_keep: Array = []          ## run, SEAL: the machine columns chosen so far
@@ -243,9 +243,6 @@ func press_machine(i: int) -> void:
 					say("NEXT %d: %d WIN", [got.of, got.winners], 4.0)
 				"magnifier":
 					say("NEXT ONE WINS" if got.wins else "NEXT ONE LOSES", [], 3.0)
-				"report":
-					say("BOX READ", [], 1.2)
-					_info_until = _time + 8.0
 				"skip":
 					Sfx.play("toss")
 					say("SKIPPED %d", [got.skipped], 2.5)
@@ -1385,14 +1382,14 @@ func _item_desc(it: Dictionary) -> String:
 
 
 ## An item can be used now: one used on a column at the machine on a day of play, one
-## used from the phone when its rule allows (TIP-OFF at the machine).
+## used from the phone when its rule allows.
 func _can_use(it: Dictionary) -> bool:
 	if not run.playing() or run.held(it.id) <= 0:
 		return false
 	if it.use == "column":
 		return run.today == "play" and at_machine
 	if it.use == "now":
-		return run.can_use_now(it.id) and (it.id != "tip" or at_machine) and (it.id != "slip" or _unopened() > 0)
+		return run.can_use_now(it.id) and (it.id != "slip" or _unopened() > 0)
 	return false
 
 
@@ -1408,8 +1405,6 @@ func _use_why(it: Dictionary) -> String:
 		"offer":
 			return tr("USED FROM THE OFFERS CARD")
 	match str(it.id):
-		"tip":
-			return tr("AT THE MACHINE, ON A DAY OF PLAY")
 		"happy", "safety":
 			return tr("ON A DAY OF PLAY")
 		"overtime":
@@ -1450,8 +1445,8 @@ func _on_phone(action: String, id: String) -> void:
 
 ## A held item's USE key, on the phone's ITEMS page or on the item picker (one path for
 ## both, so an item does the same from either). A column item then waits for a column
-## press at the machine (aim); TIP-OFF names the hottest column. Both put the phone and
-## the picker away; the others leave them up with the new numbers.
+## press at the machine (aim) and puts the phone and the picker away; the others leave
+## them up with the new numbers.
 func use_item(id: String) -> void:
 	var it := run.catalog.item(id) if run != null else {}
 	var ok := false
@@ -1464,7 +1459,7 @@ func use_item(id: String) -> void:
 		_put_items_away()
 		return
 	else:
-		var got := run.use_now(id, machine, economy)
+		var got := run.use_now(id, economy)
 		ok = not got.is_empty()
 		match id:
 			"slip":
@@ -1482,16 +1477,6 @@ func use_item(id: String) -> void:
 					hud.set_status("RETURNED %d · $%d BACK", [gone.size(), back])
 			"overtime":
 				hud.set_status("OVERTIME ON")
-			"tip":
-				if ok:
-					var col := columns.find(int(got.column))
-					_put_items_away()
-					say("HOTTEST: COLUMN %d", [col + 1], 4.0)
-					_info_column = col
-					_info_until = _time + 4.0
-					Sfx.play("toss")
-					_store_session()
-					return
 			"happy":
 				hud.set_status("HAPPY HOUR")
 			"safety":
@@ -2097,16 +2082,13 @@ func _refresh_ui() -> void:
 	show_item_tip()
 	var n := economy.net()
 	var net := tr("NET %s") % (("+" if n > 0 else "-" if n < 0 else "") + Hud._money(absi(n)))
-	if run != null and run.reading() >= BoxReading.BOOKS:
-		notepad.show_ledger(_box_rows())
-	else:
-		notepad.show_ledger([
-			tr("OPENED %s") % Hud._num(economy.opened),
-			tr("WINS %s") % Hud._num(economy.wins),
-			tr("SPENT %s") % Hud._money(economy.spent),
-			tr("WON %s") % Hud._money(economy.won),
-			net,
-		])
+	notepad.show_ledger([
+		tr("OPENED %s") % Hud._num(economy.opened),
+		tr("WINS %s") % Hud._num(economy.wins),
+		tr("SPENT %s") % Hud._money(economy.spent),
+		tr("WON %s") % Hud._money(economy.won),
+		net,
+	])
 	# The third line names a column: the one under the pointer, or one just pressed.
 	var named := hover_column if hover_column >= 0 else _info_column if _time < _info_until else -1
 	var reading := _reading_lines(named)
@@ -2127,7 +2109,7 @@ func _refresh_ui() -> void:
 		# The form's tags (G: the form says what it is; the perks never name forms).
 		if run != null and not f.tags.is_empty():
 			info += " · " + " · ".join(f.tags.map(func(t): return tr(t)))
-		# A full reading takes turns with the name on the third line.
+		# A second reading line takes turns with the name on the third line.
 		if reading.size() > 1 and fmod(_time, 4.0) >= 2.0:
 			info = str(reading[1])
 	var top := "$ %7.2f %s" % [economy.credit, tr("CREDIT")]
@@ -2165,37 +2147,25 @@ func _refresh_ui() -> void:
 	hud.set_bill_window(at_machine and camera.cam > 0.97, economy, machine.busy(), change, machine.min_price())
 
 
-## Run: what reading a column's box tells (BoxReading), as the LCD's status line and,
-## from level 3, a second line that takes turns with the name; [] without a reading.
+## Run: what reading a column's box tells (BoxReading), as the LCD's status line (the
+## flare, and from ROUGH COUNT about how many are left) and, from READ THE FLOW, a second
+## line that takes turns with the name (about how many were sold, what they paid); []
+## without a reading. Never what the rest would pay (docs/roadmap.md 数值方向 三).
 func _reading_lines(col: int) -> Array:
 	if run == null or col < 0 or col >= columns.size():
 		return []
-	var lv := run.reading_of(machine, columns[col])
-	if lv <= 0:
+	var lv := run.reading()
+	if lv < BoxReading.FLARE:
 		return []
 	var box: TicketBox = machine.boxes[columns[col]]
 	var r := BoxReading.read(box)
-	var top := tr(BoxReading.top(r))
-	var nature := tr(BoxReading.nature(box, machine.model))
-	match lv:
-		1:
-			return [top]
-		2:
-			return [nature + " · " + top]
-		3:
-			return [tr(BoxReading.feel(r.heat)) + " · " + top, nature]
-	return [tr("%d LEFT") % r.left + " · " + tr(BoxReading.feel(r.heat)),
-		tr("TOP %d MID %d LOW %d") % [r.roles.top, r.roles.mid, r.roles.low]]
-
-
-## Run, box reading at KEEP BOOKS: the notepad keeps a line for each column's box,
-## tickets opened from it and the money they won.
-func _box_rows() -> Array:
-	var rows := [[[tr("BOX"), 0.0], [tr("OPEN"), 64.0], [tr("WON"), 140.0]]]
-	for k in columns.size():
-		var box: TicketBox = machine.boxes[columns[k]]
-		rows.append([[str(k + 1), 0.0], [Hud._num(box.opened), 64.0], [Hud._money(int(box.summary().paid)), 140.0]])
-	return rows
+	var out := [tr(BoxReading.top(r))]
+	if lv >= BoxReading.LEFT:
+		out[0] += " · " + tr("ABOUT %d LEFT") % BoxReading.rough(int(r.left))
+	if lv >= BoxReading.FLOW:
+		var f := BoxReading.flow(box)
+		out.append(tr("ABOUT %d SOLD · PAID %s") % [BoxReading.rough(int(f.sold)), Hud._money(int(f.paid))])
+	return out
 
 
 ## What lies in the machine's two trays: the tickets held, split by the cabinet their

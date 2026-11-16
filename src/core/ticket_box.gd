@@ -22,8 +22,8 @@ var seed := ""
 var model: BoxModel = null   ## the odds it was built under (BoxGenerator.build sets it); its sizes are kept in a save when they differ from the machine's
 var type_id := ""
 ## The type whose net share range holds what the box was made to pay back after the
-## model's payout (BoxModel.payout, the run's): what the player is told (READ THE BOX,
-## the dev panel) and what the luck perks call a losing box. The drawn type_id when the
+## model's payout (BoxModel.payout, the run's): what the dev panel shows and what the
+## luck perks call a losing box (never told to the player). The drawn type_id when the
 ## payout is 1 (free play). Empty on a box not from the generator: net_type() then
 ## gives type_id.
 var net_type_id := ""

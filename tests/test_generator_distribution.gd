@@ -507,7 +507,7 @@ func test_payout_scales_the_run_boxes() -> void:
 
 
 ## The type a box is told by (TicketBox.net_type): the range that holds its net after the
-## payout, so READ THE BOX and the luck perks do not lie in the run. Free play: its type.
+## payout, so the luck perks (and the dev panel) do not lie in the run. Free play: its type.
 func test_run_boxes_are_told_by_their_net() -> void:
 	var pack := core_pack()
 	if pack == null:
@@ -539,7 +539,6 @@ func test_run_boxes_are_told_by_their_net() -> void:
 				# While the payout keeps a break-even box under the even range, it is told so.
 				if box.type_id == "break_even" and cfg.payout * 1.06 < 0.94:
 					check(float(on.type_by_id(id)["max"]) < 0.0, "%s %s layer %d: a box drawn break even loses %.0f%% in the run, told %s" % [form.id, seed, layer + 1, -100 * net, id])
-					eq(BoxReading.nature(box, on), "LEAN BOX", "and reads LEAN BOX")
 					check(MachineLogic.new([f], seed, on, true).losing(box), "and is a losing box to the luck perks")
 	var keys := told.keys()
 	keys.sort()

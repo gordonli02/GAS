@@ -84,7 +84,8 @@ extends RefCounted
 ##   pockets      room for this many more items
 ##   savings      every morning of a layer after its first, cash grows by % (the work line's perk)
 ##   worth_pct    + % per WORTH_STEP (times the stake) in cash   (+ slot)
-##   reading      the box-reading level (BoxReading), one per perk of the chain
+##   reading      the box-reading level a perk of the chain reads at (BoxReading's
+##                levels); the highest one held counts, not the sum
 ##   peek_n       PEEK sees this many tickets
 ##   pick_form    NEW BOX may put another of the scene's forms in the column (PICKY)
 ##   tab          tickets go on a tab, settled when the day ends (HOUSE ACCOUNT)
@@ -199,15 +200,15 @@ const STANDARD := {
 	"perks": [
 		# The shelf: always on the phone, requirements shown, to plan for.
 		{"id": "read1", "branch": "shelf", "shelf": true, "rarity": "rare", "name": "READ THE FLARE", "desc": "SAYS IF A TOP PRIZE IS STILL IN",
-			"requires_any": {"closer": 1, "regular": 1}, "effect": "reading", "levels": [{"price": 200, "value": 1}]},
-		{"id": "read2", "branch": "shelf", "shelf": true, "rarity": "rare", "name": "READ THE BOX", "desc": "SAYS IF THE BOX WAS BORN FAT OR LEAN",
-			"requires": {"read1": 1}, "effect": "reading", "levels": [{"price": 350, "value": 1}]},
-		{"id": "read3", "branch": "shelf", "shelf": true, "rarity": "rare", "name": "HOT OR COLD", "desc": "SAYS IF WHAT IS LEFT RUNS HOT OR COLD",
-			"requires": {"read2": 1}, "effect": "reading", "levels": [{"price": 600, "value": 1}]},
-		{"id": "read4", "branch": "shelf", "shelf": true, "rarity": "legendary", "name": "COUNT IT", "desc": "EXACT COUNT AND PRIZES LEFT",
-			"requires": {"read3": 1}, "effect": "reading", "levels": [{"price": 900, "value": 1}]},
-		{"id": "read5", "branch": "shelf", "shelf": true, "rarity": "legendary", "name": "KEEP BOOKS", "desc": "THE NOTEPAD KEEPS EVERY BOX",
-			"requires": {"read4": 1}, "effect": "reading", "levels": [{"price": 1200, "value": 1}]},
+			"requires_any": {"closer": 1, "regular": 1}, "effect": "reading", "levels": [{"price": 200, "value": BoxReading.FLARE}]},
+		# The chain's second and third places (docs/roadmap.md 数值方向 三.10), at those
+		# places' prices: READ THE BOX, HOT OR COLD, COUNT IT and KEEP BOOKS left it
+		# (read2..read5; a save holding them loads without them), so these have ids of
+		# their own.
+		{"id": "flow", "branch": "shelf", "shelf": true, "rarity": "rare", "name": "READ THE FLOW", "desc": "SAYS ABOUT HOW MANY WERE SOLD AND WHAT THEY PAID",
+			"requires": {"read1": 1}, "effect": "reading", "levels": [{"price": 350, "value": BoxReading.FLOW}]},
+		{"id": "readleft", "branch": "shelf", "shelf": true, "rarity": "rare", "name": "ROUGH COUNT", "desc": "SAYS ABOUT HOW MANY ARE LEFT, TO THE NEAREST 50",
+			"requires": {"flow": 1}, "effect": "reading", "levels": [{"price": 600, "value": BoxReading.LEFT}]},
 		{"id": "informant", "branch": "shelf", "shelf": true, "rarity": "rare", "name": "INFORMANT", "requires": {"read1": 1},
 			"effect": "peek_n", "levels": [{"price": 100, "value": 50, "desc": "PEEK SEES THE NEXT 50"},
 				{"price": 250, "value": 100, "extra": {"free_peek": 1}, "desc": "PEEK SEES THE NEXT 100, AND ONE IS FREE EVERY DAY OF PLAY"}]},
@@ -324,8 +325,8 @@ const STANDARD := {
 		{"id": "returns", "branch": "twist", "rarity": "common", "name": "RETURNS", "desc": "AN UNTORN TICKET GOES BACK FOR %d%% OF ITS PRICE",
 			"effect": "refund_pct", "levels": [{"price": 100, "value": 50}, {"price": 300, "value": 100}]},
 		{"id": "seal", "branch": "twist", "rarity": "rare", "name": "SEAL",
-			"effect": "seal", "levels": [{"price": 300, "value": 1, "desc": "PAY UP: THE HOTTEST BOX COMES ALONG TO THE NEXT LAYER"},
-				{"price": 700, "value": 2, "desc": "PAY UP: THE TWO HOTTEST BOXES COME ALONG TO THE NEXT LAYER"}]},
+			"effect": "seal", "levels": [{"price": 300, "value": 1, "desc": "PAY UP: A BOX COMES ALONG TO THE NEXT LAYER"},
+				{"price": 700, "value": 2, "desc": "PAY UP: TWO BOXES COME ALONG TO THE NEXT LAYER"}]},
 		{"id": "loyal", "branch": "twist", "rarity": "common", "name": "LOYAL", "desc": "ONE KIND OF TICKET ALL DAY: PRIZES +%d%%",
 			"effect": "loyal_pct", "levels": [{"price": 120, "value": 30}, {"price": 300, "value": 60}]},
 		{"id": "variety", "branch": "twist", "rarity": "common", "name": "VARIETY", "desc": "EVERY KIND BOUGHT TODAY: PRIZES +%d%%",
@@ -345,10 +346,10 @@ const STANDARD := {
 			"price": 20, "use": "column"},
 		{"id": "magnifier", "kind": "INFO", "rarity": "common", "name": "MAGNIFIER", "desc": "SAYS IF A COLUMN'S NEXT TICKET WINS",
 			"price": 8, "use": "column"},
-		{"id": "tip", "kind": "INFO", "rarity": "rare", "name": "TIP-OFF", "desc": "NAMES THE HOTTEST COLUMN, NO NUMBERS",
-			"price": 35, "use": "now"},
-		{"id": "report", "kind": "INFO", "rarity": "rare", "name": "BOX REPORT", "desc": "READS ONE BOX IN FULL",
-			"price": 60, "use": "column"},
+		# TIP-OFF left (docs/roadmap.md 数值方向 三.10): it named a column by the prize
+		# money left. BOX REPORT is parked until step 4: its new form says what the part of
+		# a box other customers bought paid, which needs the boxes sold before they come
+		# to the machine. A save holding either loads without it.
 		{"id": "coin", "kind": "ECONOMY", "rarity": "common", "name": "LUCKY COIN", "desc": "A COLUMN'S NEXT PRIZE X2",
 			"price": 40, "use": "column"},
 		{"id": "whiteout", "kind": "ECONOMY", "rarity": "common", "name": "WHITE-OUT", "desc": "THE NEXT LOSER PAYS THE SMALLEST PRIZE",

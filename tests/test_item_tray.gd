@@ -139,7 +139,7 @@ func _game(pack: PackDef) -> Game:
 	g.economy = g.run.new_economy()
 	g.machine = g.run.new_machine(pack.forms, true)
 	g.columns = range(g.machine.forms.size())
-	g.run.items = {"peek": 1, "slip": 1, "overtime": 2, "happy": 1, "tip": 1, "copy": 1}
+	g.run.items = {"peek": 1, "slip": 1, "overtime": 2, "happy": 1, "copy": 1}
 	return g
 
 
@@ -168,9 +168,9 @@ func test_the_picker_lists_what_the_phone_lists() -> void:
 	# What each state lights (the rules are the phone's: Game._can_use).
 	var orphans := Node.get_orphan_node_ids()
 	var lit := {
-		"before": {"overtime": true, "peek": false, "tip": false, "happy": false, "slip": false, "copy": false},
-		"machine": {"overtime": false, "peek": true, "tip": true, "happy": true, "slip": false, "copy": false},
-		"table": {"overtime": false, "peek": false, "tip": false, "happy": true, "slip": true, "copy": false},
+		"before": {"overtime": true, "peek": false, "happy": false, "slip": false, "copy": false},
+		"machine": {"overtime": false, "peek": true, "happy": true, "slip": false, "copy": false},
+		"table": {"overtime": false, "peek": false, "happy": true, "slip": true, "copy": false},
 	}
 	for state in ["before", "machine", "table"]:
 		var g := _game(pack)
@@ -191,7 +191,7 @@ func test_the_picker_lists_what_the_phone_lists() -> void:
 		for it in st.held:
 			ids.append(it.id)
 		eq(picker.listed(), ids, state + ": the items held, in the phone's order")
-		eq(ids.size(), 6, state + ": every item held is listed")
+		eq(ids.size(), 5, state + ": every item held is listed")
 		var phone_texts := _texts(phone)
 		for it in st.held:
 			var id: String = it.id
@@ -331,7 +331,7 @@ func test_a_token_that_cannot_be_used_changes_nothing() -> void:
 	if pack == null:
 		return
 	var orphans := Node.get_orphan_node_ids()
-	for c in [["peek", "before", "AT THE MACHINE, ON A DAY OF PLAY"], ["tip", "table", "AT THE MACHINE, ON A DAY OF PLAY"],
+	for c in [["peek", "before", "AT THE MACHINE, ON A DAY OF PLAY"], ["happy", "before", "ON A DAY OF PLAY"],
 			["overtime", "table", "BEFORE THE DAY IS CHOSEN, OR AFTER A SHIFT"], ["copy", "table", "COPIES THE LAST ITEM YOU BOUGHT"],
 			["peek", "moving", ""]]:
 		var id: String = c[0]
@@ -366,15 +366,46 @@ func test_a_tokens_tip() -> void:
 	g.hover_item = "peek"
 	g.show_item_tip()
 	eq(g.hud.tip(), [tr(peek.name), g._item_desc(peek)], "PEEK on a day of play: its name and what it does, no reason")
-	var tip := g.run.catalog.item("tip")
-	g.hover_item = "tip"
+	var ot := g.run.catalog.item("overtime")
+	g.hover_item = "overtime"
 	g.show_item_tip()
-	eq(g.hud.tip(), [tr(tip.name), g._item_desc(tip) + "\n" + tr("AT THE MACHINE, ON A DAY OF PLAY")], "TIP-OFF at the table: and why not here")
+	eq(g.hud.tip(), [tr(ot.name), g._item_desc(ot) + "\n" + tr("BEFORE THE DAY IS CHOSEN, OR AFTER A SHIFT")], "OVERTIME on a day of play: and why not now")
 	g.hover_item = "reel"
 	g.show_item_tip()
 	eq(g.hud.tip(), ["", ""], "an item not held: no tip")
 	g.hover_item = ""
 	g.show_item_tip()
 	eq(g.hud.tip(), ["", ""], "off the tokens: no tip")
+	g.free()
+	_sweep(orphans)
+
+
+## The LCD's reading lines (Game._reading_lines) by the chain (docs/roadmap.md 数值方向
+## 三.10): nothing without it; READ THE FLARE, whether a top prize is in; READ THE FLOW,
+## a second line, about how many were sold and what they paid; ROUGH COUNT, about how
+## many are left beside the flare. Never the prizes left or what the rest would pay.
+func test_the_lcd_reads_a_box_by_the_chain() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var orphans := Node.get_orphan_node_ids()
+	var g := _game(pack)
+	var box: TicketBox = g.machine.boxes[g.columns[1]]
+	box.cursor = 37
+	var top := tr(BoxReading.top(BoxReading.read(box)))
+	g.run.perks = {}
+	eq(g._reading_lines(1), [], "no perk of the chain: nothing")
+	g.run.perks = {"read1": 1}
+	eq(g._reading_lines(1), [top], "READ THE FLARE: whether a top prize is in")
+	var paid := 0
+	for k in 37:
+		paid += int(box.tickets[k].prize)
+	var flow := tr("ABOUT %d SOLD · PAID %s") % [50, Hud._money(paid)]
+	g.run.perks = {"read1": 1, "flow": 1}
+	eq(g._reading_lines(1), [top, flow], "READ THE FLOW: about 50 sold (37), and what they paid")
+	g.run.perks = {"read1": 1, "flow": 1, "readleft": 1}
+	eq(g._reading_lines(1), [top + " · " + tr("ABOUT %d LEFT") % BoxReading.rough(box.size - 37), flow],
+		"ROUGH COUNT: and about how many are left")
+	eq(g._reading_lines(-1), [], "no column named: nothing")
 	g.free()
 	_sweep(orphans)

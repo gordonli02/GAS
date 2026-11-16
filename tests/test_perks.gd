@@ -19,6 +19,17 @@ func _rich(cash: int) -> Array:
 	return [r, e]
 
 
+## The column whose box has the most tickets left (ties: the lower column), what SEAL
+## takes when none is chosen.
+func _most_left(m: MachineLogic) -> int:
+	var most := -1
+	for i in m.boxes.size():
+		var b: TicketBox = m.boxes[i]
+		if b.cursor < b.size and (most < 0 or b.size - b.cursor > m.boxes[most].size - m.boxes[most].cursor):
+			most = i
+	return most
+
+
 var _form: FormDef = null
 
 
@@ -70,7 +81,8 @@ func test_catalog_holds_together() -> void:
 		for i in c.items:
 			if i.kind == kind:
 				found += 1
-		check(found >= 3, "items of kind %s (%d)" % [kind, found])
+		# INFO is down to PEEK and MAGNIFIER while BOX REPORT is parked (M9.8 step 3).
+		check(found >= (2 if kind == "INFO" else 3), "items of kind %s (%d)" % [kind, found])
 	# G's numbers.
 	eq(c.perk("haggler").levels.size(), 1, "HAGGLER has one level")
 	eq(int(c.perk("haggler").levels[0].value), 25, "items 25% less")
@@ -436,7 +448,8 @@ func test_twist_perks() -> void:
 	# A window gets its winner as long as the box has winners to give: Big Catch's box of
 	# 200 holds about ten, for ten windows, so it may come up short by the winners it lacks.
 	check(dry_windows <= maxi(0, windows - winners_in_box), "no window of 20 without a winner (%d dry of %d windows, %d winners, %d prizes moved)" % [dry_windows, windows, winners_in_box, pulled])
-	# SEAL: paying takes the hottest box along into the next layer, as it stands.
+	# SEAL: paying takes the box with the most tickets left along into the next layer, as
+	# it stands (not the one whose rest pays most: that would read what is left).
 	var r4 := _run()
 	var e4 := r4.new_economy()
 	r4.perks = {"seal": 1}
@@ -447,12 +460,13 @@ func test_twist_perks() -> void:
 		m4.sell_now(2, e4)
 	var kept: TicketBox = m4.boxes[2]
 	kept.shuffle_rest()
-	var hottest := BoxReading.hottest(m4.boxes)
-	var hot: TicketBox = m4.boxes[hottest]
+	var most := _most_left(m4)
+	check(most != 2, "the column sold from is not the one with the most left")
+	var hot: TicketBox = m4.boxes[most]
 	e4.bonus(r4.due())
 	check(r4.pay(e4, m4), "paid, the machine given")
 	eq(r4.sealed.size(), 1, "one box sealed")
-	eq(str(r4.sealed[0].form), hot.form.uid(), "the hottest one")
+	eq([str(r4.sealed[0].form), str(r4.sealed[0].seed)], [hot.form.uid(), hot.seed], "the one with the most tickets left")
 	eq(r4.stats.sealed, 1, "counted")
 	var m5 := r4.new_machine(pack.forms, true)
 	check(r4.sealed.is_empty(), "put into the next layer's machine")
@@ -480,18 +494,29 @@ func test_twist_perks() -> void:
 			return BoxGenerator.build(by_uid[uid], s, model, true))
 		eq(m5b.boxes[col].size, found.size, "restored: the same size")
 		eq(m5b.boxes[col].tickets.map(func(t): return int(t.prize)), found.tickets.map(func(t): return int(t.prize)), "restored: the same tickets")
-	# SEAL, the player's choice (the PAY key's card): the column chosen comes along, hot or not.
+	# SEAL, the player's choice (the PAY key's card): the column chosen comes along, the
+	# most left or not.
 	var rs := _run()
 	var es := rs.new_economy()
 	rs.perks = {"seal": 1}
 	var ms := rs.new_machine(pack.forms, true)
 	eq(rs.seal_choices(ms).size(), ms.boxes.size(), "every column with tickets left can be chosen")
-	var cold := (BoxReading.hottest(ms.boxes) + 1) % ms.boxes.size()
-	var chosen: TicketBox = ms.boxes[cold]
+	var other_col := (_most_left(ms) + 1) % ms.boxes.size()
+	var chosen: TicketBox = ms.boxes[other_col]
 	es.bonus(rs.due())
-	check(rs.pay(es, ms, [cold]), "paid, a column chosen")
+	check(rs.pay(es, ms, [other_col]), "paid, a column chosen")
 	eq(rs.sealed.size(), 1, "one box sealed")
-	eq([str(rs.sealed[0].form), str(rs.sealed[0].seed)], [chosen.form.uid(), chosen.seed], "the one chosen, not the hottest")
+	eq([str(rs.sealed[0].form), str(rs.sealed[0].seed)], [chosen.form.uid(), chosen.seed], "the one chosen, not the one with the most left")
+	# SEAL 2, none chosen: the two with the most left; a tie goes to the lower column.
+	var rt := _run()
+	var et := rt.new_economy()
+	rt.perks = {"seal": 2}
+	var mt := rt.new_machine(pack.forms, true)
+	for i in mt.boxes.size():
+		mt.boxes[i].cursor = mt.boxes[i].size - (10 if i >= 1 and i <= 3 else 5)
+	et.bonus(rt.due())
+	check(rt.pay(et, mt), "SEAL 2: paid")
+	eq(rt.sealed.map(func(k): return str(k.seed)), [mt.boxes[1].seed, mt.boxes[2].seed], "SEAL 2: columns 2 and 3 (ten left each, as column 4), the lower ones first")
 	# PICKY: NEW BOX may put another of the layer's forms in the column.
 	var res6 := _rich(10000)
 	var r6: RunState = res6[0]
@@ -1574,6 +1599,19 @@ func test_the_shelf_of_perks() -> void:
 	r.perks["regular"] = 1
 	check(r.missing("read1").is_empty() and r.buy_perk("read1", e), "with REGULAR: yes")
 	check(not r.buy_perk("closer", e), "a dealt perk is not sold off the shelf")
+	# The reading chain is three perks (docs/roadmap.md 数值方向 三.10): READ THE FLARE,
+	# READ THE FLOW, ROUGH COUNT, at the prices of the chain's first three places.
+	for id in ["read2", "read3", "read4", "read5"]:
+		check(not ids.has(id) and r.catalog.perk(id).is_empty(), "%s has left the catalog" % id)
+	check(ids.has("flow") and ids.has("readleft"), "READ THE FLOW and ROUGH COUNT are on the shelf")
+	eq(r.catalog.perk("flow").requires, {"read1": 1}, "READ THE FLOW needs READ THE FLARE")
+	eq(r.catalog.perk("readleft").requires, {"flow": 1}, "ROUGH COUNT needs READ THE FLOW")
+	eq([int(r.catalog.perk("read1").levels[0].price), int(r.catalog.perk("flow").levels[0].price),
+		int(r.catalog.perk("readleft").levels[0].price)], [200, 350, 600], "$200, $350, $600")
+	check(not r.buy_perk("readleft", e), "ROUGH COUNT not before READ THE FLOW")
+	eq(r.perk_price("flow"), 350 * r.stake(), "at the layer's stake")
+	check(r.buy_perk("flow", e), "READ THE FLOW bought after READ THE FLARE")
+	check(r.buy_perk("readleft", e), "then ROUGH COUNT")
 
 
 ## QUICK HANDS, CHAIN and ENCORE wait for the shop outside the run (M13, G 2026-11-07):
@@ -1676,14 +1714,13 @@ func test_column_items() -> void:
 	# MAGNIFIER: the next ticket.
 	r.items = {"magnifier": 1}
 	eq(r.use_item("magnifier", m, 2).get("wins"), int(m.boxes[2].tickets[m.boxes[2].cursor].prize) > 0, "whether the next one wins")
-	# BOX REPORT: that box reads at level 4 until it leaves the machine.
+	# BOX REPORT is parked until step 4 (docs/roadmap.md 数值方向 三.10): not in the
+	# catalog, and one held (say, put there by hand) does nothing.
 	r.perks = {}
+	check(r.catalog.item("report").is_empty(), "BOX REPORT is not in the catalog")
 	r.items = {"report": 1}
-	r.use_item("report", m, 2)
-	eq(r.reading_of(m, 2), 4, "that box reads at level 4")
-	eq(r.reading_of(m, 3), 0, "the others do not")
-	r.change_box(e, m, 2)
-	eq(r.reading_of(m, 2), 0, "a new box has to be read again")
+	eq(r.use_item("report", m, 2), {}, "BOX REPORT does nothing")
+	eq(r.held("report"), 1, "and is not used up")
 	# FAST FORWARD: the next fifty go unsold.
 	r.items = {"skip": 1}
 	var at := m.boxes[3].cursor
@@ -1739,11 +1776,20 @@ func test_items_used_now() -> void:
 	var r := _run()
 	var e := r.new_economy()
 	var m := r.new_machine(pack.forms, true)
-	r.items = {"happy": 1, "safety": 1, "tip": 1, "slip": 1}
+	r.items = {"happy": 1, "safety": 1, "slip": 1}
 	check(not r.can_use_now("happy"), "HAPPY HOUR only on a day of play")
 	check(not r.can_use_now("slip"), "a RETURN SLIP too")
 	r.play(e)
-	eq(r.use_now("tip", m).get("column"), BoxReading.hottest(m.boxes), "TIP-OFF names the hottest box")
+	check(r.catalog.item("tip").is_empty(), "TIP-OFF has left the catalog")
+	# Neither TIP-OFF nor BOX REPORT comes on a shelf or as SKIP FOR AN ITEM's gift.
+	var seen := []
+	for k in 60:
+		var rk := RunState.start(RunConfig.standard(), "GONE-%d" % k, ["diner", "bar", "bingo"])
+		seen.append_array(rk.shelf)
+		if rk.can_skip_offers():
+			seen.append(rk.skip_offers())
+	check(seen.size() > 60, "shelves and gifts drawn (%d)" % seen.size())
+	check(not seen.has("tip") and not seen.has("report"), "no TIP-OFF or BOX REPORT among them")
 	check(not r.use_now("happy").is_empty() and r.happy, "HAPPY HOUR on")
 	eq(_pays(r, _ticket(2)), 150, "+50% today")
 	check(not r.use_now("safety").is_empty() and r.safety, "SAFETY NET on")
@@ -1772,7 +1818,7 @@ func test_items_used_now() -> void:
 	check(not r2.can_use_now("overtime"), "once a day")
 	r2.end_day(e2)
 	r2.work(e2)
-	check(r2.use_now("overtime", null, e2).get("on", false), "after a shift")
+	check(r2.use_now("overtime", e2).get("on", false), "after a shift")
 	eq(e2.earned, 4 * w2, "the wage again")
 	r2.end_day(e2)
 	r2.play(e2)
@@ -2206,26 +2252,48 @@ func test_box_reading() -> void:
 		check(absf(part.heat - float(part.value) / part.left / f.price) < 1e-6, "heat is money left per ticket's price")
 		box.cursor = box.size
 		eq(BoxReading.top(BoxReading.read(box)), "NO TOP", "%s: sold out, no top prize left" % f.id)
-	var b := BoxGenerator.build(pack.forms[0], "RD-2")
-	for t in [["big_loss", "LEAN BOX"], ["break_even", "EVEN BOX"], ["mid_win", "FAT BOX"]]:
-		b.type_id = t[0]
-		b.net_type_id = t[0]
-		eq(BoxReading.nature(b), t[1], "%s reads %s" % t)
-	# The run: the box is told by its net after the payout, not the type it was drawn.
-	b.type_id = "break_even"
-	b.net_type_id = "small_loss"
-	eq(BoxReading.nature(b), "LEAN BOX", "drawn break even, losing after the payout: LEAN BOX")
-	b.net_type_id = ""
-	eq(BoxReading.nature(b), "EVEN BOX", "a box with no net type: its own type")
-	eq(BoxReading.feel(2.0), "HOT", "hot")
-	eq(BoxReading.feel(1.0), "FAIR", "fair")
-	eq(BoxReading.feel(0.4), "COLD", "cold")
+	# ROUGH COUNT and READ THE FLOW: a count to the nearest 50, never 0 while there is one.
+	for t in [[0, 0], [1, 50], [24, 50], [25, 50], [74, 50], [75, 100], [124, 100], [125, 150], [126, 150], [200, 200], [220, 200]]:
+		eq(BoxReading.rough(t[0]), t[1], "%d reads as about %d" % t)
+	# READ THE FLOW: the tickets that left the box and what they paid, exact (the player
+	# is shown the count rough), as the flow study's past money.
+	var fb := BoxGenerator.build(pack.forms[0], "RD-3")
+	eq(BoxReading.flow(fb), {"sold": 0, "paid": 0}, "nothing sold: nothing paid")
+	for cut in [24, 25, 74, 75, 150, fb.size]:
+		fb.cursor = cut
+		var paid := 0
+		for i in cut:
+			paid += int(fb.tickets[i].prize)
+		var fl := BoxReading.flow(fb)
+		eq([fl.sold, fl.paid], [cut, paid], "%d sold: the prizes of those tickets" % cut)
+		eq(int(SimData.flow_cut(fb, cut).past_money), paid, "%d sold: the flow study's past money is the same" % cut)
+	# The chain: READ THE FLARE, READ THE FLOW, ROUGH COUNT (docs/roadmap.md 数值方向
+	# 三.10); the run reads at the highest level held.
+	check(BoxReading.FLARE < BoxReading.FLOW and BoxReading.FLOW < BoxReading.LEFT and BoxReading.TOP_LEVEL == BoxReading.LEFT,
+		"three levels, ROUGH COUNT the top")
 	var r := _run()
-	r.perks = {"read1": 1, "read2": 1, "read3": 1}
-	eq(r.reading(), 3, "three perks of the chain: level 3")
+	eq(r.reading(), 0, "no perk of the chain: no reading")
+	r.perks = {"read1": 1}
+	eq(r.reading(), BoxReading.FLARE, "READ THE FLARE")
+	r.perks = {"read1": 1, "flow": 1}
+	eq(r.reading(), BoxReading.FLOW, "and READ THE FLOW")
+	r.perks = {"read1": 1, "flow": 1, "readleft": 1}
+	eq(r.reading(), BoxReading.LEFT, "and ROUGH COUNT")
+	r.perks = {"readleft": 1}
+	eq(r.reading(), BoxReading.LEFT, "ROUGH COUNT alone (as a save might hold it) reads at its own level, not a sum")
+	eq(r.catalog.perk("flow").requires, {"read1": 1}, "READ THE FLOW needs READ THE FLARE")
+	eq(r.catalog.perk("readleft").requires, {"flow": 1}, "ROUGH COUNT needs READ THE FLOW")
+	var levels := []
+	for p in r.catalog.perks:
+		if p.effect == "reading":
+			levels.append(int(p.levels[0].value))
+	eq(levels, [BoxReading.FLARE, BoxReading.FLOW, BoxReading.LEFT], "one perk a level, at the levels BoxReading names")
+	r.perks = {}
 	check(not r.missing("read1").is_empty(), "READ THE FLARE needs CLOSER or REGULAR")
 	r.perks = {"closer": 1}
 	check(r.missing("read1").is_empty(), "CLOSER alone opens it")
+	eq(r.catalog.perk("hunter").requires.get("read1", 0), 1, "JACKPOT HUNTER still needs READ THE FLARE")
+	eq(r.catalog.perk("informant").requires, {"read1": 1}, "and INFORMANT")
 
 
 func test_buying_anything_breaks_the_work_only_line() -> void:
@@ -2264,7 +2332,6 @@ func test_saved_and_loaded() -> void:
 	r.perks = {"prizes": 1, "luck": 1, "bet": 1, "pity": 1}
 	r.items = {"coin": 2}
 	r.buy_service("more_time", e)
-	r.reports["core:catch"] = "X-0002"
 	r.dry = 7
 	r.snow = 3
 	r.happy = true
@@ -2285,7 +2352,6 @@ func test_saved_and_loaded() -> void:
 	eq(back.items, {"coin": 2}, "items")
 	eq(back.extra_days, 1, "the extra day")
 	eq(back.services, {"more_time": 1}, "services used")
-	eq(back.reports, {"core:catch": "X-0002"}, "boxes read")
 	eq(back.offers, r.offers, "the offers")
 	check(back.offers_open and back.offer_rerolls == 1, "still open, rerolled once")
 	eq(back.shelf, r.shelf, "the shelf")
@@ -2304,7 +2370,24 @@ func test_saved_and_loaded() -> void:
 	eq(odd.perks, {"prizes": 3}, "unknown perks dropped, levels kept within the perk")
 	eq(odd.offers, ["prizes"], "an unknown offer dropped, and CHAIN (it waits for M13)")
 	eq(odd.bet(), 1, "an old save's bet is ignored: no HIGH ROLLER, x1")
-	for k in ["perks", "items", "extra_days", "services", "reports", "offers", "offers_open", "shelf", "bet", "coin_on",
+	# A save from before M9.8 step 3: the reading chain to KEEP BOOKS, a TIP-OFF and a
+	# BOX REPORT held, on the shelf and bought last, and the boxes a BOX REPORT read.
+	var pre := d.duplicate(true)
+	pre.perks = {"regular": 1, "read1": 1, "read2": 1, "read3": 1, "read4": 1, "read5": 1, "informant": 1}
+	pre.items = {"tip": 2, "report": 1, "coin": 1}
+	pre.shelf = ["tip", "report", "peek"]
+	pre.last_item = "report"
+	pre.reports = {"core:catch": "X-0002"}
+	var was := RunState.from_dict(pre, RunConfig.standard())
+	check(was != null, "a save holding the removed perks and items loads")
+	if was != null:
+		eq(was.perks, {"regular": 1, "read1": 1, "informant": 1}, "READ THE BOX .. KEEP BOOKS dropped")
+		eq(was.reading(), BoxReading.FLARE, "it reads the flare, no level left over from the old chain")
+		eq(was.items, {"coin": 1}, "TIP-OFF and BOX REPORT dropped")
+		eq(was.shelf, ["peek"], "and off the shelf")
+		eq(was.last_item, "", "COPIER has nothing of theirs to copy")
+		check(not was.to_dict().has("reports"), "the boxes read are not kept")
+	for k in ["perks", "items", "extra_days", "services", "offers", "offers_open", "shelf", "bet", "coin_on",
 			"forms_today", "sealed", "day_tickets", "sure_armed", "window_n", "window_printed", "window_paid",
 			"window_wins", "streak", "push_stake", "push_printed", "last_window", "window_bar", "push_need"]:
 		d.erase(k)
