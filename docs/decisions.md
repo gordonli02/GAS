@@ -1624,3 +1624,72 @@ reroll and bankroll, their defaults).
   paid on day 1 gives 5 or 6 reward rounds (the rounds probe: 10.6 a run), which no
   bot reaches while they pay the moment they can (十二.6); the reroll helps the lines
   with cheap engines only, so perk prices and the reroll's price move together.
+
+## 十三.5: the candidates measured (not chosen yet)
+
+Roadmap 十三.5: twenty picks are not enough for a line's core, how to add. Five
+candidates as switches in `RunConfig`, read by `RunState`, all off in the standard
+config (the fixture regenerates byte-identical): `deal_bias` (a morning round weighs
+the branches of dealt perks held by this), `reward_bias` (the same on a reward round's
+new cards), `free_rerolls` (that many rerolls a morning cost nothing, the paid ones
+after start at the usual price), `starter` (1: the run's first round is the entry
+card of three different build lines, a line's cheapest dealt perk without
+requirements: CLOSER $80, DUE A WIN $200, PENNY JAR $100, STREAK $300, MIDDLE CUT
+$300; 2: and its pick is free), `offer_bonus` (four cards a round). `sim_runs
+--set=key=value,...` sets them; the bots take a free reroll whenever their pick finds
+nothing. They are experiments, not rules: G picks. 300 runs, SIM seeds.
+
+- **The ceiling** (`--reach --rerolls=0`: money no object; the whole core held by the
+  end of layer 2 / when the run ends, percent of runs):
+
+  | config | clearing | jackpot | small | batch | money |
+  |---|---|---|---|---|---|
+  | standard | 5 / 39 | 10 / 45 | 13 / 57 | 11 / 47 | 27 / 66 |
+  | deal_bias 2 | 16 / 72 | 21 / 72 | 32 / 81 | 17 / 58 | 43 / 84 |
+  | deal_bias 4 | 39 / 95 | 45 / 91 | 53 / 90 | 19 / 57 | 58 / 93 |
+  | reward_bias 4 | 8 / 52 | 13 / 55 | 16 / 61 | 13 / 51 | 32 / 74 |
+  | free_rerolls 1 | 23 / 82 | 27 / 78 | 46 / 93 | 38 / 84 | 56 / 91 |
+  | starter 1 | 6 / 44 | 12 / 50 | 12 / 54 | 25 / 65 | 38 / 77 |
+  | offer_bonus 1 | 16 / 71 | 19 / 66 | 28 / 76 | 19 / 68 | 45 / 83 |
+  | deal_bias 3, free_rerolls 1 | 77 / 99 | 71 / 98 | 88 / 100 | 52 / 85 | 83 / 99 |
+  | deal_bias 3, offer_bonus 1 | 61 / 98 | 56 / 97 | 67 / 96 | 30 / 73 | 73 / 97 |
+  | deal_bias 3, free_rerolls 1, starter 1 | 81 / 99 | 79 / 99 | 88 / 100 | 68 / 92 | 90 / 100 |
+
+  At least one engine by the end of layer 1 (clearing, jackpot, small, batch, money):
+  standard 70 / 45 / 93 / 53 / 24; the bias leaves it as it is (it acts after the first
+  card); free_rerolls 1: 92 / 68 / 100 / 78 / 41; starter 1: 84 / 73 / 96 / 79 / 67;
+  offer_bonus 1: 83 / 59 / 98 / 63 / 33. The batch line gains nothing from the bias:
+  MAGNET is on the twist branch, so holding STREAK does not weigh it up. Either MAGNET
+  moves to the batch branch or the bias goes by a line tag (二.3: "the keywords made
+  one" comes first). reward_bias hardly shows here (two reward rounds a run).
+- **Whole runs** (the seven bots that build, each config paired with the standard one;
+  cleared, the difference in points, 95%):
+
+  | config | small 47.0 | build 17.3 | jackpot 11.3 | batch 9.0 | money 6.7 | perks 6.7 | clearing 4.0 |
+  |---|---|---|---|---|---|---|---|
+  | deal_bias 2 or 4 | 0 | 0 | 0 | 0, -1.0 | 0 | 0 | +0.3, 0 |
+  | reward_bias 4 | +0.7 | -0.3 | 0 | +0.3 | +1.0 | -1.3 | +0.7 |
+  | free_rerolls 1 | +4.7 (+2.1 to +7.2) | +6.7 (+3.7 to +9.6) | -0.3 | +0.7 | 0 | +1.7 (+0.2 to +3.1) | +2.0 (+0.4 to +3.6) |
+  | offer_bonus 1 | +4.3 (+0.2 to +8.5) | +2.7 (+0.4 to +4.9) | +0.7 | +2.0 | +2.7 (+0.8 to +4.5) | 0 | +1.3 |
+  | starter 1 | +27.0 (+21.2 to +32.8) | +25.3 (+19.4 to +31.3) | -2.0 | 0 | 0 | +3.3 | +2.0 (+0.4 to +3.6) |
+  | starter 2 | +19.3 (+11.9 to +26.8) | +36.3 (+30.4 to +42.3) | +6.7 (+3.3 to +10.0) | +54.7 (+49.0 to +60.3) | +29.7 (+24.5 to +34.8) | +4.7 (+0.5 to +8.9) | +2.0 |
+  | deal_bias 3, reward_bias 3, free_rerolls 1, starter 2 | +21.3 | +36.0 | +6.7 | +54.3 | +30.0 | +1.7 | +4.0 (+1.3 to +6.7) |
+
+  Differences without an interval have one that crosses 0. Layer 1's rate under
+  starter 2: batch 12.7 to 65.7%, build 25.3 to 64.0%, money 29.7 to 55.3%, small 49.0
+  to 67.7%, perks 25.0 to 40.3%, jackpot 28.7 to 30.3%, clearing 14.0 to 16.7%.
+- **What it says.** Two problems, two levers. Getting the first engine is bound by
+  money and by the first round: only the starter moves it, and a starter that has to
+  be bought helps only the lines whose entry card $200 can pay for. Bringing the core
+  together is bound by the deal once there is money: the bias and a free reroll do
+  that, and the bots, which hold one card and no spare cash, do not see it at all
+  (the bias changed nothing in 2,100 runs): only the ceiling measures it. A free
+  starter is a large buff to everything (it takes batch and small past 60%), so the
+  debts would be set again after it.
+- **How far the bots can be trusted here.** The bias shows only its upside (a bot
+  never changes line, so a first card off the line costs it nothing). The bots take a
+  free reroll only when the cash left would buy what they want, so money never uses
+  one; a player always would. Under starter 2 the bots do not reroll the first round
+  when their line is not among the three (a player could, for a paid normal round),
+  which is why small reads lower under starter 2 than under starter 1. `offer_bonus`
+  widens reward rounds too.
