@@ -41,7 +41,10 @@ const FIRED_MIN := 0.9           ## given: a given core perk fires in at least t
 ##              against "never dealt", roadmap 十.8)}
 ##   rounds     {morning, reward, rerolls}: the rounds dealt a run and the rerolls paid
 ##              for, the mean
-##   deaths     share of all runs that failed in each layer
+##   upgrades   {shelf, reward}: levels bought from the shelf's upgrade slots and reward
+##              rounds' upgrade cards taken a run (RunState.stats upgrades,
+##              reward_upgrades), the mean
+##   deaths    share of all runs that failed in each layer
 ##   death_blocks  per layer with DEATHS_MIN deaths or more: {layer (1-based), n, cash,
 ##              short, shifts, tickets (medians), sets ([[perk ids joined, share of the
 ##              layer's deaths]], the three most common)}
@@ -78,6 +81,7 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 	var held_in := {}     # perk id -> [runs holding it when each layer ended]
 	var offered_in := {}  # perk id -> [runs it had been offered in by the time each layer ended]
 	var rounds := {"morning": 0, "reward": 0, "rerolls": 0}
+	var upgrades := {"shelf": 0, "reward": 0}
 	var dead := []   # the death of each failed run
 	var carry := []
 	carry.resize(maxi(0, layers - 1))
@@ -129,6 +133,8 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 				offered_in[id][l] += 1
 		for k in rounds:
 			rounds[k] += int(r.get("rounds", {}).get(k, 0))
+		upgrades.shelf += int(r.stats.get("upgrades", 0))
+		upgrades.reward += int(r.stats.get("reward_upgrades", 0))
 		if not r.death.is_empty():
 			dead.append(r.death)
 		for k in mini(carry.size(), r.carry.size()):
@@ -158,6 +164,7 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 		"days_spared": spared / n, "perks": perks / n, "best": percentiles(bests, BEST_PCT), "outcomes": outcomes,
 		"wilson": wilson(cleared, played), "triggers": _triggers(spec, held, played, played_in, held_in, offered_in),
 		"rounds": {"morning": rounds.morning / n, "reward": rounds.reward / n, "rerolls": rounds.rerolls / n},
+		"upgrades": {"shelf": upgrades.shelf / n, "reward": upgrades.reward / n},
 		"deaths": _deaths(dead, layers, played),
 		"death_blocks": _death_blocks(dead, layers), "carry": carry_rows, "stopped": stopped}
 

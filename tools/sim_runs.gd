@@ -66,7 +66,8 @@ extends Node
 ## D1 / D2 / D3, the share in which it had been dealt as a card by then (any round,
 ## reroll or reward round), so "never dealt" and "dealt but not bought" read apart (a
 ## shelf perk, never dealt, prints "-"). And under each bot the rounds a run (morning,
-## reward) and the rerolls paid for a run.
+## reward), the rerolls paid for and the upgrades taken a run (from the shelf's upgrade
+## slots, and reward rounds' upgrade cards); --save writes the upgrades too.
 ## With --reach the tool does only the deal's ceiling (SimReport.reach; roadmap 十二.3,
 ## "are there enough picks for a line to come together", money left out) for the line
 ## bots of --bots= (default the five), each at 0, 1, 2 and 3 rerolls a morning round: a
@@ -389,8 +390,10 @@ func _print_bot(s: Dictionary, detail: bool) -> void:
 	if not detail:
 		return
 	var rd: Dictionary = s.get("rounds", {})
-	print("  rounds a run: morning %.1f, reward %.1f; rerolls %.2f" % [float(rd.get("morning", 0.0)),
-		float(rd.get("reward", 0.0)), float(rd.get("rerolls", 0.0))])
+	var ud: Dictionary = s.get("upgrades", {})
+	print("  rounds a run: morning %.1f, reward %.1f; rerolls %.2f; upgrades: shelf %.2f, reward %.2f" % [
+		float(rd.get("morning", 0.0)), float(rd.get("reward", 0.0)), float(rd.get("rerolls", 0.0)),
+		float(ud.get("shelf", 0.0)), float(ud.get("reward", 0.0))])
 	var cat := Catalog.standard()
 	if not s.triggers.is_empty():
 		print("  %-12s %5s %5s %8s %8s %6s  %5s %5s %5s  %5s %5s %5s" % ["perk", "held", "day", "fired/r", "/100 tk", "mean%",
@@ -567,7 +570,7 @@ func _save(path: String, prefix: String, runs: int, rows: Array, shelf_upgrades:
 		bots[row[0]] = {"runs": s.runs, "layers": s.layers, "outcomes": s.outcomes, "cleared": s.cleared,
 			"wilson": s.wilson, "layer_rates": s.layer_rates, "days": s.days, "tickets": s.tickets,
 			"return": s["return"], "return_fees": s.return_fees, "perks": s.perks, "stopped": s.stopped,
-			"rounds": s.rounds}
+			"rounds": s.rounds, "upgrades": s.upgrades}
 	var f := FileAccess.open(_file_path(path), FileAccess.WRITE)
 	if f == null:
 		push_error("cannot write " + _file_path(path))

@@ -578,8 +578,15 @@ func test_bot_specs_are_data() -> void:
 		var sig: Array = SimBots.SIGNATURE.get(line, ["", ""])
 		check(["fired", "fired_pct"].has(sig[0]) and RunState.FIRED.has(sig[1]), "%s: the signature is a counted perk (%s)" % [line, str(sig)])
 	check(SimBots.VARIANTS.has("build"), "build has variants (the rerolls)")
+	# The defaults the 300-run variants pass chose (M9.8 step 2, stage 2).
+	eq(SimBots.spec("small").params.rerolls, 2, "small rerolls twice")
+	for line in ["clearing", "jackpot", "batch", "money"]:
+		eq(SimBots.spec(line).params.work_held, 1, "%s banks" % line)
+		eq(SimBots.spec(line).params.rerolls, 0, "%s does not reroll" % line)
+		check(SimBots.VARIANTS[line].has("nobank"), "%s: nobank, its old default" % line)
+	check(SimBots.VARIANTS.small.has("reroll0") and SimBots.VARIANTS.small.has("bank"), "small: reroll0 and bank")
 	for line in SimBots.VARIANTS:
-		for name in ["reroll1", "reroll2", "reroll3"]:
+		for name in ["reroll1", "reroll3", "reroll3t"]:
 			check(SimBots.VARIANTS[line].has(name), "%s: a %s variant" % [line, name])
 
 
@@ -659,7 +666,8 @@ func test_rerolls() -> void:
 			any += int(r.stats.rerolls)
 			check(r.balanced, "%s reroll3: balanced" % line)
 			var d := SimRun.play(SimBots.spec(line), pack.forms, "RR-%d" % i)
-			eq(int(d.stats.rerolls), 0, "%s: its own spec never rerolls" % line)
+			var own := int(SimBots.spec(line).params.rerolls)
+			check(int(d.stats.rerolls) <= own * int(d.stats.rounds), "%s: its own spec rerolls at most %d a round" % [line, own])
 	check(any > 0, "the reroll variants reroll (%d)" % any)
 
 
@@ -695,8 +703,9 @@ func test_work_held() -> void:
 	var e := run.new_economy()
 	var m := run.new_machine(pack.forms, true)
 	run.perks["bigfish"] = 1
-	var own := SimCtx.of(run, e, m, SimBots.spec("jackpot"))
-	var held := SimCtx.of(run, e, m, SimBots.spec("jackpot", SimBots.VARIANTS.jackpot.bank))
+	var own := SimCtx.of(run, e, m, SimBots.spec("jackpot", SimBots.VARIANTS.jackpot.nobank))
+	var held := SimCtx.of(run, e, m, SimBots.spec("jackpot"))
+	eq(held.param("work_held"), 1, "jackpot banks by default (the 300-run variants pass)")
 	check(e.cash < int(own.param("work_below")) * run.stake(), "the cash under work_below ($%d)" % e.cash)
 	check(SimBlocks.enter(own), "holding an engine: to the machine (work_held 0)")
 	check(not SimBlocks.enter(held), "work_held 1: works first for a bankroll")
@@ -749,3 +758,33 @@ func test_reach() -> void:
 	eq(s.cards.keys(), SimBots.reach_spec("small", 1).params.perks, "a row a core card")
 	eq(SimBots.reach_spec("jackpot", 0).params.shelf, ["read1", "regular"], "jackpot's shelf: READ THE FLARE and REGULAR")
 	eq(SimBots.reach_spec("money", 0).params.perks, ["worth", "middle"], "money's dealt core")
+
+
+## The upgrades counted (RunState.stats upgrades, reward_upgrades; summary's `upgrades`):
+## a level bought from the shelf's upgrade slots, and a reward round's upgrade card; a
+## reward round's new perk is neither.
+func test_upgrades_counted() -> void:
+	var run := RunState.start(RunConfig.standard(), "UP", ["diner", "bar", "bingo"])
+	var e := run.new_economy()
+	e.bonus(10000)
+	run.perks["penny"] = 1
+	run.perks["closer"] = 1
+	run.upgrades = ["penny"]
+	check(run.buy_upgrade("penny", e), "PENNY JAR's next level off the upgrade slot")
+	eq(int(run.stats.upgrades), 1, "one upgrade bought from the shelf")
+	run.offers = ["scrap", "closer"]
+	run.offers_open = true
+	run.offer_reward = true
+	check(run.buy_offer(1, e), "the reward round's upgrade card")
+	eq(int(run.stats.reward_upgrades), 1, "one reward upgrade")
+	run.offers = ["scrap", "stacker"]
+	run.offers_open = true
+	run.offer_reward = true
+	check(run.buy_offer(0, e), "a new perk from a reward round")
+	eq(int(run.stats.reward_upgrades), 1, "a new perk is not an upgrade")
+	eq(int(run.stats.upgrades), 1, "nor a shelf upgrade")
+	var pack := core_pack()
+	if pack == null:
+		return
+	var s := RunSim.summary("perks", pack.forms, 3, "UP")
+	check(s.upgrades.has("shelf") and s.upgrades.has("reward"), "summary: the upgrades a run (%s)" % str(s.upgrades))

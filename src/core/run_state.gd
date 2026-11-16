@@ -105,6 +105,7 @@ var stats := {"days": 0, "play_days": 0, "shifts": 0, "tickets": 0, "wages": 0, 
 	"layers_cleared": 0, "discarded": 0,   ## discarded: tickets bought and thrown away unopened
 	"shop": 0, "perks": 0, "items": 0, "services": 0, "bonus": 0,   ## shop: money spent there; bonus: prize money from perks and coins
 	"rerolls": 0, "skipped_offers": 0, "rounds": 0, "reward_rounds": 0,   ## rounds: morning rounds dealt; reward_rounds: reward rounds dealt
+	"upgrades": 0, "reward_upgrades": 0,   ## upgrades: levels bought from the shelf's upgrade slots; reward_upgrades: a reward round's upgrade card taken
 	"savings": 0, "insured": 0, "boxes_cleared": 0, "best_prize": 0,
 	"sure_wins": 0, "refunded": 0, "sealed": 0,   ## sure_wins: prizes moved forward; refunded: tickets given back
 	"staked": 0, "push_won": 0, "push_lost": 0}   ## ALL IN: stakes put up, what came back (x3), stakes lost
@@ -1308,6 +1309,8 @@ func buy_offer(k: int, e: Economy, free := false) -> bool:
 	if offer_reward:
 		if not _free_ok(id):
 			return false
+		if level(id) > 0:
+			stats.reward_upgrades += 1
 		_level_up(id)
 	elif free:
 		if held("cheat") <= 0 or not _free_ok(id):
@@ -1412,6 +1415,7 @@ func buy_upgrade(perk_id: String, e: Economy) -> bool:
 	if not can_buy_upgrade(perk_id, e) or not _buy_level(perk_id, e):
 		return false
 	upgrades.erase(perk_id)
+	stats.upgrades += 1
 	return true
 
 
