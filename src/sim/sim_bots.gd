@@ -42,7 +42,9 @@ extends RefCounted
 ##            clearing  the box with the fewest tickets left, never past its end, and
 ##                      stays on it until it is cleared (the last sale, CLOSER,
 ##                      SNOWBALL, ASSEMBLY LINE; FIRST PULL from each new box); works
-##                      for a bankroll of 150 tickets, engine or not
+##                      for a bankroll of 150 tickets, engine or not; rerolls a morning
+##                      round with no card it would take, twice at most, each at most a
+##                      quarter of the cash
 ##            jackpot   Big Catch / Ka-Bawk!; with READ THE FLARE only a box whose top
 ##                      prize is still in (any form's: BIG FISH doubles every top), and
 ##                      when the flare says it is gone, another such box or NEW BOX
@@ -51,12 +53,12 @@ extends RefCounted
 ##                      tickets, engine or not
 ##            small     Hot Plate / Nugget Rush, in volume; rerolls a morning round with
 ##                      no card it would take, twice at most, each at most a quarter of
-##                      the cash; works for 100 tickets while it holds no engine
+##                      the cash; works for a bankroll of 100 tickets, engine or not
 ##            batch     the forms that win most often, in windows of ten (never left
 ##                      half open), leaving only after a window without a winner (STREAK
 ##                      kept alive); ALL IN under `push` of the cash, on a window that
 ##                      paid `push_paid` tickets; works for a bankroll of 300 tickets,
-##                      engine or not
+##                      engine or not; rerolls as clearing does
 ##            money     Lucky Spur, small batches, leaving at a cash `floor` (NET WORTH
 ##                      pays by the cash in the pocket; SAVINGS grows what is left);
 ##                      works for a bankroll of 300 tickets, engine or not
@@ -67,8 +69,9 @@ extends RefCounted
 ##            M9.8 step 2, stage 2: `rerolls` and `reroll_share` (paying for a reroll of a
 ##            morning round with no card it would take, SimBlocks._reroll) and
 ##            `work_held` (a bankroll before the machine when holding an engine too),
-##            off in PARAMS; after the 300-run variants pass small rerolls (2) and the
-##            other four lines bank (docs: the best variant of each became its default)
+##            off in PARAMS; after two 300-run variants passes (a variant adopted only
+##            when its paired interval lay wholly above 0) all five lines bank, and
+##            small, clearing and batch reroll twice; jackpot and money do not reroll
 ##   churn    a probe bot (PROBES, SimProbes), not a strategy bot: the exploit check for FIRST PULL x REGULAR (docs/perk_research.md 5.11):
 ##            buys both whenever it can pay for them, and at the machine buys CHURN
 ##            tickets of a column, then changes the box, again and again. Its return
@@ -131,7 +134,8 @@ const SPECS := {
 		"stacker", "fortune", "pity", "middle"], "shelf": [], "share": 0.6, "reserve": 100, "forms": []}},
 	"clearing": {"blocks": {"enter": "line", "perks": "core", "column": "clear", "stay": "clear"},
 		"params": {"engine": ["closer", "firstpull"], "perks": ["closer", "firstpull", "assembly", "snowball"], "shelf": [],
-		"share": 0.6, "forms": [], "stop": 1.0, "work_held": 1, "work_below": 150}},
+		"share": 0.6, "forms": [], "stop": 1.0, "work_held": 1, "work_below": 150,
+		"rerolls": 2, "reroll_share": 0.25}},
 	"jackpot": {"blocks": {"enter": "line", "perks": "core", "column": "top", "stay": "hunt", "box": "flare"},
 		"params": {"engine": ["bigfish", "pity"], "perks": ["bigfish", "pity", "hunter"], "shelf": ["regular", "read1"],
 		"share": 0.6, "forms": ["catch", "kabawk"], "batch": 5, "stop": 0.5, "fee_max": 30, "hunt": 200, "work_below": 300,
@@ -139,11 +143,11 @@ const SPECS := {
 	"small": {"blocks": {"enter": "line", "perks": "core", "stay": "stop"},
 		"params": {"engine": ["penny", "scrap", "stacker"], "perks": ["penny", "stacker", "consolation", "packed", "scrap",
 		"crumbs", "trashking"], "shelf": [], "share": 0.6, "forms": ["plate", "nugget"], "stop": 1.0, "work_below": 100,
-		"rerolls": 2, "reroll_share": 0.25}},
+		"rerolls": 2, "reroll_share": 0.25, "work_held": 1}},
 	"batch": {"blocks": {"enter": "line", "perks": "core", "stay": "windows", "box": "magnet"},
 		"params": {"engine": ["streak", "magnet"], "perks": ["streak", "allin", "magnet", "crumbs", "consolation"],
 		"shelf": ["bet"], "share": 0.6, "forms": ["plate", "peckeye", "nugget"], "stop": 1.0, "push": 0.5, "work_below": 300,
-		"work_held": 1}},
+		"work_held": 1, "rerolls": 2, "reroll_share": 0.25}},
 	"money": {"blocks": {"enter": "line", "perks": "core", "stay": "floor"},
 		"params": {"engine": ["savings", "middle"], "perks": ["worth", "middle"], "shelf": ["savings"], "share": 0.6,
 		"forms": ["spur"], "batch": 5, "floor": 150, "stop": 0.5, "work_held": 1,
@@ -157,22 +161,21 @@ const SPECS := {
 ## `overrides`). tools/sim_runs --variants runs them all; a line's strength is its best
 ## (roadmap 七.4). The bot's own spec is one of them (named so, to be compared with the
 ## others). M9.8 step 2, stage 2 added the reroll and bankroll variants; after the
-## 300-run variants pass small's default rerolls twice and the other lines' default
-## banks (work_held 1), so the variants now lay the rest over that:
+## 300-run variants passes every line's default banks (work_held 1) and small's,
+## clearing's and batch's reroll twice, so the variants now lay the rest over that:
 ##   reroll1, reroll2, reroll3  that many rerolls of a morning round with no card it
 ##              would take, each at most a quarter of the cash (reroll_share 0.25:
-##              $20 of $200 at the start of a run is a tenth); on the banking lines a
-##              reroll laid over the bankroll rule (a combination not measured yet)
+##              $20 of $200 at the start of a run is a tenth); reroll2 only where the
+##              default does not reroll (jackpot, money, build)
 ##   reroll3t   three, at most a tenth of the cash (the share's effect against reroll3)
-##   reroll0    small: no reroll (its default before the pass)
-##   bank       small: work_held 1 over its rerolls
-##   nobank     the banking lines: work_held 0, their default before the pass (clearing
-##              and money with no work_below either, as before)
+##   reroll0    small, clearing, batch: no reroll (their default before the passes)
+##   nobank     every line: work_held 0, its default before the passes (clearing and
+##              money with no work_below either, as before)
 ##   work       clearing: work_below 150 only while it holds no engine (work_held 0)
 const VARIANTS := {
 	"clearing": {"stop50": {"params": {"stop": 0.5}}, "stop30": {"params": {"stop": 0.3}},
 		"nostop": {"params": {"stop": 1.0}}, "work": {"params": {"work_held": 0, "work_below": 150}},
-		"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
+		"reroll1": {"params": {"rerolls": 1}}, "reroll0": {"params": {"rerolls": 0}}, "reroll3": {"params": {"rerolls": 3}},
 		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
 		"nobank": {"params": {"work_held": 0, "work_below": 0}}},
 	"jackpot": {"nowork": {"params": {"stop": 0.5, "work_below": 0}}, "nostop": {"params": {"stop": 1.0}},
@@ -184,10 +187,10 @@ const VARIANTS := {
 		"stop50": {"params": {"stop": 0.5}}, "plate": {"params": {"forms": ["plate"]}},
 		"reroll1": {"params": {"rerolls": 1}}, "reroll0": {"params": {"rerolls": 0}}, "reroll3": {"params": {"rerolls": 3}},
 		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
-		"bank": {"params": {"work_held": 1}}},
+		"nobank": {"params": {"work_held": 0}}},
 	"batch": {"push50": {"params": {"push": 0.5}}, "push25": {"params": {"push": 0.25}},
 		"work0": {"params": {"work_below": 0}}, "paid5": {"params": {"push_paid": 5}}, "stop50": {"params": {"stop": 0.5}},
-		"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
+		"reroll1": {"params": {"rerolls": 1}}, "reroll0": {"params": {"rerolls": 0}}, "reroll3": {"params": {"rerolls": 3}},
 		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
 		"nobank": {"params": {"work_held": 0}}},
 	"money": {"floor100": {"params": {"floor": 100}}, "floor50": {"params": {"floor": 50}},

@@ -579,12 +579,13 @@ func test_bot_specs_are_data() -> void:
 		check(["fired", "fired_pct"].has(sig[0]) and RunState.FIRED.has(sig[1]), "%s: the signature is a counted perk (%s)" % [line, str(sig)])
 	check(SimBots.VARIANTS.has("build"), "build has variants (the rerolls)")
 	# The defaults the 300-run variants pass chose (M9.8 step 2, stage 2).
-	eq(SimBots.spec("small").params.rerolls, 2, "small rerolls twice")
-	for line in ["clearing", "jackpot", "batch", "money"]:
+	var rerolls := {"clearing": 2, "jackpot": 0, "small": 2, "batch": 2, "money": 0}
+	for line in rerolls:
 		eq(SimBots.spec(line).params.work_held, 1, "%s banks" % line)
-		eq(SimBots.spec(line).params.rerolls, 0, "%s does not reroll" % line)
-		check(SimBots.VARIANTS[line].has("nobank"), "%s: nobank, its old default" % line)
-	check(SimBots.VARIANTS.small.has("reroll0") and SimBots.VARIANTS.small.has("bank"), "small: reroll0 and bank")
+		eq(SimBots.spec(line).params.rerolls, rerolls[line], "%s rerolls %d a round" % [line, rerolls[line]])
+		check(SimBots.VARIANTS[line].has("nobank") and not SimBots.VARIANTS[line].has("bank"), "%s: nobank, its old default" % line)
+		check(SimBots.VARIANTS[line].has("reroll0") == (rerolls[line] > 0), "%s: reroll0 when it rerolls" % line)
+		check(SimBots.VARIANTS[line].has("reroll2") == (rerolls[line] == 0), "%s: reroll2 when it does not" % line)
 	for line in SimBots.VARIANTS:
 		for name in ["reroll1", "reroll3", "reroll3t"]:
 			check(SimBots.VARIANTS[line].has(name), "%s: a %s variant" % [line, name])
