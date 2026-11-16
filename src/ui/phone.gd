@@ -2,7 +2,7 @@ class_name Phone
 extends CanvasLayer
 ## The player's phone, screen cracked (G's to-do list, item 10): the LOAN app in both
 ## modes; in the run also the SHOP (three pages: SHELF, the shelf's perks for sale and
-## the build held; TODAY, the day's item shelf; ITEMS, the items held)
+## the build held; TODAY, the day's shelf: items and upgrade slots; ITEMS, the items held)
 ## and CONTACTS (calling the people in it; who they are and what they sell comes in
 ## M12, this is the shell).
 ## Opened by the PHONE key, P, the phone on the table or the PHONE key on the run's card.
@@ -12,7 +12,7 @@ extends CanvasLayer
 ## translated, except the phone's own words (tr here). While it is up nothing reaches
 ## the table, the machine or the card behind it.
 
-## loan, buy_perk, buy_item, use_item, buy_service
+## loan, buy_perk, buy_upgrade, buy_item, use_item, buy_service
 signal acted(action: String, id: String)
 signal closed
 
@@ -43,7 +43,7 @@ var _back: Button
 var _page: VBoxContainer
 var _scroll: ScrollContainer
 var _buttons := {}
-var _rows := {}                  ## tools: the cards on the page by id (shelf_<perk>, build_<perk>)
+var _rows := {}                  ## tools: the cards on the page by id (shelf_<perk>, build_<perk>, upgrade_<perk>)
 var _shade := ColorRect.new()
 
 
@@ -190,7 +190,7 @@ func key(id: String) -> Button:
 	return b if is_instance_valid(b) else null
 
 
-## Tools: a card on the page (shelf_<perk id>, build_<perk id>), or null.
+## Tools: a card on the page (shelf_<perk id>, build_<perk id>, upgrade_<perk id>), or null.
 func row(id: String) -> Control:
 	var c = _rows.get(id)
 	return c if is_instance_valid(c) else null
@@ -314,21 +314,7 @@ func _shop_page() -> void:
 ## dealt perks bought so far), to look at.
 func _shelf_tab() -> void:
 	for p in _st.get("shelf_perks", []):
-		var v := _card("shelf_" + str(p.id), str(p.name), "%d/%d" % [int(p.level), int(p.max)],
-			GREEN if int(p.level) > 0 else DIM)
-		for line in p.get("lines", []):
-			var l := _label(str(line[0]) if line is Array else str(line), 20, DIM if line is Array else TEXT)
-			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			v.add_child(l)
-		var buy: Dictionary = p.get("buy", {})
-		if not buy.is_empty():
-			var b := _button(str(buy.text), GREEN.darkened(0.55) if buy.ok else PANEL, TEXT if buy.ok else DIM, 20)
-			b.custom_minimum_size = Vector2(0, 42)
-			b.disabled = not buy.ok
-			var id: String = p.id
-			b.pressed.connect(func(): _tap(); acted.emit("buy_perk", id))
-			v.add_child(b)
-			_buttons["buy_perk_" + id] = b
+		_perk_card(p, "shelf_", "buy_perk", GREEN if int(p.level) > 0 else DIM)
 	var build: Array = _st.get("build", [])
 	if build.is_empty():
 		return
@@ -342,12 +328,41 @@ func _shelf_tab() -> void:
 			v.add_child(l)
 
 
-## TODAY: today's item shelf (BUY; it is not rerolled). A round of perk offers is only
-## on its card (M9.8 step 2), so it is not here.
+## A perk's card with its level, its lines and a BUY key: on SHELF (row shelf_<id>, key
+## buy_perk_<id>) and in TODAY's upgrade slots (row upgrade_<id>, key buy_upgrade_<id>).
+## `action` is what the key reports, and the key's id with the perk's after it.
+func _perk_card(p: Dictionary, row_prefix: String, action: String, note_color: Color) -> void:
+	var v := _card(row_prefix + str(p.id), str(p.name), "%d/%d" % [int(p.level), int(p.max)], note_color)
+	for line in p.get("lines", []):
+		var l := _label(str(line[0]) if line is Array else str(line), 20, DIM if line is Array else TEXT)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(l)
+	var buy: Dictionary = p.get("buy", {})
+	if buy.is_empty():
+		return
+	var b := _button(str(buy.text), GREEN.darkened(0.55) if buy.ok else PANEL, TEXT if buy.ok else DIM, 20)
+	b.custom_minimum_size = Vector2(0, 42)
+	b.disabled = not buy.ok
+	var id: String = p.id
+	b.pressed.connect(func(): _tap(); acted.emit(action, id))
+	v.add_child(b)
+	_buttons[action + "_" + id] = b
+
+
+## TODAY: today's shelf (BUY; it is not rerolled): the items, then the upgrade slots (a
+## level of a dealt perk held, each; gone once bought; nothing shown on a day with none).
+## A round of perk offers is only on its card (M9.8 step 2), so it is not here.
 func _today_tab() -> void:
 	_page.add_child(_label(str(_st.get("shelf_line", "")), 20, DIM))
 	for it in _st.get("shelf", []):
 		_page.add_child(_item_card(it, false))
+	var ups: Array = _st.get("upgrades", [])
+	if ups.is_empty():
+		return
+	_gap(4)
+	_page.add_child(_label(str(_st.get("upgrades_line", "")), 20, DIM))
+	for p in ups:
+		_perk_card(p, "upgrade_", "buy_upgrade", _tint(str(p.get("rarity_id", ""))))
 
 
 ## A card on the page with its name and a note at the top right; returns the column the

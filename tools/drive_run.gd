@@ -1,8 +1,10 @@
 extends Node
 ## Plays the story mode's run in the game scene with synthetic input: the menu's mode
 ## keys, the story and day cards, a day at the machine (bills, tickets, NEW BOX, LOAN,
-## the last sale of a box), the perk offers after a day (buy, reroll, done), the phone
-## (LOAN, the perk tree, the item shelf, box reading, a call to a contact), the item tray
+## the last sale of a box), the rounds of perk offers (a pick of one: reroll, take one,
+## skip; after a layer paid the reward rounds, free, with an upgrade card, then the
+## morning's), the phone (LOAN, the perk tree, the item shelf and an upgrade slot, box
+## reading, a call to a contact), the item tray
 ## (its picker, a token's tip, a column item's token taking the player to the machine), HIGH ROLLER's fixed bet, opening at once, putting a ticket back in the
 ## tray, the trash can, tickets kept overnight, LEAVE, a shift of work, paying early into the next layer
 ## and its stake, saving and reloading mid-run, the deadline, the settlement, and a
@@ -82,6 +84,8 @@ func _run() -> void:
 	_expect(run.story == "" and game.run_card.visible and game.run_card.key("offer_done") != null, "then the perk offers")
 	_expect(game.run_card.key("offer_0") != null and run.offers.size() == Catalog.OFFERS, "three offers, a key each")
 	_expect(game.run_card.key("offer_later") == null, "no LATER: the round is taken here or given up")
+	_expect(game.run_card.title() == "PERK OFFERS" and _card_says("TAKE ONE: THE OTHERS GO"), "the card says the pick is one")
+	_expect(game.run_card.key("play") == null and game.run_card.key("work") == null, "no day keys around the round")
 	await _shot("02b_offers")
 	game.set_language("zh")
 	await _wait(0.3)
@@ -104,6 +108,7 @@ func _run() -> void:
 	await _wait(0.3)
 	_expect(run.level(offered) == 1 and e.cash == cash - price, "BUY: %s for %s" % [offered, Hud._money(price)])
 	_expect(not run.offers_open and run.offers.is_empty() and run.items_held() == 0, "the pick ends the round: the other offers are gone, no item")
+	_expect(game.run_card.key("offer_0") == null and game.run_card.key("play") != null, "the round's card is gone: the day's choice")
 	# The checks that follow count on a run without perks and the first day's money.
 	run.perks = {}
 	run.apply(game.machine)
@@ -233,6 +238,20 @@ func _run() -> void:
 	await _wait(0.2)
 	_expect(run.held("peek") == 1 and run.held("coin") == 1 and not run.shelf.has("peek"), "PEEK and a LUCKY COIN in hand, gone from the shelf")
 	_expect(e.cash == cash - 60 and e.balanced(), "$60 from cash")
+	# An upgrade slot on TODAY (the daily shelf): a level of a dealt perk held, from cash.
+	run.upgrades = ["luck"]
+	game.phone.show_state(game.phone_state())
+	await _wait(0.2)
+	_expect(game.phone.row("upgrade_luck") != null and _pkey("buy_upgrade_luck") != null and not _pkey("buy_upgrade_luck").disabled,
+		"TODAY: LUCKY STREAK's upgrade slot, for sale")
+	await _shot("07c_shop_upgrade")
+	cash = e.cash
+	var up_price := run.perk_price("luck")
+	_phone("buy_upgrade_luck")
+	await _wait(0.2)
+	_expect(run.level("luck") == 2 and e.cash == cash - up_price and is_equal_approx(game.machine.luck, 0.6),
+		"BUY: LUCKY STREAK 2 for %s, on the machine" % Hud._money(up_price))
+	_expect(game.phone.row("upgrade_luck") == null and _pkey("buy_upgrade_luck") == null and run.upgrades.is_empty(), "the slot is gone once bought")
 	_phone("tab_items")
 	await _wait(0.2)
 	_expect(_pkey("use_peek") != null and _pkey("buy_magnifier") == null, "ITEMS: what is held, nothing to buy")
@@ -393,6 +412,8 @@ func _run() -> void:
 	await _wait(0.3)
 	_expect(run.day == 2 and run.can_choose() and game.run_card.visible, "NEXT DAY: day 2, a new choice")
 	_expect(game.tray.size() == bought - 1 and game.current.is_empty() and run.stats.discarded == discarded + 1, "the %d unopened tickets are still in the tray" % (bought - 1))
+	await _skip_offers()   # the morning's round first
+	_expect(game.run_card.key("work") != null, "the round given up: the day's choice")
 	await _shot("08c_kept_overnight")
 
 	# A shift of work.
@@ -405,6 +426,7 @@ func _run() -> void:
 	_card("next")
 	await _wait(0.3)
 	_expect(run.day == 3, "day 3")
+	await _skip_offers()
 
 	# Chinese.
 	game.set_language("zh")
@@ -413,7 +435,10 @@ func _run() -> void:
 	game.set_language("en")
 	await _wait(0.2)
 
-	# Paying early: the next layer at once, its table, its stake.
+	# Paying early: the next layer at once, its table, its stake. CLOSER taken back to its
+	# first level, the only dealt perk held below the top: the reward round's upgrade card.
+	run.perks["closer"] = 1
+	run.apply(game.machine)
 	e.bonus(run.due())
 	game._show_run_card()
 	await _wait(0.2)
@@ -428,8 +453,38 @@ func _run() -> void:
 	_expect(game.piled() == 0 and game.tray.is_empty(), "a clean table")
 	_expect(run.stats.discarded == discarded + bought, "paying ends the layer: the kept tickets are thrown away")
 	await _shot("11_story_twist")
+	_expect(run.offers_open and run.offer_reward, "reward rounds wait behind the story card")
 	_card("ok")
 	await _wait(0.3)
+	# The layer paid: reward rounds (free, rare or better, the last card an upgrade of a
+	# perk held), one after another, then the new layer's morning round.
+	_expect(game.run_card.title() == "ON THE HOUSE" and _card_says("THE LAYER IS PAID: TAKE ONE FOR FREE"), "a reward round, and why")
+	_expect(run.rewards_pending > 0 and _card_says("%d MORE AFTER THIS ONE" % run.rewards_pending), "%d more to come" % run.rewards_pending)
+	_expect(game.run_card.key("offer_reroll") == null and game.run_card.key("offer_done") != null, "no reroll; SKIP FOR AN ITEM")
+	_expect(game.run_card.key("offer_0") != null and game.run_card.key("offer_0").text == "FREE", "each card taken for nothing")
+	var last_card := run.offers.size() - 1
+	_expect(str(run.offers[last_card]) == "closer" and _card_says("UPGRADE: LEVEL 1 TO 2"), "the last card: CLOSER, an upgrade from level 1 to 2")
+	await _shot("11b_reward_round")
+	game.set_language("zh")
+	await _wait(0.3)
+	await _shot("11c_reward_round_zh")
+	game.set_language("en")
+	await _wait(0.2)
+	cash = e.cash
+	var pending := run.rewards_pending
+	_card("offer_%d" % last_card)
+	await _wait(0.3)
+	_expect(run.level("closer") == 2 and e.cash == cash, "the upgrade taken, for nothing")
+	_expect(run.offer_reward and run.rewards_pending == pending - 1 and game.run_card.title() == "ON THE HOUSE", "the next reward round at once")
+	var reward_guard := 0
+	while run.offer_reward and reward_guard < 12:
+		reward_guard += 1
+		_card("offer_done")
+		await _wait(0.3)
+	_expect(not run.offer_reward and (not run.offers_open or (game.run_card.title() == "PERK OFFERS"
+		and game.run_card.key("offer_reroll") != null)), "then the new layer's morning round (when it has cards)")
+	await _skip_offers()
+	_expect(game.run_card.key("play") != null, "then the day's choice")
 	_card("play")
 	await _wait(0.5)
 	await _shot("12_layer_2_machine")
@@ -570,6 +625,14 @@ func _skip_offers() -> void:
 		guard += 1
 		_card("offer_done")
 		await _wait(0.3)
+
+
+## Whether a line on the run's card reads `text`.
+func _card_says(text: String) -> bool:
+	for l in game.run_card._body.get_children():
+		if l is Label and l.text == text:
+			return true
+	return false
 
 
 ## Clicks a key on the run's card.
