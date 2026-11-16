@@ -39,8 +39,8 @@ const FIRED_MIN := 0.9           ## given: a given core perk fires in at least t
 ##              failed; -1 when none played it), offered_by (the same, the share in
 ##              which it had been dealt as a card by then: "dealt but not bought"
 ##              against "never dealt", roadmap 十.8)}
-##   rounds     {morning, reward, rerolls, free_rerolls}: the rounds dealt a run, the
-##              rerolls made and, of them, the free ones, the mean
+##   rounds     {morning, reward, rerolls}: the rounds dealt a run and the rerolls paid
+##              for, the mean
 ##   upgrades   {shelf, reward}: levels bought from the shelf's upgrade slots and reward
 ##              rounds' upgrade cards taken a run (RunState.stats upgrades,
 ##              reward_upgrades), the mean
@@ -80,7 +80,7 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 	played_in.fill(0)
 	var held_in := {}     # perk id -> [runs holding it when each layer ended]
 	var offered_in := {}  # perk id -> [runs it had been offered in by the time each layer ended]
-	var rounds := {"morning": 0, "reward": 0, "rerolls": 0, "free_rerolls": 0}
+	var rounds := {"morning": 0, "reward": 0, "rerolls": 0}
 	var upgrades := {"shelf": 0, "reward": 0}
 	var dead := []   # the death of each failed run
 	var carry := []
@@ -163,8 +163,7 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 		"return_fees": float(won) / (spent + fees) if spent + fees > 0 else 0.0, "fees": fees / n,
 		"days_spared": spared / n, "perks": perks / n, "best": percentiles(bests, BEST_PCT), "outcomes": outcomes,
 		"wilson": wilson(cleared, played), "triggers": _triggers(spec, held, played, played_in, held_in, offered_in),
-		"rounds": {"morning": rounds.morning / n, "reward": rounds.reward / n, "rerolls": rounds.rerolls / n,
-			"free_rerolls": rounds.free_rerolls / n},
+		"rounds": {"morning": rounds.morning / n, "reward": rounds.reward / n, "rerolls": rounds.rerolls / n},
 		"upgrades": {"shelf": upgrades.shelf / n, "reward": upgrades.reward / n},
 		"deaths": _deaths(dead, layers, played),
 		"death_blocks": _death_blocks(dead, layers), "carry": carry_rows, "stopped": stopped}
@@ -449,10 +448,10 @@ static func _used(id: String, r: Dictionary) -> bool:
 ## the whole core when it ended), engine (the same for at least one engine), done (the
 ## median round, morning and reward rounds counted, at which the core was complete, of
 ## the runs that completed it; -1 when none did), never (the share of runs that never
-## did), cards ({id: [held share a layer]}), rerolls_run (a run, free and paid),
-## free_run and paid_run (of them, the free ones, RunConfig.free_rerolls, and the paid
-## ones), cost (dollars paid for them a run), rounds (rounds dealt a run, morning and
-## reward)}.
+## did), cards ({id: [held share a layer]}), at_least ([a [share a layer] for each k
+## from 1 to the core's size]: the runs holding k of the core's cards or more when the
+## layer ended; its last is `whole`), rerolls_run (a run), cost (dollars paid for them a
+## run), rounds (rounds dealt a run, morning and reward)}.
 static func reach(line: String, base_forms: Array, runs: int, seed_prefix := "SIM", rerolls := 0,
 		config: RunConfig = null) -> Dictionary:
 	if config == null:
@@ -471,15 +470,16 @@ static func reach(line: String, base_forms: Array, runs: int, seed_prefix := "SI
 	var cards := {}
 	for id in core:
 		cards[id] = whole.duplicate()
+	var at_least := []
+	for k in core.size():
+		at_least.append(whole.duplicate())
 	var done := []
 	var n_rerolls := 0
-	var n_free := 0
 	var cost := 0
 	var rounds := 0
 	for i in runs:
 		var r := SimRun.play(spec, base_forms, "%s-%d" % [seed_prefix, i], config)
 		n_rerolls += int(r.stats.rerolls)
-		n_free += int(r.stats.free_rerolls)
 		cost += int(r.counters.get("reroll_cost", 0))
 		rounds += int(r.stats.rounds) + int(r.stats.reward_rounds)
 		if r.counters.has("reach_round"):
@@ -491,9 +491,13 @@ static func reach(line: String, base_forms: Array, runs: int, seed_prefix := "SI
 				whole[l] += 1
 			if engines.any(func(id): return int(held.get(id, 0)) > 0):
 				engine[l] += 1
+			var count := 0
 			for id in core:
 				if int(held.get(id, 0)) > 0:
 					cards[id][l] += 1
+					count += 1
+			for k in count:
+				at_least[k][l] += 1
 	var share := func(counts: Array) -> Array:
 		var out := []
 		for l in layers:
@@ -505,8 +509,8 @@ static func reach(line: String, base_forms: Array, runs: int, seed_prefix := "SI
 	var n := maxf(1.0, runs)
 	return {"line": line, "rerolls": rerolls, "runs": runs, "core": core.duplicate(), "engines": engines,
 		"whole": share.call(whole), "engine": share.call(engine), "done": median(done) if not done.is_empty() else -1,
-		"never": 1.0 - done.size() / n, "cards": card_shares, "rerolls_run": n_rerolls / n, "free_run": n_free / n,
-		"paid_run": (n_rerolls - n_free) / n, "cost": cost / n,
+		"never": 1.0 - done.size() / n, "cards": card_shares, "at_least": at_least.map(func(c): return share.call(c)),
+		"rerolls_run": n_rerolls / n, "cost": cost / n,
 		"rounds": rounds / n}
 
 

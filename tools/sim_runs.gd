@@ -70,25 +70,26 @@ extends Node
 ## slots, and reward rounds' upgrade cards); --save writes the upgrades too.
 ## With --reach the tool does only the deal's ceiling (SimReport.reach; roadmap 十二.3,
 ## "are there enough picks for a line to come together", money left out) for the line
-## bots of --bots= (default the five), each at 0, 1, 2 and 3 paid rerolls a morning round
+## bots of --bots= (default the five), each at 0, 1, 2 and 3 rerolls a morning round
 ## (--rerolls=a,b,... for other counts, e.g. --rerolls=0): a
 ## bot with plenty of cash that works every day (each layer paid on its last day, one
 ## reward round a layer), buys the shelf perks of the line's core and takes from every
 ## round the first core card it lacks, rerolling when none is there. Per line and reroll
 ## count: the share of runs holding the whole core, and at least one engine, by the end
 ## of layer 1 / 2 / 3; the median round (morning and reward counted) the core was
-## complete at and the share that never completed it; free and paid rerolls a run (two
-## columns) and what the paid ones cost; then
-## each core card's held share by layer. Exit code 0: it is a report.
+## complete at and the share that never completed it; rerolls a run and their cost; then
+## the share holding at least k of the core's cards by layer, k from 1 to the core's
+## size; then each core card's held share by layer. Exit code 0: it is a report.
 ## --set=key=value[,key=value...]: the run's config with those fields overridden
-## (RunConfig.SETTABLE: shelf_upgrades and the dealing experiments of roadmap 十三.5,
-## deal_bias, reward_bias, free_rerolls, starter, offer_bonus; RunConfig.parse_set) for
-## the table, --variants, --given and --reach (not --baseline: the fixture is the
-## standard config's). An unknown key or a bad value is an error (exit code 1). The
-## header names the overrides, --save writes them, and --against prints the saved
-## file's beside them, so --set=deal_bias=3 --against=<a file saved without> pairs the
-## experiment against the standard deal on the same seeds. --upgrades=N is
-## --set=shelf_upgrades=N.
+## (RunConfig.SETTABLE, RunConfig.parse_set: shelf_upgrades and the dealing switches of
+## roadmap 十三.5: starter, starter_cards=line:perk/line:perk..., offer_bonus, and
+## deal1 / deal2 / deal3=common/rare/legendary, a layer's rarity weights) for the table,
+## --variants, --given and --reach (not --baseline: the fixture is the standard
+## config's). An unknown key, a bad value or a config that does not hold together
+## (RunConfig.problems: a starter card that does not fit) is an error (exit code 1). The
+## header names the overrides, --save writes them, and --against prints the saved file's
+## beside them, so --set=deal2=10/8/4 --against=<a file saved without> pairs the weights
+## against the standard deal on the same seeds. --upgrades=N is --set=shelf_upgrades=N.
 
 ## The roadmap's targets (docs/roadmap.md 一): [text, low, high] in percent of runs
 ## cleared ("<": under high). build and perks have none yet.
@@ -212,6 +213,11 @@ func _run() -> void:
 	if not overrides.is_empty():
 		slots = ", overrides: " + RunConfig.set_text(overrides)
 		config.apply_set(overrides)
+		var bad := config.problems()
+		if not bad.is_empty():
+			print("--set: " + "; ".join(bad))
+			get_tree().quit(1)
+			return
 	if probes:
 		get_tree().quit(_probes(probe_runs, churn_boxes, res.pack.forms))
 		return
@@ -421,9 +427,9 @@ func _print_bot(s: Dictionary, detail: bool) -> void:
 		return
 	var rd: Dictionary = s.get("rounds", {})
 	var ud: Dictionary = s.get("upgrades", {})
-	print("  rounds a run: morning %.1f, reward %.1f; rerolls %.2f (free %.2f); upgrades: shelf %.2f, reward %.2f" % [
+	print("  rounds a run: morning %.1f, reward %.1f; rerolls %.2f; upgrades: shelf %.2f, reward %.2f" % [
 		float(rd.get("morning", 0.0)), float(rd.get("reward", 0.0)), float(rd.get("rerolls", 0.0)),
-		float(rd.get("free_rerolls", 0.0)), float(ud.get("shelf", 0.0)), float(ud.get("reward", 0.0))])
+		float(ud.get("shelf", 0.0)), float(ud.get("reward", 0.0))])
 	var cat := Catalog.standard()
 	if not s.triggers.is_empty():
 		print("  %-12s %5s %5s %8s %8s %6s  %5s %5s %5s  %5s %5s %5s" % ["perk", "held", "day", "fired/r", "/100 tk", "mean%",
@@ -510,7 +516,7 @@ func _reach(lines: Array, runs: int, prefix: String, forms: Array, config: RunCo
 		rerolls: Array = [0, 1, 2, 3]) -> void:
 	print("reach, the deal's ceiling (docs/roadmap.md 十二.3; money left out): %d runs a line and reroll count, seeds %s-0 .. %s-%d%s" % [
 		runs, prefix, prefix, runs - 1, slots])
-	print("the bot: $%d in the pocket, works every day (each layer paid on its last day: one reward round a layer), buys the shelf perks of the line's core, takes from every round the first core card it lacks; on a morning round with none, up to N paid rerolls (free ones, --set=free_rerolls, on top)" % SimBots.REACH_CASH)
+	print("the bot: $%d in the pocket, works every day (each layer paid on its last day: one reward round a layer), buys the shelf perks of the line's core, takes from every round the first core card it lacks; on a morning round with none, up to N rerolls" % SimBots.REACH_CASH)
 	for line in lines:
 		var t0 := Time.get_ticks_msec()
 		var rows := []
@@ -521,13 +527,22 @@ func _reach(lines: Array, runs: int, prefix: String, forms: Array, config: RunCo
 		print("\n%s: core %s%s; engines %s (%.1f s)" % [line, ", ".join(first.core),
 			"" if shelf.is_empty() else " (shelf bought: %s)" % ", ".join(shelf), ", ".join(first.engines),
 			(Time.get_ticks_msec() - t0) / 1000.0])
-		print("  %-7s %5s %5s %5s   %5s %5s %5s   %7s %6s   %7s %7s %8s %6s" % ["rerolls", "core1", "core2", "core3", "eng1", "eng2",
-			"eng3", "done at", "never", "free/r", "paid/r", "$ a run", "rounds"])
+		print("  %-7s %5s %5s %5s   %5s %5s %5s   %7s %6s   %7s %8s %6s" % ["rerolls", "core1", "core2", "core3", "eng1", "eng2",
+			"eng3", "done at", "never", "rr/run", "$ a run", "rounds"])
 		for r in rows:
 			var done := "-" if int(r.done) < 0 else str(int(r.done))
-			print("  %-7d %s   %s   %7s %5.0f%%   %7.2f %7.2f %8.0f %6.1f" % [r.rerolls, _pcts(r.whole), _pcts(r.engine), done,
-				r.never * 100.0, r.free_run, r.paid_run, r.cost, r.rounds])
-		print("  each core card held by the end of layer 1 / 2 / 3, percent of runs, at %s rerolls:" % ", ".join(rerolls.map(func(n): return str(n))))
+			print("  %-7d %s   %s   %7s %5.0f%%   %7.2f %8.0f %6.1f" % [r.rerolls, _pcts(r.whole), _pcts(r.engine), done,
+				r.never * 100.0, r.rerolls_run, r.cost, r.rounds])
+		var counts := ", ".join(rerolls.map(func(n): return str(n)))
+		print("  at least k of the %d core cards held by the end of layer 1 / 2 / 3, percent of runs, at %s rerolls:" % [
+			first.core.size(), counts])
+		for k in first.core.size():
+			var parts := []
+			for r in rows:
+				var c: Array = r.at_least[k]
+				parts.append("/".join(c.map(func(v): return "-" if v < 0.0 else "%.0f" % (v * 100.0))))
+			print("    %-12s %s" % ["%d of %d" % [k + 1, first.core.size()], "   ".join(parts)])
+		print("  each core card held by the end of layer 1 / 2 / 3, percent of runs, at %s rerolls:" % counts)
 		for id in first.core:
 			var parts := []
 			for r in rows:
@@ -619,7 +634,7 @@ static func _overrides_text(overrides: Dictionary) -> String:
 		return "none (the standard config)"
 	var parts := PackedStringArray()
 	for key in overrides:
-		parts.append("%s=%s" % [key, str(overrides[key])])
+		parts.append("%s=%s" % [key, RunConfig.value_text(key, overrides[key])])
 	return ", ".join(parts)
 
 

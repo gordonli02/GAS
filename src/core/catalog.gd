@@ -170,6 +170,14 @@ const DEAL := [
 	{"rarity": {"common": 10, "rare": 5, "legendary": 2}, "no_kinds": []},
 	{"rarity": {"common": 10, "rare": 5, "legendary": 5}, "no_kinds": []},
 ]
+## The build lines a starter round deals from (RunConfig.starter, an experiment for
+## roadmap 十三.5): one entry card of three of them.
+const STARTER_LINES := ["clearing", "jackpot", "small", "batch", "money"]
+## Each build line's entry card for the starter round (RunState.starter_cards; a config
+## may override it, RunConfig.starter_cards). Placeholders: what "the line's cheapest
+## dealt perk with no requirements that layer 1 deals" gave, until G names each line's
+## card (docs/roadmap.md 十三.5). problems() holds each to starter_problems.
+const STARTER := {"clearing": "closer", "jackpot": "pity", "small": "penny", "batch": "streak", "money": "middle"}
 const ITEM_WEIGHT := {"common": 10, "rare": 4, "legendary": 1}
 const KINDS := ["shelf", "build", "risk", "twist", "sure"]
 const KIND_NAMES := {"shelf": "THE SHELF", "build": "BUILD", "risk": "RISK", "twist": "TWIST", "sure": "CERTAINTY"}
@@ -439,15 +447,17 @@ static func kind(p: Dictionary) -> String:
 	return str(KIND_BRANCHES.get(str(p.get("branch", "")), "build"))
 
 
-## The deal at a layer (0-based): an entry of DEAL, the last one past the end.
-static func deal(layer: int) -> Dictionary:
-	return DEAL[clampi(layer, 0, DEAL.size() - 1)]
+## The deal at a layer (0-based): an entry of `table` (DEAL when empty; a run's is
+## RunConfig.deal), the last one past the end.
+static func deal(layer: int, table: Array = []) -> Dictionary:
+	var t: Array = DEAL if table.is_empty() else table
+	return t[clampi(layer, 0, t.size() - 1)]
 
 
-## A perk's weight in a deal at a layer: its rarity's weight in DEAL, 0 when the layer
-## leaves its kind (or its rarity) out.
-static func deal_weight(p: Dictionary, layer: int) -> float:
-	var d := deal(layer)
+## A perk's weight in a deal at a layer: its rarity's weight in `table` (DEAL when
+## empty), 0 when the layer leaves its kind (or its rarity) out.
+static func deal_weight(p: Dictionary, layer: int, table: Array = []) -> float:
+	var d := deal(layer, table)
 	if d.no_kinds.has(kind(p)):
 		return 0.0
 	return float(d.rarity.get(str(p.get("rarity", "")), 0))
@@ -556,17 +566,8 @@ func problems() -> PackedStringArray:
 				out.append("perk %s needs %s, which a run does not sell (meta)" % [p.id, need])
 			elif lv > other.levels.size():
 				out.append("perk %s needs %s at a level it does not have" % [p.id, need])
-	if DEAL.size() != 3:
-		out.append("the deal: one entry per layer, three")
-	for i in DEAL.size():
-		for r in RARITY_WEIGHT:
-			if not DEAL[i].rarity.has(r) or int(DEAL[i].rarity[r]) < 0:
-				out.append("the deal at layer %d: a weight for %s, 0 or more" % [i + 1, r])
-		for k in DEAL[i].no_kinds:
-			if not KINDS.has(k):
-				out.append("the deal at layer %d: no kind %s" % [i + 1, k])
-	if not DEAL.is_empty() and not DEAL[0].no_kinds.has("risk"):
-		out.append("the deal at layer 1: no risk (G)")
+	out.append_array(deal_problems(DEAL))
+	out.append_array(starter_problems(STARTER))
 	for p in perks:
 		if _circular(p.id, {}):
 			out.append("perk %s needs itself" % p.id)
@@ -578,6 +579,54 @@ func problems() -> PackedStringArray:
 		for s in c.get("services", []):
 			if int(s.get("price", 0)) < 1 or int(s.get("per_layer", 0)) < 1:
 				out.append("service %s: price or per_layer" % s.id)
+	return out
+
+
+## What is wrong with a table of rarity weights by layer (DEAL, or a config's
+## RunConfig.deal): one entry per layer, three; a weight 0 or more for each rarity;
+## known kinds left out; no risk in layer 1 (G).
+static func deal_problems(table: Array) -> PackedStringArray:
+	var out := PackedStringArray()
+	if table.size() != 3:
+		out.append("the deal: one entry per layer, three")
+	for i in table.size():
+		for r in RARITY_WEIGHT:
+			if not table[i].rarity.has(r) or int(table[i].rarity[r]) < 0:
+				out.append("the deal at layer %d: a weight for %s, 0 or more" % [i + 1, r])
+		for k in table[i].no_kinds:
+			if not KINDS.has(k):
+				out.append("the deal at layer %d: no kind %s" % [i + 1, k])
+	if not table.is_empty() and not table[0].no_kinds.has("risk"):
+		out.append("the deal at layer 1: no risk (G)")
+	return out
+
+
+## What is wrong with a starter table (STARTER, or a config's RunConfig.starter_table):
+## the five build lines of STARTER_LINES, each a branch of the catalog, and for each a
+## dealt perk of that branch that is there, not meta, with no requirements, and dealt
+## in layer 1 by `table` (DEAL when empty).
+func starter_problems(starter: Dictionary, table: Array = []) -> PackedStringArray:
+	var out := PackedStringArray()
+	var branch_ids := []
+	for b in branches:
+		branch_ids.append(b.id)
+	if starter.size() != STARTER_LINES.size():
+		out.append("the starter table: the five build lines (%s)" % ", ".join(STARTER_LINES))
+	for line in starter:
+		var id := str(starter[line])
+		var p := perk(id)
+		if not STARTER_LINES.has(line) or not branch_ids.has(line):
+			out.append("the starter table: %s is not a build line" % line)
+		elif p.is_empty():
+			out.append("the starter table: %s's card %s is not there" % [line, id])
+		elif p.get("shelf", false) or meta(p):
+			out.append("the starter table: %s's card %s is not dealt in a run" % [line, id])
+		elif str(p.get("branch", "")) != str(line):
+			out.append("the starter table: %s's card %s is of branch %s" % [line, id, p.get("branch", "")])
+		elif not p.get("requires", {}).is_empty() or not p.get("requires_any", {}).is_empty():
+			out.append("the starter table: %s's card %s has requirements" % [line, id])
+		elif deal_weight(p, 0, table) <= 0.0:
+			out.append("the starter table: %s's card %s is not dealt in layer 1" % [line, id])
 	return out
 
 

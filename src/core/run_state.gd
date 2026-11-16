@@ -105,7 +105,6 @@ var stats := {"days": 0, "play_days": 0, "shifts": 0, "tickets": 0, "wages": 0, 
 	"layers_cleared": 0, "discarded": 0,   ## discarded: tickets bought and thrown away unopened
 	"shop": 0, "perks": 0, "items": 0, "services": 0, "bonus": 0,   ## shop: money spent there; bonus: prize money from perks and coins
 	"rerolls": 0, "skipped_offers": 0, "rounds": 0, "reward_rounds": 0,   ## rounds: morning rounds dealt; reward_rounds: reward rounds dealt
-	"free_rerolls": 0,   ## of the rerolls, those that cost nothing (RunConfig.free_rerolls, an experiment)
 	"upgrades": 0, "reward_upgrades": 0,   ## upgrades: levels bought from the shelf's upgrade slots; reward_upgrades: a reward round's upgrade card taken
 	"savings": 0, "insured": 0, "boxes_cleared": 0, "best_prize": 0,
 	"sure_wins": 0, "refunded": 0, "sealed": 0,   ## sure_wins: prizes moved forward; refunded: tickets given back
@@ -1070,7 +1069,7 @@ func missing(perk_id: String) -> Dictionary:
 
 ## Perks that can be dealt: off the shelf, not held yet (a held perk is levelled up from
 ## the shelf's upgrade slots, or a reward round's upgrade card, never dealt again),
-## requirements met, of a kind and a rarity the layer's deal has (Catalog.DEAL). A perk
+## requirements met, of a kind and a rarity the layer's deal has (deal_weight). A perk
 ## of a form (`form`, a form's uid) only while that form is on the machine: `forms`, the
 ## uids of the machine's columns (no perk has one yet; the callers pass none until there
 ## are some).
@@ -1079,7 +1078,7 @@ func offerable(forms: Array = []) -> Array:
 	for p in catalog.dealt():
 		if level(p.id) > 0 or not missing(p.id).is_empty():
 			continue
-		if Catalog.deal_weight(p, layer) <= 0.0:
+		if deal_weight(p) <= 0.0:
 			continue
 		if p.has("form") and not forms.has(str(p.form)):
 			continue
@@ -1097,13 +1096,12 @@ func shelf_perks() -> Array:
 
 
 ## The morning round's cards: offer_count() perks out of offerable(), drawn by the
-## layer's rarity weights (Catalog.DEAL), from the run's seed, the layer, the day and the
+## layer's rarity weights (deal_weight), from the run's seed, the layer, the day and the
 ## reroll (so a save cannot be rerolled by loading it). A perk its requirements opened
 ## weighs double, so that a build comes together. The first Catalog.OFFERS of them hold
 ## two kinds at least (build / risk / twist / sure) and two branches, when the pool has
 ## them (_deal). Cards past those (DOUBLE DOWN, a bonus from outside the run) are drawn
-## freely. With config.deal_bias, a perk of a branch held weighs that many times more
-## (_pool). With config.starter, the run's first round opens with starter_cards().
+## freely. With config.starter, the run's first round opens with starter_cards().
 func deal_offers(forms: Array = []) -> Array:
 	var r := SeededRng.new("%s|offer|%d|%d|%d" % [seed, layer, day, offer_rerolls])
 	var out := []
@@ -1113,26 +1111,21 @@ func deal_offers(forms: Array = []) -> Array:
 			if ids.has(id) and out.size() < offer_count():
 				out.append(_pool([id])[0])
 				ids.erase(id)
-	_deal(out, _pool(ids, config.deal_bias if config != null else 1.0), offer_count(), r)
+	_deal(out, _pool(ids), offer_count(), r)
 	return out.map(func(c): return c.id)
-
-
-## The build lines the starter round draws from (config.starter).
-const STARTER_LINES := ["clearing", "jackpot", "small", "batch", "money"]
 
 
 ## The starter round's cards (config.starter; an experiment for roadmap 十三.5, off in
 ## the standard config; not a rule yet): the entry card of each of three different
-## build lines (STARTER_LINES), the lines drawn from the seed, in the order drawn. A
-## line's entry card is its cheapest dealt perk at level 1 with no requirements that the
-## first layer's deal allows, the catalog's order on a tie; a line without one is not
-## drawn. Cards past three are dealt the usual way (deal_offers).
+## build lines, the lines drawn from the seed, in the order drawn. Each line's entry
+## card is the config's table (RunConfig.starter_table: Catalog.STARTER, or the config's
+## starter_cards over it), in its order; a card that cannot be dealt now is left out
+## (deal_offers). Cards past three are dealt the usual way (deal_offers).
 func starter_cards() -> Array:
+	var table: Dictionary = config.starter_table() if config != null else Catalog.STARTER
 	var entries := []
-	for b in STARTER_LINES:
-		var e := entry_card(b)
-		if e != "":
-			entries.append(e)
+	for b in table:
+		entries.append(str(table[b]))
 	var r := SeededRng.new("%s|starter" % seed)
 	var out := []
 	while out.size() < Catalog.OFFERS and not entries.is_empty():
@@ -1142,20 +1135,10 @@ func starter_cards() -> Array:
 	return out
 
 
-## A build line's entry card (starter_cards): "" when it has none.
-func entry_card(branch: String) -> String:
-	var best := ""
-	var price := 0
-	for p in catalog.dealt():
-		if p.branch != branch or not p.get("requires", {}).is_empty() or not p.get("requires_any", {}).is_empty():
-			continue
-		if Catalog.deal_weight(p, 0) <= 0.0:
-			continue
-		var pr := int(p.levels[0].price)
-		if best == "" or pr < price:
-			best = p.id
-			price = pr
-	return best
+## A perk's weight in a deal at the run's layer: Catalog.deal_weight at the config's
+## rarity weights (RunConfig.deal; Catalog.DEAL in the standard config).
+func deal_weight(p: Dictionary) -> float:
+	return Catalog.deal_weight(p, layer, config.deal if config != null else [])
 
 
 ## A reward round's cards (a layer paid, docs/roadmap.md 十.7): offer_count() of them,
@@ -1180,9 +1163,8 @@ func deal_reward(forms: Array = []) -> Array:
 		else:
 			rare.append(id)
 	var out := []
-	var bias: float = config.reward_bias if config != null else 1.0
-	_deal(out, _pool(rare, bias), fresh, r)
-	_deal(out, _pool(common, bias), fresh, r)
+	_deal(out, _pool(rare), fresh, r)
+	_deal(out, _pool(common), fresh, r)
 	var ids: Array = out.map(func(c): return c.id)
 	if up != "":
 		ids.append(up)
@@ -1190,31 +1172,16 @@ func deal_reward(forms: Array = []) -> Array:
 
 
 ## The pool a deal draws from: [{id, w, branch, kind}], each perk at its layer's weight,
-## doubled for a perk with requirements; with `bias` (config.deal_bias or reward_bias,
-## an experiment for roadmap 十三.5, off in the standard config; not a rule yet; 1.0 is
-## off) times that for a perk of a branch held (held_branches).
-func _pool(ids: Array, bias := 1.0) -> Array:
+## doubled for a perk with requirements.
+func _pool(ids: Array) -> Array:
 	var pool := []
-	var held_b := held_branches() if bias != 1.0 else {}
 	for id in ids:
 		var p := catalog.perk(id)
-		var w := Catalog.deal_weight(p, layer)
+		var w := deal_weight(p)
 		if not p.get("requires", {}).is_empty():
 			w *= 2.0
-		if held_b.has(str(p.branch)):
-			w *= bias
 		pool.append({"id": id, "w": w, "branch": p.branch, "kind": Catalog.kind(p)})
 	return pool
-
-
-## The branches of the dealt perks held (level 1 or more; the shelf's not counted), as
-## a set: what config.deal_bias and reward_bias lean toward.
-func held_branches() -> Dictionary:
-	var out := {}
-	for p in catalog.dealt():
-		if level(p.id) > 0:
-			out[str(p.branch)] = true
-	return out
 
 
 ## Draws from `pool` into `out` (pool entries) until `out` holds `n` or the pool is
@@ -1355,24 +1322,13 @@ func _free_ok(perk_id: String) -> bool:
 		and missing(perk_id).is_empty()
 
 
-## Whether the round up is the free starter round (config.starter 2; an experiment for
-## roadmap 十三.5, off in the standard config; not a rule yet): the run's first morning
-## round, before any reroll, its pick taken for nothing like a reward round's. It is a
-## morning round in every other way (rerolled, it deals a paid round; it can be given up
-## for an item). Read from where the run stands, so a save keeps it.
-func starter_pick() -> bool:
-	return config != null and config.starter >= 2 and offers_open and not offer_reward \
-		and layer == 0 and day == 1 and offer_rerolls == 0
-
-
-## Whether card `k` can be taken now: on a reward round (or the free starter round) for
-## nothing, on a morning round from cash (a CHEAT SHEET's free pick is buy_offer's
-## `free`).
+## Whether card `k` can be taken now: on a reward round for nothing, on a morning round
+## from cash (a CHEAT SHEET's free pick is buy_offer's `free`).
 func can_buy_offer(k: int, e: Economy) -> bool:
 	if not offers_open or k < 0 or k >= offers.size():
 		return false
 	var id := str(offers[k])
-	return _free_ok(id) if offer_reward or starter_pick() else can_buy_perk(id, e)
+	return _free_ok(id) if offer_reward else can_buy_perk(id, e)
 
 
 ## Takes card `k` of the round up: on a reward round for nothing; on a morning round
@@ -1389,11 +1345,6 @@ func buy_offer(k: int, e: Economy, free := false) -> bool:
 		if level(id) > 0:
 			stats.reward_upgrades += 1
 		_level_up(id)
-	elif starter_pick():
-		# The free starter round (config.starter 2): nothing paid, a CHEAT SHEET not used.
-		if not _free_ok(id):
-			return false
-		_level_up(id)
 	elif free:
 		if held("cheat") <= 0 or not _free_ok(id):
 			return false
@@ -1406,24 +1357,8 @@ func buy_offer(k: int, e: Economy, free := false) -> bool:
 
 
 ## What another deal of the morning round costs now (it doubles each time in a round).
-## With config.free_rerolls (an experiment for roadmap 十三.5, off in the standard
-## config; not a rule yet) the first that many of a round cost 0 and the paid ones
-## after them start at the first price.
 func reroll_price() -> int:
-	var free := free_rerolls()
-	if offer_rerolls < free:
-		return 0
-	return Catalog.OFFER_REROLL * stake() * (1 << (offer_rerolls - free))
-
-
-## config.free_rerolls: the rerolls of each morning round that cost nothing (0: off).
-func free_rerolls() -> int:
-	return maxi(0, config.free_rerolls) if config != null else 0
-
-
-## The rerolls of the round up that were paid for (those past the free ones).
-func paid_rerolls() -> int:
-	return maxi(0, offer_rerolls - free_rerolls())
+	return Catalog.OFFER_REROLL * stake() * (1 << offer_rerolls)
 
 
 ## A reroll is only for a morning round still up (before its pick: a pick ends it), with
@@ -1441,8 +1376,6 @@ func reroll_offers(e: Economy) -> bool:
 	stats.shop += price
 	offer_rerolls += 1
 	stats.rerolls += 1
-	if price == 0:
-		stats.free_rerolls += 1
 	offers = deal_offers()
 	offers_open = not offers.is_empty()
 	_note_offered()

@@ -1220,15 +1220,27 @@ func _reward_deals(r: RunState) -> Array:
 	return out
 
 
-## The dealing experiments of docs/roadmap.md 十三.5 (RunConfig deal_bias, reward_bias,
-## free_rerolls, starter, offer_bonus; not rules yet): every one off in the standard
-## config, where the deal is what it was; off by hand, the same.
-func test_deal_experiments_off() -> void:
+## A run of the standard config with `text` (RunConfig.parse_set's text) put into it,
+## started on `seed_text`.
+func _set_run(text: String, seed_text := "P-1") -> RunState:
+	var c := RunConfig.standard()
+	var p := RunConfig.parse_set(text)
+	eq(p.error, "", "parsed: %s" % text)
+	c.apply_set(p.set)
+	return RunState.start(c, seed_text, ["diner", "bar", "bingo"])
+
+
+## The dealing switches of docs/roadmap.md 十三.5 (RunConfig starter, starter_cards,
+## offer_bonus, deal): every one off in the standard config, where the deal is what it
+## was; off by hand, the same.
+func test_deal_switches_off() -> void:
 	var std := RunConfig.standard()
-	check(std.deal_bias == 1.0 and std.reward_bias == 1.0, "the biases off (1.0)")
-	check(std.free_rerolls == 0 and std.starter == 0 and std.offer_bonus == 0, "free rerolls, starter, offer bonus off (0)")
+	check(std.starter == 0 and std.offer_bonus == 0, "starter, offer bonus off (0)")
+	eq(std.starter_cards, {}, "no starter cards of its own")
+	eq(std.starter_table(), Catalog.STARTER, "the starter table: Catalog's")
+	eq(std.deal, Catalog.DEAL, "the rarity weights: Catalog's")
 	eq(std.problems(), PackedStringArray(), "the standard config holds together")
-	var off := _exp_run({"deal_bias": 1.0, "reward_bias": 1.0, "free_rerolls": 0, "starter": 0, "offer_bonus": 0})
+	var off := _exp_run({"starter": 0, "offer_bonus": 0, "starter_cards": {}, "deal": Catalog.DEAL})
 	var r := _run()
 	eq(off.offers, r.offers, "the first round of a seed: the same")
 	eq(_deals(off), _deals(r), "every deal of 60 seeds: the same")
@@ -1237,112 +1249,67 @@ func test_deal_experiments_off() -> void:
 		run.perks = {"closer": 1, "penny": 1, "savings": 1}
 	eq(_deals(off), _deals(r), "with perks held, at layer 2: the same")
 	eq(_reward_deals(off), _reward_deals(r), "reward rounds: the same")
-	# The pool: the layer's weight, doubled for a perk with requirements, nothing else.
+	# The pool: the layer's weight in Catalog.DEAL, doubled for a perk with requirements.
 	for c in r._pool(r.offerable()):
 		var p := r.catalog.perk(c.id)
 		var w := Catalog.deal_weight(p, r.layer) * (2.0 if not p.get("requires", {}).is_empty() else 1.0)
 		eq(float(c.w), w, "%s: its weight as before" % c.id)
+	for l in 4:
+		r.layer = l
+		for p in r.catalog.dealt():
+			eq(r.deal_weight(p), Catalog.deal_weight(p, l), "%s at layer %d: Catalog's weight" % [p.id, l + 1])
 	r.offer_rerolls = 0
 	eq(r.reroll_price(), Catalog.OFFER_REROLL * r.stake(), "the first reroll at its price")
 	eq(r.offer_bonus, 0, "no offer bonus")
 
 
-## deal_bias (an experiment): a morning round's perks of a branch held (a dealt perk,
-## not the shelf's) weigh that many times more; reward rounds are not touched.
-func test_deal_bias() -> void:
-	var b := _exp_run({"deal_bias": 4.0})
+## The rarity weights by layer from the config (RunConfig.deal; --set=deal1..deal3): a
+## layer's weights change what that layer deals and no other; its no_kinds stay
+## Catalog's; Catalog.DEAL itself is not touched.
+func test_deal_weights_from_the_config() -> void:
 	var r := _run()
-	for run in [b, r]:
+	var commons := _set_run("deal1=10/0/0")
+	for id in commons.offerable():
+		eq(str(commons.catalog.perk(id).rarity), "common", "deal1=10/0/0: %s is common" % id)
+	var not_common := func(p: Dictionary) -> bool: return p.rarity != "common"
+	eq(_count(commons, _deals(commons), not_common), 0, "over 180 deals, no rare or legendary card")
+	# Layer 1 deals no legendary without its requirement met, so rare is what moves there.
+	var rare := func(p: Dictionary) -> bool: return p.rarity == "rare"
+	var up := _set_run("deal1=10/10/1")
+	var nu := _count(up, _deals(up), rare)
+	var nr := _count(r, _deals(r), rare)
+	check(nu > nr, "deal1=10/10/1: more rare cards over 180 deals (%d to %d)" % [nu, nr])
+	note("layer 1 rare cards over 180 deals: 10/10/1 %d, standard 10/3/1 %d" % [nu, nr])
+	var risk := func(p: Dictionary) -> bool: return Catalog.kind(p) == "risk"
+	eq(_count(up, _deals(up), risk), 0, "layer 1's no_kinds kept: no risk card")
+	# deal2 leaves layer 1 alone and changes layer 2.
+	var two := _set_run("deal2=10/0/10")
+	eq(_deals(two), _deals(r), "deal2: layer 1 deals as standard")
+	for run in [two, r]:
 		run.layer = 1
-		run.perks = {"closer": 1, "savings": 1}
-	eq(b.held_branches(), {"clearing": true}, "CLOSER's branch held; SAVINGS on the shelf is not counted")
-	var plain := r._pool(r.offerable())
-	var biased := b._pool(b.offerable(), b.config.deal_bias)
-	eq(plain.size(), biased.size(), "the same perks in the pool")
-	for k in plain.size():
-		var x := 4.0 if str(plain[k].branch) == "clearing" else 1.0
-		eq(float(biased[k].w), float(plain[k].w) * x, "%s: x%.0f" % [plain[k].id, x])
-	var clearing := func(p: Dictionary) -> bool: return p.branch == "clearing"
-	var nb := _count(b, _deals(b), clearing)
-	var nr := _count(r, _deals(r), clearing)
-	check(nb > nr, "over 180 deals, more clearing cards with the bias (%d to %d)" % [nb, nr])
-	note("deal_bias 4, CLOSER held: clearing cards over 180 deals %d, standard %d" % [nb, nr])
-	eq(_reward_deals(b), _reward_deals(r), "reward rounds as standard")
-	# Only the shelf held: no branch to lean toward, the deal as standard.
-	for run in [b, r]:
-		run.perks = {"savings": 1, "regular": 1}
-	eq(_deals(b), _deals(r), "only shelf perks held: as standard")
+	eq(_count(two, _deals(two), rare), 0, "deal2=10/0/10: no rare card at layer 2")
+	check(_count(r, _deals(r), rare) > 0, "the standard config deals rare cards there")
+	eq(_reward_deals(two).all(func(d): return d.all(func(id): return str(two.catalog.perk(id).rarity) != "rare")), true,
+		"nor on a reward round")
+	eq(Catalog.DEAL[0].rarity, {"common": 10, "rare": 3, "legendary": 1}, "Catalog.DEAL as it was")
+	eq(RunConfig.standard().deal, Catalog.DEAL, "a new config: Catalog's weights")
+	# A table that does not hold together is the config's problem.
+	var bad := RunConfig.standard()
+	bad.deal[0].no_kinds = []
+	check(not bad.problems().is_empty(), "layer 1 with risk: a problem")
+	bad = RunConfig.standard()
+	bad.deal.pop_back()
+	check(not bad.problems().is_empty(), "two layers: a problem")
 
 
-## reward_bias (an experiment): the same multiplier on a reward round's new cards only.
-func test_reward_bias() -> void:
-	var b := _exp_run({"reward_bias": 4.0})
-	var r := _run()
-	for run in [b, r]:
-		run.layer = 1
-		run.perks = {"closer": 1}
-	eq(_deals(b), _deals(r), "morning rounds as standard")
-	var clearing := func(p: Dictionary) -> bool: return p.branch == "clearing"
-	var nb := _count(b, _reward_deals(b), clearing)
-	var nr := _count(r, _reward_deals(r), clearing)
-	check(nb > nr, "over 180 reward rounds, more new clearing cards with the bias (%d to %d)" % [nb, nr])
-	note("reward_bias 4, CLOSER held: new clearing cards over 180 reward rounds %d, standard %d" % [nb, nr])
-
-
-## free_rerolls (an experiment): the first that many rerolls of each morning round cost
-## nothing, the paid ones after start at the first price and double; all counted in
-## stats.rerolls, the free ones in stats.free_rerolls; a save keeps where the round is.
-func test_free_rerolls() -> void:
-	var r := _exp_run({"free_rerolls": 1})
-	var e := r.new_economy()
-	e.bonus(10000)
-	var cash := e.cash
-	eq(r.reroll_price(), 0, "the first reroll: free")
-	check(r.can_reroll_offers(e) and r.reroll_offers(e), "rerolled")
-	eq(e.cash, cash, "for nothing")
-	eq(int(r.stats.rerolls), 1, "counted as a reroll")
-	eq(int(r.stats.free_rerolls), 1, "and as a free one")
-	eq(r.paid_rerolls(), 0, "none paid")
-	eq(r.reroll_price(), Catalog.OFFER_REROLL, "the next at the first price ($20)")
-	var back := RunState.from_dict(r.to_dict(), r.config)
-	eq(back.reroll_price(), Catalog.OFFER_REROLL, "saved and loaded mid-round: still $20")
-	eq(int(back.stats.free_rerolls), 1, "the count kept")
-	eq(back.offers, r.offers, "the round kept")
-	check(r.reroll_offers(e), "rerolled again")
-	eq(cash - e.cash, Catalog.OFFER_REROLL, "paid $20")
-	eq(r.reroll_price(), Catalog.OFFER_REROLL * 2, "then $40")
-	eq(int(r.stats.rerolls), 2, "two rerolls")
-	eq(int(r.stats.free_rerolls), 1, "one free")
-	eq(r.paid_rerolls(), 1, "one paid")
-	var fresh := RunState.from_dict(_exp_run({"free_rerolls": 1}).to_dict(), r.config)
-	eq(fresh.reroll_price(), 0, "saved before the round's reroll: free on load")
-	r.skip_offers()
-	r.play(e)
-	r.end_day(e)
-	check(r.offers_open and not r.offer_reward, "the next morning's round")
-	eq(r.reroll_price(), 0, "free again: each morning round")
-	var two := _exp_run({"free_rerolls": 2})
-	var e2 := two.new_economy()
-	check(two.reroll_offers(e2) and two.reroll_offers(e2), "two free rerolls")
-	eq(two.reroll_price(), Catalog.OFFER_REROLL, "then $20")
-	eq(e2.cash, e2.start_cash, "nothing paid")
-	# A reroll deals as before: the deal is the seed's, the layer's, the day's and the
-	# reroll's, free or not.
-	var s := _run()
-	s.offer_rerolls = 2
-	eq(two.offers, s.deal_offers(), "the same cards as a paid second reroll would deal")
-	check(e2.balanced(), "ledger balanced")
-
-
-## starter (an experiment): the run's first morning round is one entry card of each of
-## three build lines drawn from the seed; only that round, a reroll of it deals as usual.
+## starter (an experiment): the run's first morning round is the entry card of each of
+## three build lines drawn from the seed, from Catalog.STARTER (or the config's
+## starter_cards over it); paid for like any morning round; only that round, a reroll
+## of it deals as usual.
 func test_starter_round() -> void:
-	var r := _run()
-	var entries := {}
-	for b in RunState.STARTER_LINES:
-		entries[b] = r.entry_card(b)
-	eq(entries, {"clearing": "closer", "jackpot": "pity", "small": "penny", "batch": "streak", "money": "middle"},
-		"each line's entry card: its cheapest perk with no requirements at layer 1 (SMALL: PENNY JAR before SCRAP DEALER, the same price)")
+	eq(Catalog.STARTER.keys(), Catalog.STARTER_LINES, "a card for each of the five build lines")
+	eq(Catalog.standard().starter_problems(Catalog.STARTER), PackedStringArray(), "Catalog's table holds together")
+	var entries := Catalog.STARTER
 	var lines_seen := {}
 	for i in 30:
 		var s := _exp_run({"starter": 1}, "ST-%d" % i)
@@ -1356,6 +1323,15 @@ func test_starter_round() -> void:
 		lines_seen[",".join(s.offers)] = true
 		eq(_exp_run({"starter": 1}, "ST-%d" % i).offers, s.offers, "the same for a seed")
 	check(lines_seen.size() > 3, "the lines change with the seed (%d sets)" % lines_seen.size())
+	# Paid for: the card at its price.
+	var paid := _exp_run({"starter": 1}, "ST-1")
+	var ep := paid.new_economy()
+	ep.bonus(10000)
+	var cash := ep.cash
+	var price := paid.perk_price(paid.offers[0])
+	check(price > 0 and paid.buy_offer(0, ep), "a card bought")
+	eq(cash - ep.cash, price, "at its price ($%d)" % price)
+	check(ep.balanced(), "ledger balanced")
 	# A reroll deals the usual way; so do the next morning and the next layer's first.
 	var st := _exp_run({"starter": 1}, "ST-1")
 	var std := _exp_run({}, "ST-1")
@@ -1382,71 +1358,61 @@ func test_starter_round() -> void:
 	eq(four.offers.size(), 4, "four cards")
 	eq(four.offers.slice(0, 3), _exp_run({"starter": 1}, "ST-2").offers, "the first three: the starter's")
 	check(not four.offers.slice(0, 3).has(four.offers[3]), "the fourth another perk (%s)" % str(four.offers[3]))
+	# The config's table over Catalog's: SMALL's card SCRAP DEALER, JACKPOT's BIG FISH.
+	var over := {"small": "scrap", "jackpot": "bigfish"}
+	var seen := {}
+	for i in 30:
+		var s := _exp_run({"starter": 1, "starter_cards": over}, "ST-%d" % i)
+		eq(s.config.problems(), PackedStringArray(), "the overridden table holds together")
+		var plain := _exp_run({"starter": 1}, "ST-%d" % i)
+		for k in s.offers.size():
+			var br := str(s.catalog.perk(s.offers[k]).branch)
+			eq(str(s.offers[k]), str(over.get(br, Catalog.STARTER[br])), "%s's card from the table" % br)
+			eq(br, str(plain.catalog.perk(plain.offers[k]).branch), "the same lines drawn as with Catalog's table")
+			seen[s.offers[k]] = true
+	check(seen.has("scrap") and seen.has("bigfish") and not seen.has("penny") and not seen.has("pity"),
+		"SCRAP DEALER and BIG FISH dealt, PENNY JAR and DUE A WIN not")
+	var by_set := _set_run("starter=1,starter_cards=small:scrap/jackpot:bigfish", "ST-3")
+	eq(by_set.offers, _exp_run({"starter": 1, "starter_cards": over}, "ST-3").offers, "the same from --set")
 
 
-## starter 2 (an experiment): the starter round of starter 1, its pick free like a
-## reward round's; a morning round in every other way: rerolled, it deals a paid round;
-## given up, an item. A save keeps it.
-func test_free_starter_round() -> void:
-	var s := _exp_run({"starter": 2}, "ST-1")
-	var e := s.new_economy()
-	eq(s.offers, _exp_run({"starter": 1}, "ST-1").offers, "the cards of starter 1")
-	check(s.starter_pick() and not s.offer_reward, "a free pick, still a morning round")
-	check(not _exp_run({"starter": 1}, "ST-1").starter_pick(), "starter 1: not free")
-	check(not _run().starter_pick(), "the standard config: not free")
-	var k := 0
-	for i in s.offers.size():
-		if s.perk_price(s.offers[i]) > s.perk_price(s.offers[k]):
-			k = i
-	var id: String = s.offers[k]
-	check(s.can_buy_offer(k, e), "the dearest card (%s, $%d) can be taken with $%d" % [id, s.perk_price(id), e.cash])
-	var cash := e.cash
-	check(s.buy_offer(k, e), "taken")
-	eq(s.level(id), 1, "held")
-	eq(e.cash, cash, "nothing paid")
-	eq(int(s.stats.shop), 0, "nothing counted as spent")
-	eq(int(s.stats.perks), 1, "a perk counted")
-	check(not s.offers_open and not s.starter_pick(), "the round is over")
-	check(e.balanced(), "ledger balanced")
-	# A CHEAT SHEET is not used up on it.
-	var c := _exp_run({"starter": 2}, "ST-1")
-	var ec := c.new_economy()
-	c.items["cheat"] = 1
-	check(c.buy_offer(0, ec, true), "taken with free set")
-	eq(c.held("cheat"), 1, "the CHEAT SHEET kept")
-	# Rerolled: a paid morning round, the usual deal.
-	var r := _exp_run({"starter": 2}, "ST-1")
-	var er := r.new_economy()
-	er.bonus(10000)
-	check(r.reroll_offers(er), "rerolled")
-	check(not r.starter_pick(), "no longer free")
-	var std := _exp_run({}, "ST-1")
-	std.offer_rerolls = 1
-	eq(r.offers, std.deal_offers(), "the usual deal")
-	var price := r.perk_price(r.offers[0])
-	cash = er.cash
-	check(r.buy_offer(0, er), "a card bought")
-	eq(cash - er.cash, price, "at its price")
-	# Saved and loaded with the round up: still free.
-	var sv := _exp_run({"starter": 2}, "ST-1")
-	var back := RunState.from_dict(sv.to_dict(), sv.config)
-	check(back.starter_pick(), "loaded: still the free pick")
-	eq(back.offers, sv.offers, "the same cards")
-	var eb := back.new_economy()
-	cash = eb.cash
-	check(back.buy_offer(k, eb), "taken after loading")
-	eq(eb.cash, cash, "for nothing")
-	# Given up for an item; the next morning is an ordinary round.
-	var g := _exp_run({"starter": 2}, "ST-1")
-	var eg := g.new_economy()
-	var gift := g.skip_offers()
-	check(gift != "" and g.held(gift) == 1, "given up: an item (%s)" % gift)
-	g.play(eg)
-	g.end_day(eg)
-	check(g.offers_open and not g.starter_pick(), "day 2: not free")
+## The starter table checked (Catalog.starter_problems; RunConfig.problems for a
+## config's): the five build lines, each a dealt perk of that line that is there, not
+## meta, has no requirements and is dealt in layer 1.
+func test_starter_table_checked() -> void:
+	var cat := Catalog.standard()
+	var swap := func(line: String, id: String) -> Dictionary:
+		var t := Catalog.STARTER.duplicate()
+		t[line] = id
+		return t
+	var cases := {
+		"a line missing": {"clearing": "closer", "jackpot": "pity", "small": "penny", "batch": "streak"},
+		"not a build line": Catalog.STARTER.merged({"luck": "luck"}),
+		"a card not there": swap.call("clearing", "nothing"),
+		"a card of another line": swap.call("clearing", "penny"),
+		"a shelf perk": swap.call("clearing", "savings"),
+		"a meta perk": swap.call("batch", "combo"),
+		"a card with requirements": swap.call("clearing", "snowball"),
+	}
+	for what in cases:
+		check(not cat.starter_problems(cases[what]).is_empty(), "%s: a problem" % what)
+	check(cat.starter_problems(Catalog.STARTER, [{"rarity": {"common": 10, "rare": 0, "legendary": 1}, "no_kinds": ["risk"]}])
+		.size() == 3, "layer 1 dealing no rare: DUE A WIN, STREAK and MIDDLE CUT not dealt there")
+	# In a config: checked with the starter on, or a table of its own.
+	var c := RunConfig.standard()
+	c.apply_set({"deal1": [10, 0, 1]})
+	eq(c.problems(), PackedStringArray(), "no rare in layer 1, starter off: fine")
+	c.starter = 1
+	check(not c.problems().is_empty(), "starter on: its rare cards are not dealt in layer 1")
+	c = RunConfig.standard()
+	c.starter_cards = {"small": "closer"}
+	check(not c.problems().is_empty(), "a table of its own, starter off: still checked")
+	c = RunConfig.standard()
+	c.starter = 2
+	check(not c.problems().is_empty(), "starter 2: a problem (0 or 1)")
 
 
-## offer_bonus in the config (an experiment): copied to the run when it starts.
+## offer_bonus in the config: copied to the run when it starts.
 func test_offer_bonus_from_the_config() -> void:
 	var r := _exp_run({"offer_bonus": 1})
 	eq(r.offer_bonus, 1, "the run's bonus from the config")

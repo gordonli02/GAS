@@ -73,28 +73,22 @@ var start_cash := 200
 var loan_interest := 15
 var payout := 1.0            ## the boxes' prize totals times this (BoxModel.payout)
 var shelf_upgrades := 1      ## upgrade slots on each morning's shelf
-## The dealing candidates (docs/roadmap.md 十三.5) are switches below, not in STANDARD;
-## a simulator run sets them (sim_runs --set=key=value) to measure one.
-## deal_bias: a morning round's perk whose branch is that of a dealt perk held weighs
-## this many times its weight (1.0: off; RunState._pool). An experiment for roadmap
-## 十三.5, off in the standard config; not a rule yet.
-var deal_bias := 1.0
-## reward_bias: the same, for a reward round's new cards only (1.0: off). An experiment
-## for roadmap 十三.5, off in the standard config; not a rule yet.
-var reward_bias := 1.0
-## free_rerolls: this many rerolls of each morning round cost nothing; the paid ones
-## after them start at the first price (0: off; RunState.reroll_price). An experiment
-## for roadmap 十三.5, off in the standard config; not a rule yet.
-var free_rerolls := 0
-## starter: 1 deals the run's first morning round as one entry card of each of three
-## build lines drawn from the seed (0: off; RunState.starter_cards); 2 the same, its
-## pick taken for nothing (RunState.starter_pick). An experiment for
-## roadmap 十三.5, off in the standard config; not a rule yet.
+## The dealing switches of docs/roadmap.md 十三.5 are below, not in STANDARD; a
+## simulator run sets them (sim_runs --set=key=value) to measure one.
+## starter: 1 deals the run's first morning round as the entry cards of three build
+## lines drawn from the seed (0: off; RunState.starter_cards), paid for like any morning
+## round's. An experiment for roadmap 十三.5, off in the standard config, until G names
+## each line's card.
 var starter := 0
+## starter_cards: {build line: perk id} over Catalog.STARTER (starter_table); empty:
+## Catalog's table as it is.
+var starter_cards := {}
 ## offer_bonus: cards a round on top of Catalog.OFFERS, copied to RunState.offer_bonus
-## when the run starts (0: off). An experiment for roadmap 十三.5, off in the standard
-## config; not a rule yet.
+## when the run starts (0: off).
 var offer_bonus := 0
+## deal: the rarity weights of each layer's deal, Catalog.DEAL's shape (RunState.deal_weight);
+## Catalog.DEAL in the standard config.
+var deal: Array = Catalog.DEAL.duplicate(true)
 var layers: Array = []
 var catalog: Catalog = null
 
@@ -104,15 +98,22 @@ static func standard() -> RunConfig:
 
 
 ## The fields a simulator run may override (sim_runs --set=key=value,...), with the
-## type of each: the upgrade slots and the dealing experiments.
-const SETTABLE := {"shelf_upgrades": TYPE_INT, "deal_bias": TYPE_FLOAT, "reward_bias": TYPE_FLOAT,
-	"free_rerolls": TYPE_INT, "starter": TYPE_INT, "offer_bonus": TYPE_INT}
+## type of each: the upgrade slots and the dealing switches of roadmap 十三.5.
+## starter_cards: "line:perk/line:perk..." over Catalog.STARTER (starter_cards);
+## deal1 .. deal3: "common/rare/legendary", whole weights for that layer's deal (its
+## no_kinds stay Catalog.DEAL's).
+const SETTABLE := {"shelf_upgrades": TYPE_INT, "starter": TYPE_INT, "offer_bonus": TYPE_INT,
+	"starter_cards": TYPE_DICTIONARY, "deal1": TYPE_ARRAY, "deal2": TYPE_ARRAY, "deal3": TYPE_ARRAY}
+## The rarities in the order deal1 .. deal3 take them.
+const DEAL_ORDER := ["common", "rare", "legendary"]
 
 
 ## "key=value[,key=value...]" as {set: {key: value}, error: ""}: each key one of
-## SETTABLE, its value a number of its type (an int field takes a whole number), not
-## under 0 (a bias above 0). On the first bad pair `error` says what is wrong and `set`
-## holds the pairs before it. A key given twice keeps the last value.
+## SETTABLE; an int field takes a whole number, 0 or more; starter_cards one
+## "line:perk" or more, split by "/", each line one of Catalog.STARTER_LINES (whether
+## the card fits is problems()'s); deal1 .. deal3 three whole numbers, 0 or more, split
+## by "/", not all 0. On the first bad pair `error` says what is wrong and `set` holds
+## the pairs before it. A key given twice keeps the last value.
 static func parse_set(text: String) -> Dictionary:
 	var out := {}
 	for pair in text.split(",", false):
@@ -127,27 +128,73 @@ static func parse_set(text: String) -> Dictionary:
 			if not v.is_valid_int() or v.to_int() < 0:
 				return {"set": out, "error": "%s takes a whole number, 0 or more: %s" % [key, v]}
 			out[key] = v.to_int()
+		elif SETTABLE[key] == TYPE_DICTIONARY:
+			var table := {}
+			for entry in v.split("/", false):
+				var lc := entry.strip_edges().split(":")
+				if lc.size() != 2 or not Catalog.STARTER_LINES.has(lc[0].strip_edges()) or lc[1].strip_edges() == "":
+					return {"set": out, "error": "%s takes line:perk/line:perk..., each line one of %s: %s" % [key,
+						", ".join(Catalog.STARTER_LINES), v]}
+				table[lc[0].strip_edges()] = lc[1].strip_edges()
+			if table.is_empty():
+				return {"set": out, "error": "%s: no line given" % key}
+			out[key] = table
 		else:
-			if not v.is_valid_float() or v.to_float() <= 0.0:
-				return {"set": out, "error": "%s takes a number above 0: %s" % [key, v]}
-			out[key] = v.to_float()
+			var w := v.split("/")
+			var weights := []
+			for t in w:
+				if t.strip_edges().is_valid_int() and t.to_int() >= 0:
+					weights.append(t.to_int())
+			if w.size() != DEAL_ORDER.size() or weights.size() != DEAL_ORDER.size() or weights.max() <= 0:
+				return {"set": out, "error": "%s takes common/rare/legendary, whole numbers 0 or more, not all 0: %s" % [key, v]}
+			out[key] = weights
 	return {"set": out, "error": ""}
 
 
-## Puts the overrides of parse_set into this config.
+## Puts the overrides of parse_set into this config: deal1 .. deal3 into that layer's
+## rarity weights in `deal`.
 func apply_set(overrides: Dictionary) -> void:
 	for key in overrides:
-		if SETTABLE.has(key):
+		if not SETTABLE.has(key):
+			continue
+		if str(key).begins_with("deal"):
+			var i := str(key).trim_prefix("deal").to_int() - 1
+			for k in DEAL_ORDER.size():
+				deal[i].rarity[DEAL_ORDER[k]] = int(overrides[key][k])
+		else:
 			set(key, overrides[key])
+
+
+## An override's value as --set takes it: "10/5/2" for deal1 .. deal3,
+## "line:perk/..." for starter_cards, else the value.
+static func value_text(key: String, value: Variant) -> String:
+	if value is Array:
+		return "/".join(value.map(func(x): return str(int(x))))
+	if value is Dictionary:
+		var parts := PackedStringArray()
+		for line in value:
+			parts.append("%s:%s" % [line, value[line]])
+		return "/".join(parts)
+	return str(value)
+
+
+## The standard config's value of an override's key, as value_text writes it.
+static func standard_text(key: String) -> String:
+	var std := RunConfig.standard()
+	if key.begins_with("deal"):
+		var r: Dictionary = Catalog.deal(key.trim_prefix("deal").to_int() - 1, std.deal).rarity
+		return value_text(key, DEAL_ORDER.map(func(k): return r[k]))
+	if key == "starter_cards":
+		return value_text(key, std.starter_table())
+	return str(std.get(key))
 
 
 ## The overrides as text, "key=value, ...", each with the standard value beside it;
 ## "" for none.
 static func set_text(overrides: Dictionary) -> String:
-	var std := RunConfig.standard()
 	var parts := PackedStringArray()
 	for key in overrides:
-		parts.append("%s=%s (standard %s)" % [key, str(overrides[key]), str(std.get(key))])
+		parts.append("%s=%s (standard %s)" % [key, value_text(key, overrides[key]), standard_text(key)])
 	return ", ".join(parts)
 
 
@@ -162,11 +209,10 @@ static func from_dict(d: Dictionary, cat: Catalog = null) -> RunConfig:
 	c.loan_interest = int(d.get("loan_interest", 15))
 	c.payout = float(d.get("payout", 1.0))
 	c.shelf_upgrades = int(d.get("shelf_upgrades", 1))
-	c.deal_bias = float(d.get("deal_bias", 1.0))
-	c.reward_bias = float(d.get("reward_bias", 1.0))
-	c.free_rerolls = int(d.get("free_rerolls", 0))
 	c.starter = int(d.get("starter", 0))
+	c.starter_cards = d.get("starter_cards", {}).duplicate(true)
 	c.offer_bonus = int(d.get("offer_bonus", 0))
+	c.deal = d.get("deal", Catalog.DEAL).duplicate(true)
 	c.layers = d.get("layers", []).duplicate(true)
 	c.catalog = cat if cat != null else Catalog.standard()
 	var line := c.work_line()
@@ -346,10 +392,20 @@ func problems() -> PackedStringArray:
 		out.append("payout not above 0")
 	if shelf_upgrades < 0:
 		out.append("upgrade slots under 0")
-	if deal_bias <= 0.0 or reward_bias <= 0.0:
-		out.append("a deal bias not above 0")
-	if free_rerolls < 0 or starter < 0 or offer_bonus < 0:
-		out.append("free rerolls, starter or offer bonus under 0")
+	if starter < 0 or starter > 1 or offer_bonus < 0:
+		out.append("starter not 0 or 1, or offer bonus under 0")
+	out.append_array(Catalog.deal_problems(deal))
+	if starter > 0 or not starter_cards.is_empty():
+		out.append_array(catalog.starter_problems(starter_table(), deal))
+	return out
+
+
+## The starter round's table (RunState.starter_cards): Catalog.STARTER with
+## starter_cards over it, in Catalog's order of the lines (a line it does not have
+## after them).
+func starter_table() -> Dictionary:
+	var out := Catalog.STARTER.duplicate()
+	out.merge(starter_cards, true)
 	return out
 
 
