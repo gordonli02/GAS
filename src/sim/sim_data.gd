@@ -197,10 +197,13 @@ static func flow_cut(box: TicketBox, cut: int) -> Dictionary:
 	cut = clampi(cut, 0, box.size)
 	var was := box.cursor
 	box.cursor = cut
-	var past_money := int(BoxReading.flow(box).paid)   # what READ THE FLOW says it paid
+	var fl := BoxReading.flow(box)   # what READ THE FLOW says was sold and paid
+	var past_money := int(fl.paid)
 	var r := BoxReading.read(box)
 	box.cursor = was
-	var past_cost := cut * box.form.price
+	# The tickets bought (a FAST FORWARD's unsold ones are not: the study's boxes, as
+	# built, have none, so this is `cut` there).
+	var past_cost := int(fl.sold) * box.form.price
 	var rest_cost := (box.size - cut) * box.form.price
 	return {"past_money": past_money, "past_cost": past_cost, "rest_money": int(r.value), "rest_cost": rest_cost,
 		"past": float(past_money) / past_cost if past_cost > 0 else 0.0,

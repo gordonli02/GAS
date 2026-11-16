@@ -320,19 +320,34 @@ static func paired_mean(diffs: Array) -> Dictionary:
 ##              high, verdict}
 ## `reading` (no verdict): the signature per 100 tickets of both arms and their ratio,
 ## how much play at the machine weighs (机器前决策分量): {line, control, x}.
+## With `daily` ({item id: n}, sim_runs --given --items) both arms also hold those items
+## every morning (SimRun.stock): the line arm is the line bot with its `use` variant (the
+## items used with care, `overrides` laid over it), the control blind using each item the
+## moment it has it (items "blind"); a third arm, `noitems`, is the line bot holding the
+## same items and using none. Each arm then has `items` ({counter: per run}: the items
+## block's counters, SimCtx), and the result `items`: {over_none: judge_return of line
+## less noitems, blind_over_none: of control less noitems} (what careful use adds over no
+## use; criterion 2 is what it adds over blind use).
 static func given(line: String, base_forms: Array, runs: int, seed_prefix := "GV", config: RunConfig = null,
-		overrides: Dictionary = {}) -> Dictionary:
+		overrides: Dictionary = {}, daily: Dictionary = {}) -> Dictionary:
 	if config == null:
 		config = RunConfig.standard()
 	var specs := {"line": SimBots.given_spec(line, overrides), "control": SimBots.control_spec(line)}
+	if not daily.is_empty():
+		var use: Dictionary = SimBots.VARIANTS.get(line, {}).get("use", SimBots.USE)
+		specs = {"line": SimBots.given_spec(line, SimBots.merged(use, overrides), daily),
+			"control": SimBots.control_spec(line, daily),
+			"noitems": SimBots.given_spec(line, SimBots.merged(overrides, {"blocks": {"items": "none"}}), daily)}
 	var core: Dictionary = SimBots.GIVEN.get(line, {})
 	var sig: Array = SimBots.SIGNATURE.get(line, ["fired", ""])
 	var acc := {}
 	for arm in specs:
-		acc[arm] = {"tickets": 0, "spent": 0, "won": 0, "sig": 0, "cleared": 0, "fired": {}, "flags": {}}
+		acc[arm] = {"tickets": 0, "spent": 0, "won": 0, "sig": 0, "cleared": 0, "fired": {}, "flags": {}, "counters": {}}
 		for id in core:
 			acc[arm].flags[id] = []
 	var diffs := []
+	var over_none := []
+	var blind_over_none := []
 	for i in runs:
 		var rets := {}
 		for arm in specs:
@@ -342,6 +357,8 @@ static func given(line: String, base_forms: Array, runs: int, seed_prefix := "GV
 			a.spent += int(r.spent)
 			a.won += int(r.won)
 			a.sig += int(r[sig[0]].get(sig[1], 0))
+			for k in r.counters:
+				a.counters[k] = int(a.counters.get(k, 0)) + int(r.counters[k])
 			if r.status == RunState.CLEARED:
 				a.cleared += 1
 			for id in core:
@@ -352,6 +369,11 @@ static func given(line: String, base_forms: Array, runs: int, seed_prefix := "GV
 			rets[arm] = float(r.won) / r.spent if int(r.spent) > 0 else -1.0
 		if rets.line >= 0.0 and rets.control >= 0.0:
 			diffs.append(rets.line - rets.control)
+		if rets.has("noitems") and rets.noitems >= 0.0:
+			if rets.line >= 0.0:
+				over_none.append(rets.line - rets.noitems)
+			if rets.control >= 0.0:
+				blind_over_none.append(rets.control - rets.noitems)
 	var n := maxf(1.0, runs)
 	var arms := {}
 	for arm in acc:
@@ -361,6 +383,11 @@ static func given(line: String, base_forms: Array, runs: int, seed_prefix := "GV
 			fired[id] = float(a.fired.get(id, 0)) / n
 		arms[arm] = {"tickets": a.tickets / n, "return": float(a.won) / a.spent if a.spent > 0 else 0.0,
 			"signature": 100.0 * a.sig / a.tickets if a.tickets > 0 else 0.0, "fired": fired, "cleared": a.cleared / n}
+		if not daily.is_empty():
+			var per := {}
+			for k in a.counters:
+				per[k] = float(a.counters[k]) / n
+			arms[arm].items = per
 	var rows := []
 	var missing := []
 	for id in core:
@@ -379,8 +406,12 @@ static func given(line: String, base_forms: Array, runs: int, seed_prefix := "GV
 	var play := judge_return(diffs)
 	play.merge({"name": "play", "line": arms.line["return"], "control": arms.control["return"]})
 	var criteria := [{"name": "fired", "pass": missing.is_empty(), "rows": rows, "missing": missing}, play]
-	return {"line": line, "runs": runs, "given": core.duplicate(), "arms": arms, "criteria": criteria,
+	var out := {"line": line, "runs": runs, "given": core.duplicate(), "arms": arms, "criteria": criteria,
 		"pass": criteria.all(func(c): return c.pass), "reading": {"line": ls, "control": cs, "x": x}}
+	if not daily.is_empty():
+		out.daily = daily.duplicate()
+		out.items = {"over_none": judge_return(over_none), "blind_over_none": judge_return(blind_over_none)}
+	return out
 
 
 ## Criterion 1 of `given` for one card: `line` and `control` are per-seed flags (the card

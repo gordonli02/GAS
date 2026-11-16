@@ -46,14 +46,21 @@ static func read(box: TicketBox) -> Dictionary:
 
 
 ## What has already happened to a box (READ THE FLOW): {sold, paid}. sold: the tickets
-## that have left it, whoever bought them (exact: the player is shown rough(sold));
+## bought out of it, whoever bought them (exact: the player is shown rough(sold));
 ## paid: their printed prizes at the box's stake, no perk's multiplier (those are the
-## buyer's, not the box's). SimData.flow_cut's past money is this at its cut.
+## buyer's, not the box's). The tickets a FAST FORWARD took out unsold are neither:
+## nobody got those prizes (docs/roadmap.md 数值方向 三.11). SimData.flow_cut's past
+## money is this at its cut.
 static func flow(box: TicketBox) -> Dictionary:
+	var gone := box.unsold()
+	var sold := 0
 	var paid := 0
 	for i in mini(box.cursor, box.size):
+		if gone.has(i):
+			continue
+		sold += 1
 		paid += int(box.tickets[i].prize)
-	return {"sold": mini(box.cursor, box.size), "paid": paid}
+	return {"sold": sold, "paid": paid}
 
 
 ## A count (tickets left, or sold) to the nearest ROUGH (never 0 while there is one).

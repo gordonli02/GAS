@@ -255,12 +255,10 @@ func press_machine(i: int) -> void:
 					Sfx.play("toss")
 					_refresh_machine_view()
 					say("BOXES SWAPPED", [], 2.0)
-				"sure", "reel":
-					say("NEXT ONE WINS", [], 3.0)
-				"queue":
-					say("%d WINNERS MOVED UP", [got.moved], 3.0)
-		else:
-			say("NOTHING TO MOVE", [], 2.0)
+				"sure", "reel", "queue":
+					# Only that it was used: what it moved, or that there was nothing
+					# to move, would tell what the box holds (docs/roadmap.md 数值方向 三.11).
+					say("USED", [], 2.0)
 		_store_session()
 		return
 	if machine.change_armed:
@@ -913,9 +911,9 @@ func _seal_card() -> void:
 	for i in run.seal_choices(machine):
 		if _seal_keep.has(i) or not columns.has(i):
 			continue
-		var box: TicketBox = machine.boxes[i]
-		rows.append([{"id": "seal_%d" % i, "text": tr("COLUMN %d · %s · %d LEFT") % [columns.find(i) + 1,
-			machine.forms[i].name.to_upper(), box.size - box.cursor]}])
+		# The column and the form only: no count (docs/roadmap.md 数值方向 三.11).
+		rows.append([{"id": "seal_%d" % i, "text": tr("COLUMN %d · %s") % [columns.find(i) + 1,
+			machine.forms[i].name.to_upper()]}])
 	rows.append([{"id": "seal_back", "text": tr("BACK"), "kind": "chrome"}])
 	run_card.show_card(tr("WHICH BOX COMES ALONG?"), lines, rows)
 

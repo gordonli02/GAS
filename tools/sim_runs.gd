@@ -57,7 +57,12 @@ extends Node
 ## seed played by the line bot holding its core (SimBots.GIVEN) and buying no perks, and
 ## by blind holding the same; per line the numbers of both arms and PASS / FAIL for each
 ## of the two criteria (fired, play) and the line, and the signature ratio as a reading
-## (no verdict). Exit code 0 either way: it is a report.
+## (no verdict). Exit code 0 either way: it is a report. --given --items: every arm also
+## holds SimBots.GIVEN_ITEMS, topped up every morning (only the simulator); the line arm
+## is the line bot's `use` variant (the items used with care), the control blind using
+## each item at once (items "blind"), and a third arm, "no use", the line arm holding the
+## items and using none; per arm the items used a run, and the paired return of careful
+## use over no use and of blind use over no use (criterion 2 is careful over blind).
 ## With --variants the table is of every named variant of the bots of --bots= that have
 ## some (SimBots.VARIANTS: the five lines and build; default the five lines), a row each
 ## (<bot>/<variant>) beside the bot's own spec, paired with it on the same seeds, with
@@ -141,6 +146,7 @@ func _run() -> void:
 	var save := ""
 	var against := ""
 	var given := false
+	var given_items := false
 	var variants := false
 	var probes := false
 	var probe_runs := SimProbes.RUNS
@@ -182,6 +188,8 @@ func _run() -> void:
 			detail = true
 		elif a == "--given":
 			given = true
+		elif a == "--items":
+			given_items = true
 		elif a == "--variants":
 			variants = true
 		elif a == "--probes":
@@ -256,7 +264,7 @@ func _run() -> void:
 	if given:
 		if slots != "":
 			print(slots.trim_prefix(", "))
-		_given(lines, runs, prefix, res.pack.forms, config)
+		_given(lines, runs, prefix, res.pack.forms, config, SimBots.GIVEN_ITEMS if given_items else {})
 		get_tree().quit(0)
 		return
 	if reach:
@@ -491,22 +499,43 @@ func _print_bot(s: Dictionary, detail: bool) -> void:
 
 
 ## --given: the given-cards test of each line in `lines` (SimReport.given), printed.
-func _given(lines: Array, runs: int, prefix: String, forms: Array, config: RunConfig) -> void:
+func _given(lines: Array, runs: int, prefix: String, forms: Array, config: RunConfig, daily: Dictionary = {}) -> void:
 	print("given cards (docs/roadmap.md M9.8 step 1 stage 3): %d runs a line, seeds %s-0 .. %s-%d" % [runs, prefix, prefix, runs - 1])
 	print("line arm: the line bot holding its core, buying no perks; control: blind holding the same")
+	if not daily.is_empty():
+		var held := []
+		for id in daily:
+			held.append("%s %d" % [id, daily[id]])
+		print("with items (M9.8 step 3): every arm holds %s, topped up every morning (only the simulator); line: its `use` variant, using them with care; control: blind, using each at once; no use: the line arm holding them and using none" % ", ".join(held))
 	var verdicts := []
 	for line in lines:
 		var t0 := Time.get_ticks_msec()
-		var g := SimReport.given(line, forms, runs, prefix, config)
+		var g := SimReport.given(line, forms, runs, prefix, config, {}, daily)
 		var core := []
 		for id in g.given:
 			core.append("%s %d" % [id, g.given[id]])
 		print("\n%s: %s (%.1f s)" % [line, ", ".join(core), (Time.get_ticks_msec() - t0) / 1000.0])
 		var sig: Array = SimBots.SIGNATURE[line]
 		print("  %-8s %8s %7s %8s %12s" % ["arm", "tickets", "return", "cleared", "%s %s/100" % [sig[1], "pct" if sig[0] == "fired_pct" else "fired"]])
-		for arm in ["line", "control"]:
+		for arm in g.arms:
 			var a: Dictionary = g.arms[arm]
-			print("  %-8s %8.0f %7.3f %7.1f%% %12.3f" % [arm, a.tickets, a["return"], a.cleared * 100.0, a.signature])
+			print("  %-8s %8.0f %7.3f %7.1f%% %12.3f" % ["no use" if arm == "noitems" else arm, a.tickets, a["return"],
+				a.cleared * 100.0, a.signature])
+		if g.has("items"):
+			for arm in g.arms:
+				var used: Dictionary = g.arms[arm].get("items", {})
+				var keys := used.keys()
+				keys.sort()
+				var parts := []
+				for k in keys:
+					if str(k).begins_with("item_") or str(k).begins_with("peek_") or str(k).begins_with("bought_") \
+							or ["one_more", "slip_tickets"].has(k):
+						parts.append("%s %.2f" % [k, used[k]])
+				print("    %-8s items a run: %s" % ["no use" if arm == "noitems" else arm, ", ".join(parts) if not parts.is_empty() else "none"])
+			for k in ["over_none", "blind_over_none"]:
+				var j: Dictionary = g.items[k]
+				print("  %s: return per dollar, paired by seed (%d): mean %+.4f, 95%% %+.4f to %+.4f: %s" % [
+					"careful use over no use" if k == "over_none" else "blind use over no use", j.n, j.mean, j.low, j.high, j.verdict])
 		var c1: Dictionary = g.criteria[0]
 		print("  1 fired: every given perk fired (or used) in >= %.0f%% of runs; a card the control is also under that is judged against the control" % (SimReport.FIRED_MIN * 100.0))
 		for row in c1.rows:

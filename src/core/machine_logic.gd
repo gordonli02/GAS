@@ -301,7 +301,7 @@ func sell_now(i: int, economy: Economy) -> Dictionary:
 func skip(i: int, n: int) -> int:
 	var box := boxes[i]
 	var k := clampi(mini(n, stock_left(i) - 1), 0, maxi(0, box.size - box.cursor - 1))
-	box.cursor += k
+	box.skip_ahead(k)
 	return k
 
 

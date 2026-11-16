@@ -681,19 +681,34 @@ func test_sure_wins_move_a_prize_forward() -> void:
 	var q := r4.use_item("queue", m4, c6)
 	eq(BoxReading.winners_next(b7, Catalog.QUEUE_WINDOW), in_window + int(q.get("moved", 0)), "QUEUE JUMP: %d more winners in the next 20" % int(q.get("moved", 0)))
 	check(int(q.get("moved", 0)) > 0, "some were moved")
-	# A SURE THING with nothing left to move is not used up.
+	# A SURE item with nothing left to move is used up all the same (G, docs/roadmap.md
+	# 数值方向 三.11: one kept would tell for free that the box holds no prize).
 	var r5 := _run()
-	r5.items = {"sure": 1}
+	r5.items = {"sure": 1, "reel": 1, "queue": 1}
 	var m5 := r5.new_machine([pack.forms[0]], true)
 	var b8: TicketBox = m5.boxes[0]
 	var last_win := -1
 	for i in b8.size:
 		if b8.wins(i):
 			last_win = i
+	check(last_win + 1 < b8.size, "the box ends in losers (seeded)")
 	if last_win + 1 < b8.size:
 		b8.cursor = last_win + 1
-		eq(r5.use_item("sure", m5, 0), {}, "no prize left behind the cursor: nothing")
-		eq(r5.held("sure"), 1, "kept")
+		var ops := b8.ops.size()
+		eq(r5.use_item("sure", m5, 0), {"moved": false, "wins": false}, "SURE THING, no prize left behind the cursor: nothing moved")
+		eq(r5.held("sure"), 0, "used up")
+		eq(r5.use_item("reel", m5, 0), {"moved": false, "wins": false}, "REEL IN: nothing moved")
+		eq(r5.held("reel"), 0, "used up")
+		eq(r5.use_item("queue", m5, 0), {"moved": 0}, "QUEUE JUMP: none moved")
+		eq(r5.held("queue"), 0, "used up")
+		eq(b8.ops.size(), ops, "the box as it was")
+		eq(int(r5.stats.sure_wins), 0, "no sure win counted")
+	# A sold-out box takes none of them (the next sale loads a new one).
+	r5.items = {"sure": 1, "queue": 1}
+	b8.cursor = b8.size
+	eq(r5.use_item("sure", m5, 0), {}, "sold out: nothing")
+	eq(r5.use_item("queue", m5, 0), {}, "sold out: nothing")
+	eq(r5.items, {"sure": 1, "queue": 1}, "kept")
 	# The moves are replayed from a save.
 	var saved := m4.to_dict()
 	var m6 := r4.new_machine(pack.forms, true)
@@ -2294,6 +2309,60 @@ func test_box_reading() -> void:
 	check(r.missing("read1").is_empty(), "CLOSER alone opens it")
 	eq(r.catalog.perk("hunter").requires.get("read1", 0), 1, "JACKPOT HUNTER still needs READ THE FLARE")
 	eq(r.catalog.perk("informant").requires, {"read1": 1}, "and INFORMANT")
+
+
+## FAST FORWARD's tickets left the box unsold: READ THE FLOW counts neither them nor
+## their prizes (G, docs/roadmap.md 数值方向 三.11), and the box keeps knowing which
+## they were through a save and through SEAL into the next layer.
+func test_fast_forward_is_not_in_the_flow() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var r := _run()
+	var e := r.new_economy()
+	r.perks = {"seal": 1}
+	r.items = {"skip": 1}
+	var m := r.new_machine(pack.forms, true)
+	var c := 2
+	var box: TicketBox = m.boxes[c]
+	box.cursor = 20
+	eq(int(r.use_item("skip", m, c).get("skipped", 0)), 50, "fifty skipped")
+	box.cursor += 10
+	var paid := 0
+	for i in range(0, 20) + range(70, 80):
+		paid += int(box.tickets[i].prize)
+	var want := {"sold": 30, "paid": paid}
+	eq(box.unsold().size(), 50, "the box knows the fifty")
+	eq(BoxReading.flow(box), want, "the flow: the thirty bought and what they paid, not the fifty")
+	var cut := SimData.flow_cut(box, box.cursor)
+	check(int(cut.past_money) == paid and int(cut.past_cost) == 30 * box.form.price, "the flow study the same (%s)" % str(cut))
+	eq(box.cursor, 80, "flow_cut puts the cursor back")
+	# A save.
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(m.to_dict()))
+	var m2 := r.new_machine(pack.forms, true)
+	var by_uid := {}
+	for f in m.forms:
+		by_uid[f.uid()] = f
+	m2.load_boxes(saved.boxes, func(uid, s): return BoxGenerator.build(by_uid[uid], s, m2.model, true))
+	eq(BoxReading.flow(m2.boxes[c]), want, "after a save: the same flow")
+	# SEAL carries the box, and what was skipped, into the next layer.
+	e.bonus(r.due())
+	check(r.pay(e, m, [c]), "paid, the column sealed")
+	var m3 := r.new_machine(pack.forms, true)
+	var found: TicketBox = null
+	for b in m3.boxes:
+		if b.seed == box.seed and b.form.uid() == box.form.uid():
+			found = b
+	check(found != null, "the box is on the next layer's machine")
+	if found != null:
+		eq(found.cursor, 80, "where it stood")
+		eq(BoxReading.flow(found), {"sold": 30, "paid": paid * found.form.stake / box.form.stake}, "the same flow, at the new stake")
+	# A machine's FAST FORWARD with nothing to skip logs nothing.
+	var m4 := r.new_machine(pack.forms, true)
+	var b4: TicketBox = m4.boxes[0]
+	b4.cursor = b4.size - 1
+	eq(m4.skip(0, 50), 0, "the last ticket stays")
+	check(b4.ops.is_empty(), "nothing logged")
 
 
 func test_buying_anything_breaks_the_work_only_line() -> void:

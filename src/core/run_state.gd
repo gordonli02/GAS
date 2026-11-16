@@ -1554,8 +1554,11 @@ func peek_n() -> int:
 ## it found: PEEK {winners, of} (under MARKED the winners of the next few come first);
 ## MAGNIFIER {wins}; FAST FORWARD {skipped}; SHUFFLE {shuffled}; LUCKY COIN {on}; MOVER
 ## {with: the other column}; SURE THING and REEL IN {moved: whether a prize was moved,
-## wins: true}; QUEUE JUMP {moved: how many}; {} if none is held (a SURE item with no
-## prize left to move is not used up).
+## wins: whether the next ticket wins now}; QUEUE JUMP {moved: how many}; {} if none is
+## held. A SURE item is used up even when the box has no prize left to move (G,
+## docs/roadmap.md 数值方向 三.11: one kept in the pocket would tell for free that the box
+## holds none); the game says only that it was used, the result is for the tests and
+## the simulator.
 func use_item(item_id: String, machine: MachineLogic, i: int) -> Dictionary:
 	if not playing() or held(item_id) <= 0 or i < 0 or i >= machine.boxes.size():
 		return {}
@@ -1587,15 +1590,14 @@ func use_item(item_id: String, machine: MachineLogic, i: int) -> Dictionary:
 			if box.cursor >= box.size:
 				return {}
 			var before := box.ops.size()
-			if not box.pull_winner(box.cursor, "random" if item_id == "sure" else "biggest"):
-				return {}
-			out = {"moved": box.ops.size() > before, "wins": true}
+			box.pull_winner(box.cursor, "random" if item_id == "sure" else "biggest")
+			out = {"moved": box.ops.size() > before, "wins": box.wins(box.cursor)}
 			if out.moved:
 				stats.sure_wins += 1
 		"queue":
-			var n := box.scatter(box.cursor, Catalog.QUEUE_WINDOW, Catalog.QUEUE_MOVES)
-			if n <= 0:
+			if box.cursor >= box.size:
 				return {}
+			var n := box.scatter(box.cursor, Catalog.QUEUE_WINDOW, Catalog.QUEUE_MOVES)
 			stats.sure_wins += n
 			out = {"moved": n}
 		_:

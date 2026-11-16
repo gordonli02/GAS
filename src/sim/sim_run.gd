@@ -4,19 +4,21 @@ extends RefCounted
 ## tickets sold and opened at once instead of through the motor, the tray and the
 ## table. The loop is the day's skeleton; every choice in it is a block of the bot's
 ## spec (SimBlocks, SimBots):
-##   morning   perks, then items ("morning")
+##   morning   the daily items topped up (stock), perks, then items ("morning")
 ##   enter     to the machine when the bot wants it and the slot can sell it a ticket
-##             (can_buy), else work (a bot that cannot work plays)
+##             (can_buy), else work, then items ("work") (a bot that cannot work plays)
 ##   machine   a column; then, until the layer is paid or the bot leaves: pay the layer
-##             when it can be and the stay block's pay agrees, else stay (the next batch's size, 0 leaves), items
-##             ("machine"), feed the slot (the stay block's feed; refill when it cannot
+##             when it can be and the stay block's pay agrees, else stay (the next
+##             batch's size; 0 leaves unless one_more buys a ticket on a MAGNIFIER's
+##             yes), items ("machine": it may change the column, or leave for the day),
+##             feed the slot (the stay block's feed; refill when it cannot
 ##             buy: borrow or leave), sell and open the batch (push after every
 ##             opening), box
 ##   evening   the day ends; a layer paid brings a new machine
 ## A spec's `given` perks ({id: level}) are held from the start, free (the "given
 ## cards" test, docs/roadmap.md M9.8 step 1 stage 3), and its `bonus` dollars are in the
-## pocket from the start, as a prize (the rounds probe's plenty of cash); only the
-## simulator does these.
+## pocket from the start, as a prize (the rounds probe's plenty of cash), and its
+## `daily_items` are topped up every morning (stock); only the simulator does these.
 
 ## A day at the machine has no limit; a bot stops after this many tickets so that a
 ## run always ends.
@@ -67,6 +69,7 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 	while run.playing() and guard < 1000:
 		guard += 1
 		ctx.start_day()
+		stock(run, spec.params.get("daily_items", {}))
 		var layer := run.layer
 		SimBlocks.perks(ctx)
 		_note_perks(run, held)
@@ -75,7 +78,9 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 			run.play(e)
 			if day(ctx) == 0 and run.playing() and run.layer == layer:
 				idle += 1
-		elif not run.work(e) and run.play(e):
+		elif run.work(e):
+			SimBlocks.items(ctx, "work")
+		elif run.play(e):
 			day(ctx)
 		_note_perks(run, held)
 		if run.playing() and run.layer == layer:
@@ -138,6 +143,46 @@ static func give(run: RunState, given: Dictionary) -> void:
 	run.upgrades = run.deal_upgrades()
 
 
+## The spec's `daily_items` ({item id: n}): each held item of them topped up to n, every
+## morning (the first included), past the item cap if need be (the given-cards test with
+## items, tools/sim_runs --given --items: both arms hold the same items every day). Only
+## the simulator does this.
+static func stock(run: RunState, daily: Dictionary) -> void:
+	for id in daily:
+		if not run.catalog.item(id).is_empty():
+			run.items[id] = maxi(run.held(id), int(daily[id]))
+
+
+## RETURN SLIP (items "use", SimBlocks._slip): the rest of column `col`'s box bought and
+## left unopened in the tray (the last sale and the perks of a box cleared are the
+## buyer's at once, as at the machine), then every one of them given back at full price
+## with the slip. Returns the tickets bought.
+static func slip_rest(ctx: SimCtx, col: int) -> int:
+	var run := ctx.run
+	var e := ctx.e
+	var m := ctx.m
+	var box: TicketBox = m.boxes[col]
+	var rest := box.size - box.cursor
+	SimBlocks.feed(ctx, rest * m.price(col))
+	var held := []
+	var last := 0
+	for k in rest:
+		var sold := m.sell_now(col, e)
+		if sold.is_empty():
+			break
+		if sold.last_sale:
+			last += 1
+			run.cleared_box(m)
+		held.append({"form": m.forms[col], "ticket": sold.ticket, "box": sold.box, "bet": m.bet})
+	run.count_sales(held.size(), last, m.forms[col].uid())
+	ctx.bought += held.size()
+	if not run.use_now("slip").is_empty():
+		run.refund_tickets(e, held, 100)
+		ctx.counters["slip_tickets"] = int(ctx.counters.get("slip_tickets", 0)) + held.size()
+		ctx.counters["item_slip"] = int(ctx.counters.get("item_slip", 0)) + 1
+	return held.size()
+
+
 ## A run's dice for the bot (SimCtx.rng). Common random numbers (docs/roadmap.md 七.6):
 ## they are the seed's alone, not the bot's, so two bots (or two variants of one) on a
 ## seed draw the same dice, as they already load the same boxes; a difference between
@@ -162,8 +207,11 @@ static func _note_perks(run: RunState, held: Dictionary) -> void:
 
 
 ## A day at the machine: one column (SimBlocks.column), then batches until the layer
-## can be paid (and is, when SimBlocks.pay says so), the bot leaves (stay 0, or the money runs out and it does not
-## refill), or DAY_CAP. Returns the tickets bought.
+## can be paid (and is, when SimBlocks.pay says so), the bot leaves (stay 0 and no
+## ticket more for a MAGNIFIER's yes, SimBlocks.one_more; the items block leaving for
+## the day; or the money runs out and it does not refill), or DAY_CAP. Before a batch
+## the items block may change the column; the batch is then asked of stay again.
+## Returns the tickets bought.
 static func day(ctx: SimCtx) -> int:
 	var run := ctx.run
 	var e := ctx.e
@@ -176,9 +224,18 @@ static func day(ctx: SimCtx) -> int:
 			run.pay(e, m)
 			return ctx.bought
 		var per := SimBlocks.stay(ctx)
-		if per <= 0:
-			break
-		SimBlocks.items(ctx, "machine")
+		if per > 0:
+			var was := ctx.col
+			if not SimBlocks.items(ctx, "machine"):
+				break
+			if ctx.col != was:
+				per = SimBlocks.stay(ctx)
+				if per <= 0:
+					break
+		else:
+			per = SimBlocks.one_more(ctx)
+			if per <= 0:
+				break
 		var col := ctx.col
 		var price := m.price(col)
 		SimBlocks.feed(ctx, price * per)

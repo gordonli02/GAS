@@ -42,7 +42,7 @@ var opened := 0              ## tickets opened so far (by ticket number)
 ## cursor, {"m": [a, b]} the tickets at a and b swapped, {"w": [i, tier]} the loser at i
 ## made a winner of tier (CONSOLATION), {"c": [i, n]} the prize at i split over up to n
 ## losers after it (CRUMBS), {"p": pct} pct% of the big prizes broken into smallest
-## ones (PACKED).
+## ones (PACKED), {"f": [i, n]} the n tickets from i gone unsold (FAST FORWARD).
 var ops: Array = []
 var cut_total := 0           ## money CRUMBS took off split tickets (their pieces hold it)
 
@@ -104,6 +104,30 @@ func replay(saved: Array) -> void:
 			crumble(int(op.c[0]), int(op.c[1]))
 		elif op.has("p"):
 			pack(int(op.p))
+		elif op.has("f") and typeof(op.f) == TYPE_ARRAY and op.f.size() == 2:
+			ops.append({"f": [int(op.f[0]), int(op.f[1])]})
+
+
+## FAST FORWARD: the next `n` tickets leave the box unsold (never paid for, never
+## opened). Logged, so the box keeps knowing which they were (a save and SEAL carry the
+## log): nobody bought them, so READ THE FLOW counts neither them nor their prizes
+## (docs/roadmap.md 数值方向 三.11).
+func skip_ahead(n: int) -> void:
+	n = clampi(n, 0, size - cursor)
+	if n <= 0:
+		return
+	ops.append({"f": [cursor, n]})
+	cursor += n
+
+
+## The places of the tickets FAST FORWARD took out of the box unsold: {index: true}.
+func unsold() -> Dictionary:
+	var out := {}
+	for op in ops:
+		if op.has("f"):
+			for k in int(op.f[1]):
+				out[int(op.f[0]) + k] = true
+	return out
 
 
 func wins(i: int) -> bool:

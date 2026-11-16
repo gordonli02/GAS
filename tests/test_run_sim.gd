@@ -562,7 +562,7 @@ func test_bot_specs_are_data() -> void:
 	for line in SimBots.VARIANTS:
 		check(SimBots.NAMES.has(line), "%s: variants of a bot" % line)
 		var vs: Dictionary = SimBots.VARIANTS[line]
-		check(vs.size() >= 3 and vs.size() <= 10, "%s: 3 to 10 variants (%d)" % [line, vs.size()])
+		check(vs.size() >= 3 and vs.size() <= 14, "%s: 3 to 14 variants (%d)" % [line, vs.size()])
 		for name in vs:
 			var o: Dictionary = vs[name]
 			for k in o:
@@ -589,6 +589,36 @@ func test_bot_specs_are_data() -> void:
 	for line in SimBots.VARIANTS:
 		for name in ["reroll1", "reroll3", "reroll3t"]:
 			check(SimBots.VARIANTS[line].has(name), "%s: a %s variant" % [line, name])
+	# The items block (M9.8 step 3): its variants, the params it reads, each line's and
+	# build's `use` and `usebuy` (and jackpot's `informant`); no bot uses items by default.
+	eq(SimBlocks.VARIANTS.items, ["none", "use", "blind"], "items: none (the default), use, blind")
+	for k in ["peek_min", "peek_scale", "happy_min", "slip_max", "coin_wait", "item_share", "item_list", "daily_items"]:
+		check(SimBots.PARAMS.has(k), "%s is a param" % k)
+	eq(float(SimBots.PARAMS.item_share), 0.0, "no item bought by default")
+	eq(SimBots.PARAMS.daily_items, {}, "no daily items by default")
+	for id in SimBots.PARAMS.item_list:
+		check(not Catalog.standard().item(id).is_empty(), "item_list: %s is an item" % id)
+	for f in SimBots.PARAMS.peek_min:
+		check(float(SimBots.PARAMS.peek_min[f]) > 0.0, "peek_min: %s in winners per 100" % f)
+	for bot in SimBots.NAMES + SimBots.PROBES:
+		eq(SimBots.spec(bot).blocks.items, "none", "%s uses no item by default" % bot)
+	for line in ["clearing", "jackpot", "small", "batch", "money", "build"]:
+		var vs: Dictionary = SimBots.VARIANTS[line]
+		check(vs.has("use") and vs.has("usebuy"), "%s: use and usebuy" % line)
+		eq(SimBots.spec(line, vs.get("use", {})).blocks.items, "use", "%s/use uses its items" % line)
+		eq(float(SimBots.spec(line, vs.get("use", {})).params.item_share), 0.0, "%s/use buys none" % line)
+		check(float(SimBots.spec(line, vs.get("usebuy", {})).params.item_share) > 0.0, "%s/usebuy buys" % line)
+	var inf := SimBots.spec("jackpot", SimBots.VARIANTS.jackpot.informant)
+	check(inf.blocks.items == "use" and inf.params.shelf.has("informant"), "jackpot/informant buys INFORMANT and uses its items")
+	for id in SimBots.GIVEN_ITEMS:
+		check(not Catalog.standard().item(id).is_empty(), "GIVEN_ITEMS: %s is an item" % id)
+	var gl := SimBots.given_spec("small", SimBots.VARIANTS.small.use, SimBots.GIVEN_ITEMS)
+	check(gl.blocks.items == "use" and gl.params.daily_items == SimBots.GIVEN_ITEMS, "the line arm with items")
+	var gc := SimBots.control_spec("small", SimBots.GIVEN_ITEMS)
+	check(gc.blocks.items == "blind" and gc.params.daily_items == SimBots.GIVEN_ITEMS, "the control with items: blind")
+	eq(SimBots.control_spec("small").blocks.items, "none", "the control without items uses none")
+	eq(SimBots.merged({"params": {"a": 1, "b": 2}}, {"params": {"b": 3}, "blocks": {"items": "none"}}),
+		{"blocks": {"items": "none"}, "params": {"a": 1, "b": 3}}, "merged: the second over the first")
 
 
 ## A morning (or, with `reward`, a reward) round set by hand: a fresh run at stake 1,
@@ -921,3 +951,215 @@ func test_flow_study() -> void:
 			check(row.r >= -1.0 and row.r <= 1.0, "%s at %d%%: r %.3f" % [key, row.cut, row.r])
 	eq(SimData.flow_study(forms, N, null, "FLOWT"), s, "the same seed, the same numbers")
 	check(SimData.flow_study(forms, N, null, "FLOWU") != s, "another seed, other numbers")
+
+
+## A day at the machine set by hand for the items block: a fresh run at stake 1 on a day
+## of play, `cash` in the pocket, blind's blocks with items "use" and `params`, no item
+## held, today's column 0.
+func _items_ctx(forms: Array, params: Dictionary = {}, cash := 10000) -> SimCtx:
+	var run := RunState.start(RunConfig.standard(), "IT", ["diner", "bar", "bingo"])
+	var e := run.new_economy()
+	e.bonus(cash - e.cash)
+	var ctx := SimCtx.of(run, e, run.new_machine(forms, true), SimBots.spec("blind", {"blocks": {"items": "use"}, "params": params}))
+	run.play(e)
+	run.items = {}
+	ctx.start_day()
+	ctx.col = 0
+	ctx.day_money = e.cash + e.credit
+	return ctx
+
+
+## [a column whose next ticket wins (column 1, a winner moved there when it has none),
+## a column whose next ticket loses (-1 when none)].
+func _next_yes_no(ctx: SimCtx) -> Array:
+	var b1: TicketBox = ctx.m.boxes[1]
+	b1.pull_winner(b1.cursor, "next")
+	var no := -1
+	for i in ctx.m.boxes.size():
+		var b: TicketBox = ctx.m.boxes[i]
+		if i != 1 and not b.wins(b.cursor):
+			no = i
+			break
+	return [1 if b1.wins(b1.cursor) else -1, no]
+
+
+## A PEEK threshold just under (`under` false: at) the winners of column 0's next PEEK.
+func _peek_at(ctx: SimCtx, under: bool) -> void:
+	var box: TicketBox = ctx.m.boxes[0]
+	var n := ctx.run.peek_n()
+	var k := BoxReading.winners_next(box, n)
+	ctx.spec.params.peek_min = {box.form.id: k * 100.0 / n + (1.0 if under else 0.0)}
+
+
+## The items block (M9.8 step 3), each rule of items "use" on a state set by hand; `none`
+## never uses anything; the daily items (only the simulator) topped up; whole runs with
+## the variants balance.
+func test_items_block() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var forms: Array = pack.forms
+	# none: nothing, anywhere.
+	var c := _items_ctx(forms)
+	c.spec = SimBots.spec("blind")
+	c.run.items = {"peek": 1, "magnifier": 1, "coin": 1, "happy": 1, "safety": 1, "sure": 1, "slip": 1}
+	var held: Dictionary = c.run.items.duplicate()
+	for at in ["morning", "work", "machine"]:
+		check(SimBlocks.items(c, at), "none, %s: carries on" % at)
+	eq(SimBlocks.one_more(c), 0, "none: no ticket more when leaving")
+	eq(c.run.items, held, "none: every item still held")
+	check(c.counters.is_empty() and not c.run.happy and not c.run.safety, "none: nothing used, nothing counted")
+	# PEEK at peek_min: it buys into the window.
+	var p := _items_ctx(forms)
+	_peek_at(p, false)
+	p.run.items = {"peek": 1}
+	check(SimBlocks.items(p, "machine"), "PEEK at peek_min: plays")
+	check(p.col == 0 and p.run.held("peek") == 0, "on its column, the PEEK used")
+	check(p.peeks.size() == 1 and p.peeks.values()[0].good, "the answer kept")
+	# Under it, holding nothing else: another column; back on it, left again without a PEEK.
+	var u := _items_ctx(forms)
+	_peek_at(u, true)
+	u.run.items = {"peek": 1}
+	check(SimBlocks.items(u, "machine"), "PEEK under peek_min: plays elsewhere")
+	check(u.col != 0 and u.left_today.has(0), "it left column 0 (for %d)" % u.col)
+	check(int(u.counters.get("peek_bad", 0)) == 1 and int(u.counters.get("peek_moved", 0)) == 1, "counted (%s)" % str(u.counters))
+	u.col = 0
+	check(SimBlocks.items(u, "machine") and u.col != 0, "the window known to be under: left again")
+	eq(int(u.counters.get("peek_known", 0)), 1, "without another PEEK")
+	# Under it with a FAST FORWARD: the window skipped, on the same column.
+	var f := _items_ctx(forms)
+	_peek_at(f, true)
+	f.run.items = {"peek": 1, "skip": 1}
+	var fb: TicketBox = f.m.boxes[0]
+	var at := fb.cursor
+	check(SimBlocks.items(f, "machine") and f.col == 0, "FAST FORWARD: stays on its column")
+	eq(fb.cursor, at + 50, "the window skipped")
+	eq(int(f.counters.get("peek_skip", 0)), 1, "counted")
+	# Under it, nowhere else to go: home; in the endgame it plays the window.
+	var h := _items_ctx(forms)
+	_peek_at(h, true)
+	h.run.items = {"peek": 1}
+	for i in range(1, h.m.boxes.size()):
+		h.left_today.append(i)
+	check(not SimBlocks.items(h, "machine"), "nowhere else: home for the day")
+	eq(int(h.counters.get("peek_stop", 0)), 1, "counted")
+	h.run.day = h.run.days()
+	check(SimBlocks.items(h, "machine") and h.col == 0, "the layer's last day: it plays the window")
+	eq(int(h.counters.get("peek_stayed", 0)), 1, "counted")
+	# LUCKY COIN: at once, the MAGNIFIER kept for the day's end (one_more).
+	var z := _items_ctx(forms)
+	var yn := _next_yes_no(z)
+	if check(yn[0] >= 0 and yn[1] >= 0, "a column whose next ticket wins and one whose next loses"):
+		z.col = yn[1]
+		z.run.items = {"magnifier": 1, "coin": 1}
+		SimBlocks.items(z, "machine")
+		eq(z.run.items, {"magnifier": 1}, "the coin at once, the MAGNIFIER kept")
+		eq(z.run.coin_on, {z.m.forms[yn[1]].uid(): 1}, "on the column's form")
+		eq(SimBlocks.one_more(z), 0, "leaving, the next one loses: no ticket more")
+		z.run.items = {"magnifier": 1}
+		z.col = yn[0]
+		eq(SimBlocks.one_more(z), 1, "leaving, the next one wins: that ticket")
+		eq(int(z.counters.get("one_more", 0)), 1, "counted")
+	# coin_wait 1: the coin only after a MAGNIFIER's yes.
+	var w := _items_ctx(forms, {"coin_wait": 1})
+	yn = _next_yes_no(w)
+	if yn[0] >= 0 and yn[1] >= 0:
+		w.col = yn[1]
+		w.run.items = {"magnifier": 1, "coin": 1}
+		SimBlocks.items(w, "machine")
+		eq(w.run.items, {"coin": 1}, "coin_wait 1, a no: the coin kept")
+		w.run.items = {"magnifier": 1, "coin": 1}
+		w.col = yn[0]
+		SimBlocks.items(w, "machine")
+		check(w.run.items.is_empty() and w.run.coin_on.has(w.m.forms[yn[0]].uid()), "a yes: the coin goes on")
+	# SURE THING: with a MAGNIFIER only on a no; without, at once.
+	var s := _items_ctx(forms)
+	yn = _next_yes_no(s)
+	if yn[0] >= 0 and yn[1] >= 0:
+		s.run.items = {"sure": 1, "magnifier": 1}
+		s.col = yn[0]
+		SimBlocks.items(s, "machine")
+		eq(s.run.items, {"sure": 1}, "the next one wins: the SURE THING kept")
+		s.run.items = {"sure": 1, "magnifier": 1}
+		s.col = yn[1]
+		var sb: TicketBox = s.m.boxes[yn[1]]
+		SimBlocks.items(s, "machine")
+		check(s.run.items.is_empty() and sb.wins(sb.cursor), "the next one loses: SURE THING on it, it wins now")
+		s.run.items = {"sure": 1}
+		s.col = 2 if yn[1] != 2 else 3
+		SimBlocks.items(s, "machine")
+		eq(s.run.held("sure"), 0, "no MAGNIFIER: at once")
+	# HAPPY HOUR: only with happy_min tickets' money today; SAFETY NET at once.
+	var hh := _items_ctx(forms, {"happy_min": 50})
+	var price := hh.m.price(0)
+	hh.run.items = {"happy": 1}
+	hh.day_money = 50 * price - 1
+	SimBlocks.items(hh, "machine")
+	check(not hh.run.happy and hh.run.held("happy") == 1, "under happy_min tickets' money: kept")
+	hh.day_money = 50 * price
+	SimBlocks.items(hh, "machine")
+	check(hh.run.happy and hh.run.held("happy") == 0, "at it: on")
+	hh.run.items = {"safety": 1}
+	SimBlocks.items(hh, "machine")
+	check(hh.run.safety and hh.run.held("safety") == 0, "SAFETY NET: on, a day of play")
+	# RETURN SLIP: the rest of a box bought, the last sale taken, every ticket given back.
+	var sl := _items_ctx(forms, {"slip_max": 10})
+	var lb: TicketBox = sl.m.boxes[0]
+	lb.cursor = lb.size - 11
+	sl.run.items = {"slip": 1}
+	SimBlocks.items(sl, "machine")
+	eq(sl.run.held("slip"), 1, "eleven left, slip_max 10: kept")
+	lb.cursor = lb.size - 10
+	var money := sl.e.cash + sl.e.credit
+	var last: int = sl.m.last_sale
+	check(last > 0, "the layer has a last-sale prize")
+	SimBlocks.items(sl, "machine")
+	eq(sl.run.held("slip"), 0, "ten left: used")
+	eq(int(sl.counters.get("slip_tickets", 0)), 10, "the ten bought and given back")
+	eq(sl.e.cash + sl.e.credit, money + last, "the money back, and the last sale")
+	check(lb.cursor >= lb.size and int(sl.run.stats.boxes_cleared) == 1, "the box cleared")
+	check(sl.e.balanced(), "balanced")
+	# OVERTIME after a shift: the shift paid again.
+	var orun := RunState.start(RunConfig.standard(), "OT", ["diner", "bar", "bingo"])
+	var oe := orun.new_economy()
+	var oc := SimCtx.of(orun, oe, orun.new_machine(forms, true), SimBots.spec("blind", {"blocks": {"items": "use"}}))
+	orun.items = {"overtime": 1}
+	SimBlocks.items(oc, "morning")
+	eq(orun.held("overtime"), 1, "not in the morning: the day is not chosen yet")
+	check(orun.work(oe), "a shift")
+	var earned := oe.earned
+	SimBlocks.items(oc, "work")
+	check(oe.earned - earned == orun.shift_wage() and orun.held("overtime") == 0, "OVERTIME after it: paid again")
+	# CHEAT SHEET: the dearest card on the bot's list, free.
+	var ch := _hand_round(forms, SimBots.spec("build", {"blocks": {"items": "use"}}), 100000, ["prizes", "luck", "closer"])
+	ch.run.items = {"cheat": 1}
+	var want := "prizes" if ch.run.perk_price("prizes") >= ch.run.perk_price("luck") else "luck"
+	var cash := ch.e.cash
+	SimBlocks.perks(ch)
+	check(ch.run.level(want) == 1 and ch.run.level("closer") == 0, "CHEAT SHEET: %s, the dearest on its list (CLOSER is not)" % want)
+	check(ch.e.cash == cash and ch.run.held("cheat") == 0, "for free, the sheet used")
+	# The daily items: topped up, never down; only the simulator.
+	var st := RunState.start(RunConfig.standard(), "ST", ["diner", "bar", "bingo"])
+	st.items = {"peek": 1, "coin": 5}
+	SimRun.stock(st, {"peek": 2, "coin": 1, "nothing": 3})
+	eq(st.items, {"peek": 2, "coin": 5}, "topped up to the count, never down; an unknown id ignored")
+	check(not ("daily_items" in st), "the run has no such thing: only the simulator")
+	var used := SimRun.play(SimBots.spec("small", {"blocks": {"items": "use"}, "params": {"daily_items": {"coin": 1}}}), forms, "IT-0")
+	check(int(used.counters.get("item_coin", 0)) >= 1, "use: the morning's coin used (%s)" % str(used.counters))
+	var kept := SimRun.play(SimBots.spec("small", {"params": {"daily_items": {"coin": 1}}}), forms, "IT-0")
+	check(not kept.counters.keys().any(func(k): return str(k).begins_with("item_")), "none: held, never used")
+	check(used.balanced and kept.balanced, "balanced")
+	# Whole runs: every line's and build's item variants, and the control with items.
+	for line in ["clearing", "jackpot", "small", "batch", "money", "build"]:
+		for v in SimBots.VARIANTS[line]:
+			if not str(v).begins_with("use") and v != "informant":
+				continue
+			for i in (2 if full else 1):
+				var r := SimRun.play(SimBots.spec(line, SimBots.VARIANTS[line][v]), forms, "IU-%d" % i)
+				check([RunState.CLEARED, RunState.FAILED].has(r.status) and r.balanced, "%s/%s %d: ends, balanced" % [line, v, i])
+	var gi := SimReport.given("money", forms, 1, "GV", null, {}, SimBots.GIVEN_ITEMS)
+	eq(gi.arms.keys(), ["line", "control", "noitems"], "with items: three arms")
+	check(gi.has("items") and gi.items.has("over_none") and gi.items.has("blind_over_none"), "and what use adds")
+	check(gi.arms.control.items.has("item_peek"), "the control uses its items (%s)" % str(gi.arms.control.items))
+	check(not gi.arms.noitems.items.keys().any(func(k): return str(k).begins_with("item_")), "no use: none used")
+	check(not SimReport.given("money", forms, 1, "GV").has("items"), "without items: as before")

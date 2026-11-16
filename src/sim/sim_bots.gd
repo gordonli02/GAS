@@ -76,6 +76,8 @@ extends RefCounted
 ##            buys both whenever it can pay for them, and at the machine buys CHURN
 ##            tickets of a column, then changes the box, again and again. Its return
 ##            counted with the fees (summary's `return_fees`) must stay at 1 or under
+## No bot uses an item unless its spec says so (items "none"); the lines' and build's
+## `use` and `usebuy` variants do (M9.8 step 3), and the given-cards test with items.
 ## A bot that cannot work (NO WAY BACK bought) plays instead.
 ## "Can pay for a ticket" is the slot's rule (SimRun.can_buy): bills, and coins under the
 ## smallest bill (Economy.coins_for, G 2026-11-07), so every bot that goes to the machine
@@ -115,6 +117,22 @@ const PARAMS := {
 	"push_paid": 0,          # stay "windows": ALL IN only on a window that paid this many tickets of the cheapest price
 	"fee_max": 30,           # box "flare", column "top": NEW BOX only while the fee is at most this many tickets
 	"hunt": 0,               # stay "hunt": with JACKPOT HUNTER on, the tickets it plays on before paying a layer it can pay
+	# items "use" (SimBlocks._at_machine, _peek, _use; M9.8 step 3). Read only by a spec that
+	# opts in through VARIANTS: no bot uses items by default, so these move no run until
+	# defaults are picked from a variants pass.
+	# PEEK: a window is bought into only when its winners per 100 tickets reach this, by
+	# form id (a form not listed: never left). The defaults are each form's mean winners per
+	# 100 in layer 1 (sim_runs' form table, 300 boxes, M9.8 step 3): leave a window under the
+	# form's own average.
+	"peek_min": {"catch": 3.4, "kabawk": 1.9, "plate": 10.2, "spur": 8.9, "order": 8.0, "flock": 7.9,
+		"nugget": 8.7, "peckeye": 9.5},
+	"peek_scale": 1.0,       # items "use": peek_min times this (0.8: leave only a window under 80% of the form's average)
+	"happy_min": 50,         # items "use": HAPPY HOUR on a day it comes to the machine with this many tickets' money of its column
+	"slip_max": 50,          # items "use": RETURN SLIP when the box has at most this many tickets left (and the money buys them)
+	"coin_wait": 0,          # items "use": 1 puts a LUCKY COIN on only after a MAGNIFIER's yes when one is held; 0 at once
+	"item_share": 0.0,       # items "use": an item is bought off the shelf only while its price is at most this share of the cash (0: never)
+	"item_list": ["happy", "coin", "sure", "queue", "safety", "peek", "reel"],   # items "use": the items bought, in this order
+	"daily_items": {},       # the run: items topped up to this count every morning ({id: n}; the given-cards test with items; only the simulator)
 }
 
 ## Each bot's blocks and params ({} for a bot that is all defaults). `build` takes the
@@ -157,6 +175,19 @@ const SPECS := {
 }
 
 
+## The items variants (M9.8 step 3, "机器人跟着补"): `use` uses what the bot holds
+## (SimBlocks items "use"); `usebuy` buys off the shelf too, an item while it costs at
+## most a tenth of the cash (`item_list`: clearing's puts RETURN SLIP first, for its last
+## sales); jackpot's `informant` buys INFORMANT with its shelf perks (READ THE FLARE is
+## its requirement) and uses its PEEKs.
+const USE := {"blocks": {"items": "use"}}
+const USEBUY := {"blocks": {"items": "use"}, "params": {"item_share": 0.1}}
+## The jackpot line's PEEK threshold: 1 winner per 100 tickets on its forms, so it leaves
+## only a window with no winner at all (a PEEK of 50 or 100). Its money is in the top
+## prize: one winner in the window may be it, and a window under the form's average count
+## says little about the top.
+const JACKPOT_PEEK := {"catch": 1.0, "kabawk": 1.0}
+
 ## Each line bot's named variants (and build's): overrides laid over its spec (spec's
 ## `overrides`). tools/sim_runs --variants runs them all; a line's strength is its best
 ## (roadmap 七.4). The bot's own spec is one of them (named so, to be compared with the
@@ -172,35 +203,51 @@ const SPECS := {
 ##   nobank     every line: work_held 0, its default before the passes (clearing and
 ##              money with no work_below either, as before)
 ##   work       clearing: work_below 150 only while it holds no engine (work_held 0)
+##   use, usebuy  every line and build: the items block "use" (USE, USEBUY)
+##   informant  jackpot: buys INFORMANT and uses its items
 const VARIANTS := {
 	"clearing": {"stop50": {"params": {"stop": 0.5}}, "stop30": {"params": {"stop": 0.3}},
 		"nostop": {"params": {"stop": 1.0}}, "work": {"params": {"work_held": 0, "work_below": 150}},
 		"reroll1": {"params": {"rerolls": 1}}, "reroll0": {"params": {"rerolls": 0}}, "reroll3": {"params": {"rerolls": 3}},
 		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
-		"nobank": {"params": {"work_held": 0, "work_below": 0}}},
+		"nobank": {"params": {"work_held": 0, "work_below": 0}},
+		"use": USE, "usebuy": {"blocks": {"items": "use"}, "params": {"item_share": 0.1,
+			"item_list": ["slip", "happy", "coin", "sure", "queue", "safety", "peek", "reel"]}}},
 	"jackpot": {"nowork": {"params": {"stop": 0.5, "work_below": 0}}, "nostop": {"params": {"stop": 1.0}},
 		"work300": {"params": {"work_below": 300}}, "fee15": {"params": {"fee_max": 15}}, "hunt0": {"params": {"hunt": 0}},
 		"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
 		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
-		"nobank": {"params": {"work_held": 0}}},
+		"nobank": {"params": {"work_held": 0}},
+		"use": {"blocks": {"items": "use"}, "params": {"peek_min": JACKPOT_PEEK}},
+		"usebuy": {"blocks": {"items": "use"}, "params": {"peek_min": JACKPOT_PEEK, "item_share": 0.1}},
+		"informant": {"blocks": {"items": "use"}, "params": {"peek_min": JACKPOT_PEEK,
+			"shelf": ["regular", "read1", "informant"]}}},
 	"small": {"nowork": {"params": {"stop": 0.5, "work_below": 0}}, "nostop": {"params": {"stop": 1.0}},
 		"stop50": {"params": {"stop": 0.5}}, "plate": {"params": {"forms": ["plate"]}},
 		"reroll1": {"params": {"rerolls": 1}}, "reroll0": {"params": {"rerolls": 0}}, "reroll3": {"params": {"rerolls": 3}},
 		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
-		"nobank": {"params": {"work_held": 0}}},
+		"nobank": {"params": {"work_held": 0}},
+		"use": USE, "usebuy": USEBUY},
 	"batch": {"push50": {"params": {"push": 0.5}}, "push25": {"params": {"push": 0.25}},
 		"work0": {"params": {"work_below": 0}}, "paid5": {"params": {"push_paid": 5}}, "stop50": {"params": {"stop": 0.5}},
 		"reroll1": {"params": {"rerolls": 1}}, "reroll0": {"params": {"rerolls": 0}}, "reroll3": {"params": {"rerolls": 3}},
 		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
-		"nobank": {"params": {"work_held": 0}}},
+		"nobank": {"params": {"work_held": 0}},
+		"use": USE, "usebuy": USEBUY},
 	"money": {"floor100": {"params": {"floor": 100}}, "floor50": {"params": {"floor": 50}},
 		"nostop": {"params": {"stop": 1.0}}, "batch10": {"params": {"batch": 10}},
 		"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
 		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
-		"nobank": {"params": {"work_held": 0, "work_below": 0}}},
+		"nobank": {"params": {"work_held": 0, "work_below": 0}},
+		"use": USE, "usebuy": USEBUY},
 	"build": {"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
-		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}}},
+		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
+		"use": USE, "usebuy": USEBUY},
 }
+
+## The items the given-cards test with items holds every morning (sim_runs --given
+## --items; SimRun.stock): both arms the same.
+const GIVEN_ITEMS := {"peek": 1, "magnifier": 1, "coin": 1, "happy": 1}
 
 ## The deal's ceiling (SimReport.reach): the line's bot's cash at the start, enough for
 ## every card and reroll of the run.
@@ -233,20 +280,38 @@ const SIGNATURE := {
 
 ## The given-cards test's line arm: the line bot (with `overrides`, a variant) holding
 ## its GIVEN core from the start, the morning's perk buying off (perks "none"), so it
-## spends nothing on perks and differs from the control only in its play.
-static func given_spec(line: String, overrides: Dictionary = {}) -> Dictionary:
+## spends nothing on perks and differs from the control only in its play. With `daily`
+## ({item id: n}, the test with items) it holds those items every morning too.
+static func given_spec(line: String, overrides: Dictionary = {}, daily: Dictionary = {}) -> Dictionary:
 	var s := spec(line, overrides)
 	s.blocks.perks = "none"
 	s.params.given = GIVEN.get(line, {}).duplicate()
+	s.params.daily_items = daily.duplicate()
 	return s
 
 
 ## The given-cards test's control arm: blind (every block's default) holding the same
-## core, on the same seeds (and dice). Named "<line> control".
-static func control_spec(line: String) -> Dictionary:
-	var s := spec("blind", {"params": {"given": GIVEN.get(line, {}).duplicate()}})
+## core, on the same seeds (and dice). Named "<line> control". With `daily`, the same
+## items every morning, used blind (items "blind").
+static func control_spec(line: String, daily: Dictionary = {}) -> Dictionary:
+	var o := {"params": {"given": GIVEN.get(line, {}).duplicate()}}
+	if not daily.is_empty():
+		o.params.daily_items = daily.duplicate()
+		o.blocks = {"items": "blind"}
+	var s := spec("blind", o)
 	s.name = line + " control"
 	return s
+
+
+## `over` laid over `base` (both overrides, {blocks, params} either optional): a variant
+## with another on top.
+static func merged(base: Dictionary, over: Dictionary) -> Dictionary:
+	var out := {"blocks": base.get("blocks", {}).duplicate(true), "params": base.get("params", {}).duplicate(true)}
+	for k in ["blocks", "params"]:
+		var d: Dictionary = over.get(k, {})
+		for key in d:
+			out[k][key] = d[key]
+	return out
 
 
 ## The deal's ceiling for `line` (SimReport.reach; roadmap 十二.3): work's play (it works

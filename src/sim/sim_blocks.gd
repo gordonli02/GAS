@@ -3,7 +3,9 @@ extends RefCounted
 ## A bot's day cut into six blocks (docs/roadmap.md 七.2), each asked by the run's loop
 ## (SimRun) at its point of the day:
 ##   perks   the morning: the rounds of perk offers, the shelf and its upgrade slots (perks)
-##   items   using an item, in the morning and at the machine before each batch (items)
+##   items   using and buying items: in the morning, after a shift, and at the machine
+##           before each batch (items) and when leaving (one_more); CHEAT SHEET is
+##           used in the perks block (_cheat), on a round's card
 ##   enter   go to the machine or work, borrowing first (enter); and, at the machine,
 ##           whether to borrow when the money runs short (refill)
 ##   column  which column to play (column); asked once a day
@@ -18,7 +20,8 @@ extends RefCounted
 ##
 ## A block may only call into the run (RunState, Economy, MachineLogic, BoxReading), set ctx.col
 ## and count in ctx.counters; the loop does the rest (paying the layer, selling,
-## opening, counting).
+## opening, counting), but for a RETURN SLIP's tickets, bought and given back unopened
+## by the items block through SimRun.slip_rest.
 ##
 ## The line bots (M9.8 step 1, stage 3) share three rules, read by their variants:
 ##   the stop-loss  while the bot buys its line's perks (perks "core"), it leaves the
@@ -40,7 +43,7 @@ const VARIANTS := {
 	"column": ["pick", "clear", "top"],
 	"stay": ["batches", "stop", "clear", "windows", "floor", "hunt"],
 	"perks": ["none", "savings", "cheapest", "skip", "line", "core", "grab", "reach"],
-	"items": ["none"],
+	"items": ["none", "use", "blind"],
 	"box": ["keep", "churn", "flare", "magnet"],
 }
 
@@ -439,6 +442,8 @@ static func perks(ctx: SimCtx) -> void:
 	var guard := 0
 	while ctx.run.offers_open and guard < 50:
 		guard += 1
+		if _cheat(ctx, v):
+			continue
 		if v == "cheapest":
 			_cheapest_round(ctx)
 		elif v == "line" or _engine(ctx):
@@ -455,6 +460,34 @@ static func perks(ctx: SimCtx) -> void:
 static func _engine(ctx: SimCtx) -> bool:
 	for id in ctx.param("engine"):
 		if ctx.run.level(id) > 0:
+			return true
+	return false
+
+
+## CHEAT SHEET (items "use"), asked before each morning round of perks `cheapest`,
+## `line` and `core`: the dearest card of the round the bot wants (`cheapest`: any;
+## `core` holding no engine: its `engine` perks; else its `perks`) taken for free, the
+## sheet used up (a free card saves the most on the dearest). True when it took one
+## (the round is over).
+static func _cheat(ctx: SimCtx, v: String) -> bool:
+	var run := ctx.run
+	if ctx.variant("items") != "use" or run.held("cheat") <= 0 or run.offer_reward or not run.offers_open:
+		return false
+	var wanted: Array = run.offers
+	if v == "core" and not _engine(ctx):
+		wanted = ctx.param("engine")
+	elif v != "cheapest":
+		wanted = ctx.param("perks")
+	var ks := []
+	for k in run.offers.size():
+		if wanted.has(str(run.offers[k])) and run.perk_price(str(run.offers[k])) > 0:
+			ks.append(k)
+	ks.sort_custom(func(a, b): return run.perk_price(str(run.offers[a])) > run.perk_price(str(run.offers[b])) or \
+		run.perk_price(str(run.offers[a])) == run.perk_price(str(run.offers[b])) and a < b)
+	for k in ks:
+		if run.buy_offer(k, ctx.e, true):
+			run.apply(ctx.m)
+			_count(ctx, "item_cheat")
 			return true
 	return false
 
@@ -737,14 +770,276 @@ static func _rolls(ctx: SimCtx) -> bool:
 
 # --- items -----------------------------------------------------------------------
 
-## Using an item, `at` "morning" (after the perks) or "machine" (before each batch).
-## Variants:
-##   none  never (no bot uses one today)
-static func items(ctx: SimCtx, _at: String) -> void:
+## The items used on a column (RunState.use_item) and from the phone (use_now).
+const COLUMN_ITEMS := ["peek", "magnifier", "skip", "shuffle", "coin", "mover", "sure", "reel", "queue"]
+const NOW_ITEMS := ["happy", "safety", "slip", "overtime", "copy"]
+
+
+## Using (and buying) items, `at` "morning" (after the perks), "work" (after a shift)
+## or "machine" (before each batch, today's column picked). False only at the machine:
+## the bot leaves for the day. Variants:
+##   none   never (the default: no bot uses one unless its spec says so)
+##   use    the careful player, using only what the game shows (a PEEK's and a
+##          MAGNIFIER's answers, READ THE FLARE through the run's reading), each item by
+##          its rule (_use, _at_machine, one_more; CHEAT SHEET in the perks block,
+##          _cheat); in the morning it buys off the shelf the `item_list` items whose
+##          price is at most `item_share` of the cash (0, the default: never), then a
+##          COPIER copies one of them. WHITE-OUT works by itself (RunState.pay_ticket)
+##   blind  the given-cards control with items: every item held is used the moment it
+##          can be, on today's column, with no thought (a PEEK's answer is ignored, a
+##          coin and HAPPY HOUR go on at once, a RETURN SLIP on an empty tray)
+static func items(ctx: SimCtx, at: String) -> bool:
 	match ctx.variant("items"):
 		"none":
-			return
+			return true
+		"use":
+			return _use(ctx, at)
+		"blind":
+			_blind(ctx, at)
+			return true
 	assert(false, "unknown items variant")
+	return true
+
+
+## One item used on today's column, counted ("item_<id>"). Returns use_item's answer.
+static func _col(ctx: SimCtx, id: String) -> Dictionary:
+	var got := ctx.run.use_item(id, ctx.m, ctx.col)
+	if not got.is_empty():
+		ctx.counters["item_" + id] = int(ctx.counters.get("item_" + id, 0)) + 1
+	return got
+
+
+## One item used from the phone, counted. Returns use_now's answer.
+static func _now(ctx: SimCtx, id: String) -> Dictionary:
+	var got := ctx.run.use_now(id, ctx.e)
+	if not got.is_empty():
+		ctx.counters["item_" + id] = int(ctx.counters.get("item_" + id, 0)) + 1
+	return got
+
+
+static func _count(ctx: SimCtx, key: String) -> void:
+	ctx.counters[key] = int(ctx.counters.get(key, 0)) + 1
+
+
+## items "use". The morning: the shelf's `item_list` items within `item_share` of the
+## cash, in that order (an item is worth a small share of a bankroll, never the day);
+## then a COPIER on the last one bought when it is on that list (a free second one).
+## After a shift: OVERTIME (the shift is paid again: never better spent than on a day
+## worked). At the machine: _at_machine.
+static func _use(ctx: SimCtx, at: String) -> bool:
+	var run := ctx.run
+	match at:
+		"morning":
+			var share := float(ctx.param("item_share"))
+			if share > 0.0:
+				for id in ctx.param("item_list"):
+					if run.shelf.has(id) and run.item_price(id) <= ctx.e.cash * share and run.buy_item(id, ctx.e):
+						_count(ctx, "bought_" + str(id))
+			if run.can_use_now("copy") and ctx.param("item_list").has(run.last_item):
+				_now(ctx, "copy")
+			return true
+		"work":
+			if run.can_use_now("overtime"):
+				_now(ctx, "overtime")
+			return true
+		"machine":
+			return _at_machine(ctx)
+	return true
+
+
+## items "use" before a batch on today's column, in this order:
+##   SAFETY NET   at once on a day of play: it gives back a share of the day's loss, and
+##                the bot cannot tell a losing day before it is played
+##   HAPPY HOUR   when the money the bot came with today buys `happy_min` tickets of the
+##                column: +50% is worth most on the day the most is bought
+##   RETURN SLIP  when the box has at most `slip_max` tickets left, the machine has a
+##                last-sale prize and the money buys them all (and READ THE FLARE, when
+##                held, does not say a top prize is in): the rest is bought unopened,
+##                the last sale (and a cleared box's perks) taken, every ticket given
+##                back at full price (_slip; the rules allow it: they sit unopened in the
+##                tray). The only use of a slip a bot has: it opens what it buys at once
+##   PEEK         the column decision (_peek): may move the bot to another column, or
+##                send it home
+##   SURE THING   with a MAGNIFIER held, only when the MAGNIFIER says the next ticket
+##                loses (on a winner it would be spent for nothing); without, at once
+##   REEL IN      with READ THE FLARE, only on a box whose top prize is in (its biggest
+##                prize left is then the top); without the flare, at once
+##   QUEUE JUMP   when the money buys QUEUE_WINDOW tickets of the column (the winners it
+##                moves are bought, not left for tomorrow's box)
+##   LUCKY COIN   when no coin waits on the column's form: at once (a coin waits for the
+##                form's next prize whichever ticket that is, so a MAGNIFIER adds nothing
+##                to it); with `coin_wait` 1, as the brief had it, only after a
+##                MAGNIFIER's yes when one is held
+## FAST FORWARD and SHUFFLE only answer a bad PEEK (_peek); MOVER is never used (moving
+## to the other column is free). A MAGNIFIER with no SURE THING (and no coin waiting
+## for it) is kept for the day's end (one_more).
+static func _at_machine(ctx: SimCtx) -> bool:
+	var run := ctx.run
+	var e := ctx.e
+	if run.can_use_now("safety"):
+		_now(ctx, "safety")
+	if run.can_use_now("happy") and ctx.day_money >= int(ctx.param("happy_min")) * ctx.m.price(ctx.col):
+		_now(ctx, "happy")
+	_slip(ctx)
+	if not _peek(ctx):
+		return false
+	var box: TicketBox = ctx.m.boxes[ctx.col]
+	if box.cursor >= box.size:
+		return true   # sold out: the next sale loads a new box
+	var price := ctx.m.price(ctx.col)
+	if run.held("sure") > 0:
+		if run.held("magnifier") <= 0 or not bool(_col(ctx, "magnifier").get("wins", true)):
+			_col(ctx, "sure")
+	if run.held("reel") > 0 and (run.reading() < BoxReading.FLARE or top_in(ctx, ctx.col)):
+		_col(ctx, "reel")
+	if run.held("queue") > 0 and e.cash + e.credit >= Catalog.QUEUE_WINDOW * price:
+		_col(ctx, "queue")
+	if run.held("coin") > 0 and int(run.coin_on.get(box.form.uid(), 0)) <= 0:
+		if int(ctx.param("coin_wait")) <= 0 or run.held("magnifier") <= 0:
+			_col(ctx, "coin")
+		elif bool(_col(ctx, "magnifier").get("wins", false)):
+			_col(ctx, "coin")
+	return true
+
+
+## RETURN SLIP (items "use"; _at_machine says when): the rest of today's box bought
+## unopened and given back (SimRun.slip_rest).
+static func _slip(ctx: SimCtx) -> void:
+	var run := ctx.run
+	if run.held("slip") <= 0 or not run.can_use_now("slip") or ctx.m.last_sale <= 0:
+		return
+	var box: TicketBox = ctx.m.boxes[ctx.col]
+	var rest := box.size - box.cursor
+	if rest <= 0 or rest > int(ctx.param("slip_max")):
+		return
+	if ctx.e.cash + ctx.e.credit < rest * ctx.m.price(ctx.col):
+		return
+	if run.reading() >= BoxReading.FLARE and top_in(ctx, ctx.col):
+		return
+	SimRun.slip_rest(ctx, ctx.col)
+
+
+## The PEEK threshold of a form, in winners per 100 tickets (`peek_min` of its id, times
+## `peek_scale`; a form not listed: 0, never left).
+static func peek_min(ctx: SimCtx, form: FormDef) -> float:
+	return float(ctx.param("peek_min").get(form.id, 0.0)) * float(ctx.param("peek_scale"))
+
+
+## items "use": the PEEK, the one item that makes playing at the machine a decision.
+## Before a batch, when today's box has no answer yet for where it stands, a PEEK held
+## looks at its next peek_n() tickets (INFORMANT sees further); the bot buys into them
+## only when their winners reach peek_min (per 100 tickets: the window's count times 100
+## over its size). An answer is kept until the box has gone past it, so a window known
+## to be under is left again without another PEEK. Under it the bot leaves the window:
+## a FAST FORWARD held skips it (then it may PEEK again), else a SHUFFLE held deals the
+## rest again (the next tickets are then the rest's average), else another column (its
+## `forms`' first, the fewest left, none it left today nor one known to be under), else
+## it goes home for the day: false. In the layer's endgame it never goes home: it plays
+## the window. Counted (SimCtx.counters).
+static func _peek(ctx: SimCtx) -> bool:
+	var run := ctx.run
+	var guard := 0
+	while guard < 12:
+		guard += 1
+		var box: TicketBox = ctx.m.boxes[ctx.col]
+		if box.cursor >= box.size:
+			return true
+		var key := "%s|%s" % [box.form.uid(), box.seed]
+		var known: Dictionary = ctx.peeks.get(key, {})
+		if not known.is_empty() and box.cursor < int(known.until):
+			if known.good:
+				return true
+			_count(ctx, "peek_known")
+		elif run.held("peek") > 0:
+			var got := _col(ctx, "peek")
+			var n := mini(int(got.get("of", 0)), box.size - box.cursor)
+			var good := float(got.get("winners", 0)) * 100.0 >= peek_min(ctx, box.form) * n
+			ctx.peeks[key] = {"until": box.cursor + n, "good": good}
+			if good:
+				return true
+			_count(ctx, "peek_bad")
+		else:
+			return true
+		if run.held("skip") > 0 and not _col(ctx, "skip").is_empty():
+			ctx.peeks.erase(key)
+			_count(ctx, "peek_skip")
+			continue
+		if run.held("shuffle") > 0 and not _col(ctx, "shuffle").is_empty():
+			ctx.peeks.erase(key)
+			_count(ctx, "peek_shuffle")
+			continue
+		if not ctx.left_today.has(ctx.col):
+			ctx.left_today.append(ctx.col)
+		var c := _other_column(ctx)
+		if c >= 0:
+			ctx.col = c
+			_count(ctx, "peek_moved")
+			continue
+		if endgame(ctx):
+			_count(ctx, "peek_stayed")
+			return true
+		_count(ctx, "peek_stop")
+		return false
+	return true
+
+
+## A column to go to from a window under peek_min: of the columns the money buys a
+## ticket of (the `forms`' first, then any), not today's, not one left today, not one
+## whose box is known to be under where it stands; the fewest tickets left. The jackpot
+## line (column "top", reading the flare) goes only to a box whose top prize is in, as
+## its column block does. -1: none.
+static func _other_column(ctx: SimCtx) -> int:
+	var tops := ctx.variant("column") == "top" and ctx.run.reading() >= BoxReading.FLARE
+	for any in [false, true]:
+		var cols := []
+		for i in _cols(ctx, any):
+			if i == ctx.col or ctx.left_today.has(i) or (tops and not top_in(ctx, i)):
+				continue
+			var box: TicketBox = ctx.m.boxes[i]
+			var known: Dictionary = ctx.peeks.get("%s|%s" % [box.form.uid(), box.seed], {})
+			if not known.is_empty() and box.cursor < int(known.until) and not known.good:
+				continue
+			cols.append(i)
+		if not cols.is_empty():
+			return _fewest_left(ctx, cols)
+	return -1
+
+
+## Asked when the bot is about to leave the machine (stay said 0): items "use" holding a
+## MAGNIFIER looks at today's column, and when the next ticket wins buys that one ticket
+## (a winner for a ticket's price). Returns the tickets to buy: 1, or 0 to leave.
+static func one_more(ctx: SimCtx) -> int:
+	if ctx.variant("items") != "use" or ctx.run.held("magnifier") <= 0 or ctx.col < 0:
+		return 0
+	var box: TicketBox = ctx.m.boxes[ctx.col]
+	if box.cursor >= box.size or not SimRun.can_buy(ctx.e, ctx.m.price(ctx.col)):
+		return 0
+	if not bool(_col(ctx, "magnifier").get("wins", false)):
+		return 0
+	_count(ctx, "one_more")
+	return 1
+
+
+## items "blind": every item held used the moment it can be. In the morning and after a
+## shift, the phone's (OVERTIME, a COPIER); at the machine, the phone's (HAPPY HOUR,
+## SAFETY NET, a RETURN SLIP on an empty tray), then every column item on today's
+## column, each as many as are held (a PEEK's and a MAGNIFIER's answers ignored).
+static func _blind(ctx: SimCtx, at: String) -> void:
+	var run := ctx.run
+	for id in NOW_ITEMS:
+		var g := 0
+		while run.can_use_now(id) and g < 10:
+			g += 1
+			if _now(ctx, id).is_empty():
+				break
+	if at != "machine":
+		return
+	for id in COLUMN_ITEMS:
+		var g := 0
+		while run.held(id) > 0 and g < 10:
+			g += 1
+			if _col(ctx, id).is_empty():
+				break
 
 
 # --- box -------------------------------------------------------------------------

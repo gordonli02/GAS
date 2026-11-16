@@ -28,11 +28,23 @@ var payable_at := -1
 ## boxes the jackpot line left because READ THE FLARE said their top prize was gone; the
 ## rounds probe's "grab_*" (SimBlocks.grab); "reroll_cost", dollars paid for rerolls
 ## (SimBlocks._reroll, reach); "reach_round", when the deal's ceiling bot held its whole
-## core (SimBlocks.reach).
+## core (SimBlocks.reach); the items block's (SimBlocks.items): "item_<id>" each item
+## used, "bought_<id>" each bought off the shelf, "peek_bad" a PEEK under peek_min,
+## "peek_known" a window known to be under come back to (another batch, the column
+## block's choice), and what the bot did then: "peek_skip" (FAST FORWARD),
+## "peek_shuffle", "peek_moved" (another column), "peek_stayed" (none, the endgame),
+## "peek_stop" (it left for the day); "one_more", a ticket bought on a MAGNIFIER's yes
+## when it was leaving; "slip_tickets", tickets bought and given back with a RETURN SLIP.
 var counters := {}
 ## The rounds dealt (RunState.stats rounds + reward_rounds) when the rounds probe's bot
 ## last took a card (SimBlocks.grab); -1 before.
 var taken_on := -1
+## What the bot's PEEKs said (items "use", SimBlocks._peek): "<form uid>|<box seed>" ->
+## {until: the box's place the answer reaches to, good: at least peek_min}. Kept over
+## the run: a box is the same box tomorrow.
+var peeks := {}
+## The columns the bot left today after a PEEK under peek_min (items "use").
+var left_today := []
 
 
 ## A context over an existing run (tests, or a bot's block asked outside a run). `spec`
@@ -64,3 +76,4 @@ func start_day() -> void:
 	day_money = 0
 	payable_at = -1
 	day_layer = run.layer
+	left_today = []
