@@ -592,9 +592,11 @@ func test_bot_specs_are_data() -> void:
 
 
 ## A morning (or, with `reward`, a reward) round set by hand: a fresh run at stake 1,
-## the bot `spec` with `cash` in the pocket, the round's cards `offers`.
-func _hand_round(forms: Array, spec: Dictionary, cash: int, offers: Array, reward := false) -> SimCtx:
-	var run := RunState.start(RunConfig.standard(), "RR", ["diner", "bar", "bingo"])
+## the bot `spec` with `cash` in the pocket, the round's cards `offers`; `config` the
+## standard one when null.
+func _hand_round(forms: Array, spec: Dictionary, cash: int, offers: Array, reward := false,
+		config: RunConfig = null) -> SimCtx:
+	var run := RunState.start(config if config != null else RunConfig.standard(), "RR", ["diner", "bar", "bingo"])
 	var e := run.new_economy()
 	if cash > e.cash:
 		e.bonus(cash - e.cash)
@@ -670,6 +672,77 @@ func test_rerolls() -> void:
 			var own := int(SimBots.spec(line).params.rerolls)
 			check(int(d.stats.rerolls) <= own * int(d.stats.rounds), "%s: its own spec rerolls at most %d a round" % [line, own])
 	check(any > 0, "the reroll variants reroll (%d)" % any)
+
+
+## The dealing experiments' free reroll (RunConfig.free_rerolls, roadmap 十三.5; off in
+## the standard config): a bot whose pick finds nothing takes it whatever its `rerolls`
+## (jackpot's is 0), the paid ones still count against `rerolls`; the reach bot takes it
+## on top of its N.
+func test_free_rerolls_and_the_bots() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var free := RunConfig.standard()
+	free.free_rerolls = 1
+	var off := ["closer", "penny", "scrap"]   # no jackpot card
+	var jack := SimBots.spec("jackpot")
+	eq(int(jack.params.rerolls), 0, "jackpot pays for no reroll")
+	var c := _hand_round(pack.forms, jack, 100000, off, false, free)
+	SimBlocks._engine_round(c)
+	eq(int(c.run.stats.rerolls), 1, "jackpot, rerolls 0: the free reroll taken, no paid one")
+	eq(int(c.run.stats.free_rerolls), 1, "and it was free")
+	eq(int(c.counters.get("reroll_cost", 0)), 0, "for nothing")
+	c = _hand_round(pack.forms, jack, 100000, off)
+	SimBlocks._engine_round(c)
+	eq(int(c.run.stats.rerolls), 0, "the standard config: none")
+	c = _hand_round(pack.forms, jack, 100000, off, true, free)
+	SimBlocks._engine_round(c)
+	eq(int(c.run.stats.rerolls), 0, "a reward round: never")
+	# A line bot with rerolls 2: the free one, then up to two paid.
+	var build := SimBots.spec("build", {"params": {"rerolls": 2, "reroll_share": 1.0}})
+	for i in 4:
+		c = _hand_round(pack.forms, build, 100000, ["closer", "firstpull", "assembly"], false, free)
+		c.run.seed = "FR-%d" % i
+		SimBlocks._line_round(c)
+		var n := int(c.run.stats.rerolls)
+		check(n >= 1 and n <= 3, "build: the free one and at most two paid (%d)" % n)
+		eq(int(c.run.stats.free_rerolls), 1, "build: one free")
+		eq(int(c.counters.get("reroll_cost", 0)), [0, 0, 20, 60][n], "build: what the paid ones cost")
+	# cheapest (perks): nothing within its share: the free reroll, then the item.
+	var cheap := SimBots.spec("perks", {"params": {"share": 0.0001}})
+	c = _hand_round(pack.forms, cheap, 1000, off, false, free)
+	SimBlocks._cheapest_round(c)
+	eq(int(c.run.stats.free_rerolls), 1, "perks: the free reroll")
+	eq(int(c.run.stats.rerolls), 1, "and no paid one")
+	# The reach bot at r0: only free rerolls.
+	var any := 0
+	for line in SimBots.GIVEN:
+		var r := SimRun.play(SimBots.reach_spec(line, 0), pack.forms, "FR-0", free)
+		eq(int(r.stats.rerolls), int(r.stats.free_rerolls), "%s reach r0: every reroll free" % line)
+		check(int(r.stats.rerolls) <= int(r.stats.rounds), "%s reach r0: at most one a morning round" % line)
+		eq(int(r.rounds.free_rerolls), int(r.stats.free_rerolls), "%s: the free ones in the result" % line)
+		any += int(r.stats.rerolls)
+	check(any > 0, "the reach bots take free rerolls (%d)" % any)
+
+
+## sim_runs --set=key=value,... (RunConfig.parse_set, apply_set, set_text): the
+## upgrade slots and the dealing experiments; an unknown key or a bad value is an error.
+func test_set_overrides() -> void:
+	var p := RunConfig.parse_set("deal_bias=2.5,free_rerolls=1, starter=1,offer_bonus=1,reward_bias=3,shelf_upgrades=2")
+	eq(p.error, "", "parsed")
+	eq(p.set, {"deal_bias": 2.5, "free_rerolls": 1, "starter": 1, "offer_bonus": 1, "reward_bias": 3.0, "shelf_upgrades": 2},
+		"each key with its type")
+	var c := RunConfig.standard()
+	c.apply_set(p.set)
+	check(c.deal_bias == 2.5 and c.reward_bias == 3.0 and c.free_rerolls == 1 and c.starter == 1 and c.offer_bonus == 1
+		and c.shelf_upgrades == 2, "put into the config")
+	eq(c.problems(), PackedStringArray(), "and it holds together")
+	check(RunConfig.set_text({"deal_bias": 2.5}).contains("deal_bias=2.5 (standard 1"), "the text names the standard value")
+	eq(RunConfig.set_text({}), "", "no overrides: no text")
+	eq(RunConfig.parse_set("").set, {}, "nothing given: nothing set")
+	for bad in ["deal_bais=2", "deal_bias", "free_rerolls=1.5", "free_rerolls=-1", "deal_bias=0", "deal_bias=x", "payout=1"]:
+		check(str(RunConfig.parse_set(bad).error) != "", "an error: %s" % bad)
+	eq(RunConfig.parse_set("starter=1,starter=0").set, {"starter": 0}, "a key twice: the last")
 
 
 ## M9.8 step 2, stage 2: a reward round for a `core` bot holding no engine: an engine

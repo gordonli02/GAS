@@ -73,12 +73,81 @@ var start_cash := 200
 var loan_interest := 15
 var payout := 1.0            ## the boxes' prize totals times this (BoxModel.payout)
 var shelf_upgrades := 1      ## upgrade slots on each morning's shelf
+## The dealing candidates (docs/roadmap.md 十三.5) are switches below, not in STANDARD;
+## a simulator run sets them (sim_runs --set=key=value) to measure one.
+## deal_bias: a morning round's perk whose branch is that of a dealt perk held weighs
+## this many times its weight (1.0: off; RunState._pool). An experiment for roadmap
+## 十三.5, off in the standard config; not a rule yet.
+var deal_bias := 1.0
+## reward_bias: the same, for a reward round's new cards only (1.0: off). An experiment
+## for roadmap 十三.5, off in the standard config; not a rule yet.
+var reward_bias := 1.0
+## free_rerolls: this many rerolls of each morning round cost nothing; the paid ones
+## after them start at the first price (0: off; RunState.reroll_price). An experiment
+## for roadmap 十三.5, off in the standard config; not a rule yet.
+var free_rerolls := 0
+## starter: 1 deals the run's first morning round as one entry card of each of three
+## build lines drawn from the seed (0: off; RunState.starter_cards). An experiment for
+## roadmap 十三.5, off in the standard config; not a rule yet.
+var starter := 0
+## offer_bonus: cards a round on top of Catalog.OFFERS, copied to RunState.offer_bonus
+## when the run starts (0: off). An experiment for roadmap 十三.5, off in the standard
+## config; not a rule yet.
+var offer_bonus := 0
 var layers: Array = []
 var catalog: Catalog = null
 
 
 static func standard() -> RunConfig:
 	return from_dict(STANDARD)
+
+
+## The fields a simulator run may override (sim_runs --set=key=value,...), with the
+## type of each: the upgrade slots and the dealing experiments.
+const SETTABLE := {"shelf_upgrades": TYPE_INT, "deal_bias": TYPE_FLOAT, "reward_bias": TYPE_FLOAT,
+	"free_rerolls": TYPE_INT, "starter": TYPE_INT, "offer_bonus": TYPE_INT}
+
+
+## "key=value[,key=value...]" as {set: {key: value}, error: ""}: each key one of
+## SETTABLE, its value a number of its type (an int field takes a whole number), not
+## under 0 (a bias above 0). On the first bad pair `error` says what is wrong and `set`
+## holds the pairs before it. A key given twice keeps the last value.
+static func parse_set(text: String) -> Dictionary:
+	var out := {}
+	for pair in text.split(",", false):
+		var kv := pair.strip_edges().split("=")
+		if kv.size() != 2:
+			return {"set": out, "error": "not key=value: %s" % pair}
+		var key := kv[0].strip_edges()
+		var v := kv[1].strip_edges()
+		if not SETTABLE.has(key):
+			return {"set": out, "error": "unknown key %s (one of %s)" % [key, ", ".join(SETTABLE.keys())]}
+		if SETTABLE[key] == TYPE_INT:
+			if not v.is_valid_int() or v.to_int() < 0:
+				return {"set": out, "error": "%s takes a whole number, 0 or more: %s" % [key, v]}
+			out[key] = v.to_int()
+		else:
+			if not v.is_valid_float() or v.to_float() <= 0.0:
+				return {"set": out, "error": "%s takes a number above 0: %s" % [key, v]}
+			out[key] = v.to_float()
+	return {"set": out, "error": ""}
+
+
+## Puts the overrides of parse_set into this config.
+func apply_set(overrides: Dictionary) -> void:
+	for key in overrides:
+		if SETTABLE.has(key):
+			set(key, overrides[key])
+
+
+## The overrides as text, "key=value, ...", each with the standard value beside it;
+## "" for none.
+static func set_text(overrides: Dictionary) -> String:
+	var std := RunConfig.standard()
+	var parts := PackedStringArray()
+	for key in overrides:
+		parts.append("%s=%s (standard %s)" % [key, str(overrides[key]), str(std.get(key))])
+	return ", ".join(parts)
 
 
 ## `catalog`: where SAVINGS' levels come from (the standard catalog when null). Each
@@ -92,6 +161,11 @@ static func from_dict(d: Dictionary, cat: Catalog = null) -> RunConfig:
 	c.loan_interest = int(d.get("loan_interest", 15))
 	c.payout = float(d.get("payout", 1.0))
 	c.shelf_upgrades = int(d.get("shelf_upgrades", 1))
+	c.deal_bias = float(d.get("deal_bias", 1.0))
+	c.reward_bias = float(d.get("reward_bias", 1.0))
+	c.free_rerolls = int(d.get("free_rerolls", 0))
+	c.starter = int(d.get("starter", 0))
+	c.offer_bonus = int(d.get("offer_bonus", 0))
 	c.layers = d.get("layers", []).duplicate(true)
 	c.catalog = cat if cat != null else Catalog.standard()
 	var line := c.work_line()
@@ -271,6 +345,10 @@ func problems() -> PackedStringArray:
 		out.append("payout not above 0")
 	if shelf_upgrades < 0:
 		out.append("upgrade slots under 0")
+	if deal_bias <= 0.0 or reward_bias <= 0.0:
+		out.append("a deal bias not above 0")
+	if free_rerolls < 0 or starter < 0 or offer_bonus < 0:
+		out.append("free rerolls, starter or offer bonus under 0")
 	return out
 
 

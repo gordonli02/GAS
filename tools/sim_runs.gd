@@ -70,7 +70,8 @@ extends Node
 ## slots, and reward rounds' upgrade cards); --save writes the upgrades too.
 ## With --reach the tool does only the deal's ceiling (SimReport.reach; roadmap 十二.3,
 ## "are there enough picks for a line to come together", money left out) for the line
-## bots of --bots= (default the five), each at 0, 1, 2 and 3 rerolls a morning round: a
+## bots of --bots= (default the five), each at 0, 1, 2 and 3 paid rerolls a morning round
+## (--rerolls=a,b,... for other counts, e.g. --rerolls=0): a
 ## bot with plenty of cash that works every day (each layer paid on its last day, one
 ## reward round a layer), buys the shelf perks of the line's core and takes from every
 ## round the first core card it lacks, rerolling when none is there. Per line and reroll
@@ -78,11 +79,15 @@ extends Node
 ## of layer 1 / 2 / 3; the median round (morning and reward counted) the core was
 ## complete at and the share that never completed it; rerolls a run and their cost; then
 ## each core card's held share by layer. Exit code 0: it is a report.
-## --upgrades=N: the run's config with N upgrade slots on the daily shelf
-## (RunConfig.shelf_upgrades; default the standard config's) for the table, --variants,
-## --given and --reach (not --baseline: the fixture is the standard config's). The
-## header says so when it is not the standard value, and --save writes it, so
-## --upgrades=2 --against=<a file saved at 1> pairs one slot against two on the same seeds.
+## --set=key=value[,key=value...]: the run's config with those fields overridden
+## (RunConfig.SETTABLE: shelf_upgrades and the dealing experiments of roadmap 十三.5,
+## deal_bias, reward_bias, free_rerolls, starter, offer_bonus; RunConfig.parse_set) for
+## the table, --variants, --given and --reach (not --baseline: the fixture is the
+## standard config's). An unknown key or a bad value is an error (exit code 1). The
+## header names the overrides, --save writes them, and --against prints the saved
+## file's beside them, so --set=deal_bias=3 --against=<a file saved without> pairs the
+## experiment against the standard deal on the same seeds. --upgrades=N is
+## --set=shelf_upgrades=N.
 
 ## The roadmap's targets (docs/roadmap.md 一): [text, low, high] in percent of runs
 ## cleared ("<": under high). build and perks have none yet.
@@ -120,8 +125,35 @@ func _run() -> void:
 	var probe_runs := SimProbes.RUNS
 	var bots_set := false
 	var reach := false
-	var upgrades := -1
+	var reach_rerolls := [0, 1, 2, 3]
+	var overrides := {}
 	for a in OS.get_cmdline_user_args():
+		var set_text := ""
+		if a.begins_with("--set="):
+			set_text = a.trim_prefix("--set=")
+		elif a.begins_with("--upgrades="):
+			set_text = "shelf_upgrades=" + a.trim_prefix("--upgrades=")
+		if a.begins_with("--set=") or a.begins_with("--upgrades="):
+			var parsed := RunConfig.parse_set(set_text)
+			if parsed.error != "":
+				print("--set: " + str(parsed.error))
+				get_tree().quit(1)
+				return
+			overrides.merge(parsed.set, true)
+			continue
+		if a.begins_with("--rerolls="):
+			reach_rerolls = []
+			for t in a.trim_prefix("--rerolls=").split(",", false):
+				if not t.strip_edges().is_valid_int() or t.to_int() < 0:
+					print("--rerolls: a list of whole numbers, 0 or more: " + a)
+					get_tree().quit(1)
+					return
+				reach_rerolls.append(t.to_int())
+			if reach_rerolls.is_empty():
+				print("--rerolls: no count given")
+				get_tree().quit(1)
+				return
+			continue
 		if a == "--detail":
 			detail = true
 		elif a == "--given":
@@ -132,8 +164,6 @@ func _run() -> void:
 			probes = true
 		elif a == "--reach":
 			reach = true
-		elif a.begins_with("--upgrades="):
-			upgrades = maxi(0, a.trim_prefix("--upgrades=").to_int())
 		elif a.begins_with("--probe-runs="):
 			probe_runs = maxi(1, a.trim_prefix("--probe-runs=").to_int())
 		elif a == "--early":
@@ -178,10 +208,9 @@ func _run() -> void:
 		get_tree().quit(_write_baseline(baseline, frozen, baseline_runs, res.pack.forms, config))
 		return
 	var slots := ""
-	if upgrades >= 0 and upgrades != config.shelf_upgrades:
-		slots = ", shelf upgrade slots %d (standard %d)" % [upgrades, config.shelf_upgrades]
-	if upgrades >= 0:
-		config.shelf_upgrades = upgrades
+	if not overrides.is_empty():
+		slots = ", overrides: " + RunConfig.set_text(overrides)
+		config.apply_set(overrides)
 	if probes:
 		get_tree().quit(_probes(probe_runs, churn_boxes, res.pack.forms))
 		return
@@ -193,7 +222,7 @@ func _run() -> void:
 		get_tree().quit(0)
 		return
 	if reach:
-		_reach(lines, runs, prefix, res.pack.forms, config, slots)
+		_reach(lines, runs, prefix, res.pack.forms, config, slots, reach_rerolls)
 		get_tree().quit(0)
 		return
 	if variants:
@@ -241,9 +270,9 @@ func _run() -> void:
 	for row in rows:
 		_print_bot(row[1], detail)
 	if save != "":
-		_save(save, prefix, runs, rows, config.shelf_upgrades)
+		_save(save, prefix, runs, rows, config.shelf_upgrades, overrides)
 	if against != "":
-		_against(against, prefix, rows)
+		_against(against, prefix, rows, overrides)
 	if ev_boxes > 0:
 		print("\nreturn per dollar of tickets, %d boxes of each form bought out:" % ev_boxes)
 		for levels in SimData.EV_SETS:
@@ -391,9 +420,9 @@ func _print_bot(s: Dictionary, detail: bool) -> void:
 		return
 	var rd: Dictionary = s.get("rounds", {})
 	var ud: Dictionary = s.get("upgrades", {})
-	print("  rounds a run: morning %.1f, reward %.1f; rerolls %.2f; upgrades: shelf %.2f, reward %.2f" % [
+	print("  rounds a run: morning %.1f, reward %.1f; rerolls %.2f (free %.2f); upgrades: shelf %.2f, reward %.2f" % [
 		float(rd.get("morning", 0.0)), float(rd.get("reward", 0.0)), float(rd.get("rerolls", 0.0)),
-		float(ud.get("shelf", 0.0)), float(ud.get("reward", 0.0))])
+		float(rd.get("free_rerolls", 0.0)), float(ud.get("shelf", 0.0)), float(ud.get("reward", 0.0))])
 	var cat := Catalog.standard()
 	if not s.triggers.is_empty():
 		print("  %-12s %5s %5s %8s %8s %6s  %5s %5s %5s  %5s %5s %5s" % ["perk", "held", "day", "fired/r", "/100 tk", "mean%",
@@ -474,16 +503,17 @@ func _given(lines: Array, runs: int, prefix: String, forms: Array, config: RunCo
 		print("  " + v)
 
 
-## --reach: the deal's ceiling of each line in `lines` (SimReport.reach) at 0 to 3
-## rerolls a morning round, printed.
-func _reach(lines: Array, runs: int, prefix: String, forms: Array, config: RunConfig, slots: String) -> void:
+## --reach: the deal's ceiling of each line in `lines` (SimReport.reach) at each count
+## of `rerolls` a morning round (--rerolls=, default 0 to 3), printed.
+func _reach(lines: Array, runs: int, prefix: String, forms: Array, config: RunConfig, slots: String,
+		rerolls: Array = [0, 1, 2, 3]) -> void:
 	print("reach, the deal's ceiling (docs/roadmap.md 十二.3; money left out): %d runs a line and reroll count, seeds %s-0 .. %s-%d%s" % [
 		runs, prefix, prefix, runs - 1, slots])
-	print("the bot: $%d in the pocket, works every day (each layer paid on its last day: one reward round a layer), buys the shelf perks of the line's core, takes from every round the first core card it lacks; on a morning round with none, up to N rerolls" % SimBots.REACH_CASH)
+	print("the bot: $%d in the pocket, works every day (each layer paid on its last day: one reward round a layer), buys the shelf perks of the line's core, takes from every round the first core card it lacks; on a morning round with none, up to N paid rerolls (free ones, --set=free_rerolls, on top)" % SimBots.REACH_CASH)
 	for line in lines:
 		var t0 := Time.get_ticks_msec()
 		var rows := []
-		for n in 4:
+		for n in rerolls:
 			rows.append(SimReport.reach(line, forms, runs, prefix, n, config))
 		var first: Dictionary = rows[0]
 		var shelf: Array = SimBots.reach_spec(line, 0).params.shelf
@@ -496,7 +526,7 @@ func _reach(lines: Array, runs: int, prefix: String, forms: Array, config: RunCo
 			var done := "-" if int(r.done) < 0 else str(int(r.done))
 			print("  %-7d %s   %s   %7s %5.0f%%   %7.2f %8.0f %6.1f" % [r.rerolls, _pcts(r.whole), _pcts(r.engine), done,
 				r.never * 100.0, r.rerolls_run, r.cost, r.rounds])
-		print("  each core card held by the end of layer 1 / 2 / 3, percent of runs, at 0, 1, 2 and 3 rerolls:")
+		print("  each core card held by the end of layer 1 / 2 / 3, percent of runs, at %s rerolls:" % ", ".join(rerolls.map(func(n): return str(n))))
 		for id in first.core:
 			var parts := []
 			for r in rows:
@@ -563,7 +593,7 @@ static func _file_path(path: String) -> String:
 
 ## --save: every bot's per-seed outcomes and headline numbers, as JSON, with the
 ## config's upgrade slots (--upgrades).
-func _save(path: String, prefix: String, runs: int, rows: Array, shelf_upgrades: int) -> void:
+func _save(path: String, prefix: String, runs: int, rows: Array, shelf_upgrades: int, overrides: Dictionary) -> void:
 	var bots := {}
 	for row in rows:
 		var s: Dictionary = row[1]
@@ -575,20 +605,35 @@ func _save(path: String, prefix: String, runs: int, rows: Array, shelf_upgrades:
 	if f == null:
 		push_error("cannot write " + _file_path(path))
 		return
-	f.store_string(JSON.stringify({"seed_prefix": prefix, "runs": runs, "shelf_upgrades": shelf_upgrades, "bots": bots},
-		"\t") + "\n")
+	f.store_string(JSON.stringify({"seed_prefix": prefix, "runs": runs, "shelf_upgrades": shelf_upgrades,
+		"overrides": overrides, "bots": bots}, "\t") + "\n")
 	f.close()
 	print("\nsaved " + _file_path(path))
 
 
-## --against: each bot run now and in the saved file, on the same seeds, paired.
-func _against(path: String, prefix: String, rows: Array) -> void:
+## Overrides ({key: value}) for a line of text: "none" (the standard config) or each
+## key=value.
+static func _overrides_text(overrides: Dictionary) -> String:
+	if overrides.is_empty():
+		return "none (the standard config)"
+	var parts := PackedStringArray()
+	for key in overrides:
+		parts.append("%s=%s" % [key, str(overrides[key])])
+	return ", ".join(parts)
+
+
+## --against: each bot run now and in the saved file, on the same seeds, paired; the
+## overrides of both (--set) printed first.
+func _against(path: String, prefix: String, rows: Array, overrides: Dictionary) -> void:
 	var saved = JSON.parse_string(FileAccess.get_file_as_string(_file_path(path)))
 	if not saved is Dictionary or not saved.has("bots"):
 		print("\nagainst %s: cannot read it" % path)
 		return
 	print("\nagainst %s (A: now, B: saved; seeds %s; shelf upgrade slots there: %s):" % [path, saved.get("seed_prefix", "?"),
 		str(int(saved.shelf_upgrades)) if saved.has("shelf_upgrades") else "not saved"])
+	var there = saved.get("overrides")
+	print("  overrides: A %s; B %s" % [_overrides_text(overrides),
+		_overrides_text(there) if there is Dictionary else "not saved (a file from before --set)"])
 	for row in rows:
 		var bot: String = row[0]
 		var s: Dictionary = row[1]

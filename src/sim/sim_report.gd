@@ -39,8 +39,8 @@ const FIRED_MIN := 0.9           ## given: a given core perk fires in at least t
 ##              failed; -1 when none played it), offered_by (the same, the share in
 ##              which it had been dealt as a card by then: "dealt but not bought"
 ##              against "never dealt", roadmap 十.8)}
-##   rounds     {morning, reward, rerolls}: the rounds dealt a run and the rerolls paid
-##              for, the mean
+##   rounds     {morning, reward, rerolls, free_rerolls}: the rounds dealt a run, the
+##              rerolls made and, of them, the free ones, the mean
 ##   upgrades   {shelf, reward}: levels bought from the shelf's upgrade slots and reward
 ##              rounds' upgrade cards taken a run (RunState.stats upgrades,
 ##              reward_upgrades), the mean
@@ -80,7 +80,7 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 	played_in.fill(0)
 	var held_in := {}     # perk id -> [runs holding it when each layer ended]
 	var offered_in := {}  # perk id -> [runs it had been offered in by the time each layer ended]
-	var rounds := {"morning": 0, "reward": 0, "rerolls": 0}
+	var rounds := {"morning": 0, "reward": 0, "rerolls": 0, "free_rerolls": 0}
 	var upgrades := {"shelf": 0, "reward": 0}
 	var dead := []   # the death of each failed run
 	var carry := []
@@ -163,7 +163,8 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 		"return_fees": float(won) / (spent + fees) if spent + fees > 0 else 0.0, "fees": fees / n,
 		"days_spared": spared / n, "perks": perks / n, "best": percentiles(bests, BEST_PCT), "outcomes": outcomes,
 		"wilson": wilson(cleared, played), "triggers": _triggers(spec, held, played, played_in, held_in, offered_in),
-		"rounds": {"morning": rounds.morning / n, "reward": rounds.reward / n, "rerolls": rounds.rerolls / n},
+		"rounds": {"morning": rounds.morning / n, "reward": rounds.reward / n, "rerolls": rounds.rerolls / n,
+			"free_rerolls": rounds.free_rerolls / n},
 		"upgrades": {"shelf": upgrades.shelf / n, "reward": upgrades.reward / n},
 		"deaths": _deaths(dead, layers, played),
 		"death_blocks": _death_blocks(dead, layers), "carry": carry_rows, "stopped": stopped}
