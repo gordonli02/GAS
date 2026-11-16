@@ -87,7 +87,8 @@ var reward_bias := 1.0
 ## for roadmap 十三.5, off in the standard config; not a rule yet.
 var free_rerolls := 0
 ## starter: 1 deals the run's first morning round as one entry card of each of three
-## build lines drawn from the seed (0: off; RunState.starter_cards). An experiment for
+## build lines drawn from the seed (0: off; RunState.starter_cards); 2 the same, its
+## pick taken for nothing (RunState.starter_pick). An experiment for
 ## roadmap 十三.5, off in the standard config; not a rule yet.
 var starter := 0
 ## offer_bonus: cards a round on top of Catalog.OFFERS, copied to RunState.offer_bonus

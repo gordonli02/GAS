@@ -35,7 +35,9 @@ extends RefCounted
 ## left still buys a card it is rerolling for. `rerolls` 0 (the default) never rerolls.
 ## A free reroll (RunConfig.free_rerolls, an experiment off in the standard config) is
 ## taken by every bot that picks ("line", "core", "cheapest", "reach") whatever its
-## `rerolls`; only the paid ones count against it.
+## `rerolls`; only the paid ones count against it. The free starter round
+## (RunConfig.starter 2, RunState.starter_pick, an experiment) is played as a reward
+## round by them all: a free card taken when it is one they would take, never rerolled.
 
 ## The variants of each block, the default first.
 const VARIANTS := {
@@ -474,7 +476,9 @@ static func _shelf_engine(ctx: SimCtx) -> void:
 ## A round, holding no engine: the first of the `engine` perks among its cards that
 ## the cash pays for (or free, on a reward round); on a morning round with none, a
 ## reroll when _reroll allows (an engine the cash left could pay for), then again; on a
-## reward round with none, the first of its `perks` there (free); else the item.
+## reward round with none, the first of its `perks` there (free); else the item. The
+## free starter round (RunState.starter_pick, an experiment) is played as a reward
+## round: never rerolled.
 static func _engine_round(ctx: SimCtx) -> void:
 	var run := ctx.run
 	var e := ctx.e
@@ -482,7 +486,7 @@ static func _engine_round(ctx: SimCtx) -> void:
 	var k := _first_of(ctx, ctx.param("engine"))
 	while k < 0 and _reroll(ctx, ctx.param("engine"), pays):
 		k = _first_of(ctx, ctx.param("engine"))
-	if k < 0 and run.offer_reward:
+	if k < 0 and (run.offer_reward or run.starter_pick()):
 		k = _first_of(ctx, ctx.param("perks"))
 	if k >= 0 and run.buy_offer(k, e):
 		run.apply(ctx.m)
@@ -513,7 +517,7 @@ static func _first_of(ctx: SimCtx, ids: Array) -> int:
 static func _reroll(ctx: SimCtx, wanted: Array, takes: Callable) -> bool:
 	var run := ctx.run
 	var e := ctx.e
-	if run.offer_reward or not run.offers_open:
+	if run.offer_reward or not run.offers_open or run.starter_pick():
 		return false
 	var price := run.reroll_price()
 	if price > 0 and (run.paid_rerolls() >= int(ctx.param("rerolls")) or price > e.cash * float(ctx.param("reroll_share"))):
@@ -557,7 +561,7 @@ static func _cheapest_round(ctx: SimCtx) -> void:
 ## cheapest within `share` of the cash; -1: none.
 static func _cheapest_pick(ctx: SimCtx) -> int:
 	var run := ctx.run
-	if run.offer_reward:
+	if run.offer_reward or run.starter_pick():
 		return 0
 	var share := float(ctx.param("share"))
 	var best := -1
@@ -613,7 +617,7 @@ static func _line_pick(ctx: SimCtx) -> int:
 		var id := str(run.offers[k])
 		if not prefs.has(id) or run.perk_price(id) <= 0:
 			continue
-		if not run.offer_reward and not _line_takes(ctx, id, ctx.e.cash):
+		if not run.offer_reward and not run.starter_pick() and not _line_takes(ctx, id, ctx.e.cash):
 			continue
 		if best < 0 or prefs.find(id) < prefs.find(str(run.offers[best])):
 			best = k
@@ -714,7 +718,7 @@ static func reach(ctx: SimCtx) -> void:
 	while run.offers_open and guard < 50:
 		guard += 1
 		var k := _reach_pick(ctx, core)
-		while k < 0 and not run.offer_reward \
+		while k < 0 and not run.offer_reward and not run.starter_pick() \
 				and (run.reroll_price() == 0 or run.paid_rerolls() < int(ctx.param("rerolls"))) \
 				and core.any(func(id): return run.level(id) <= 0 and run.offerable().has(id)):
 			var price := run.reroll_price()

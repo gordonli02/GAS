@@ -725,6 +725,51 @@ func test_free_rerolls_and_the_bots() -> void:
 	check(any > 0, "the reach bots take free rerolls (%d)" % any)
 
 
+## The free starter round (RunConfig.starter 2, an experiment): the bots take it as a
+## reward round's: a card on their list for nothing (core holding no engine: an engine
+## first, else a listed card), else the item; never rerolled; cheapest the first card.
+func test_bots_and_the_free_starter() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var cfg := RunConfig.standard()
+	cfg.starter = 2
+	cfg.free_rerolls = 1
+	var jack := SimBots.spec("jackpot")
+	var c := _hand_round(pack.forms, jack, 50, ["closer", "bigfish", "penny"], false, cfg)
+	check(c.run.starter_pick(), "the round up is the free starter")
+	SimBlocks._engine_round(c)
+	eq(c.run.level("bigfish"), 1, "jackpot: the engine, $300, with $50")
+	eq(c.e.cash, 50, "for nothing")
+	c = _hand_round(pack.forms, jack, 50, ["closer", "bigfish", "penny"])
+	SimBlocks._engine_round(c)
+	eq(c.run.level("bigfish"), 0, "the standard config: not with $50")
+	c = _hand_round(pack.forms, SimBots.spec("small"), 50, ["consolation", "closer", "bigfish"], false, cfg)
+	SimBlocks._engine_round(c)
+	eq(c.run.level("consolation"), 1, "small, no engine up: the listed CONSOLATION")
+	c = _hand_round(pack.forms, jack, 50, ["closer", "penny", "scrap"], false, cfg)
+	SimBlocks._engine_round(c)
+	check(int(c.run.stats.perks) == 0 and int(c.run.stats.skipped_offers) == 1, "nothing listed: the item")
+	eq(int(c.run.stats.rerolls), 0, "not rerolled, a free reroll there or not")
+	var build := SimBots.spec("build", {"params": {"rerolls": 2, "reroll_share": 1.0}})
+	c = _hand_round(pack.forms, build, 10, ["closer", "penny", "firstpull"], false, cfg)
+	SimBlocks._line_round(c)
+	eq(c.run.level("penny"), 1, "build: PENNY JAR with $10")
+	c = _hand_round(pack.forms, build, 10000, ["closer", "firstpull", "assembly"], false, cfg)
+	SimBlocks._line_round(c)
+	check(int(c.run.stats.rerolls) == 0 and int(c.run.stats.skipped_offers) == 1, "build, nothing listed: the item, no reroll")
+	c = _hand_round(pack.forms, SimBots.spec("perks"), 10, ["firstpull", "closer", "penny"], false, cfg)
+	SimBlocks._cheapest_round(c)
+	eq(c.run.level("firstpull"), 1, "cheapest: the first card, free")
+	eq(c.e.cash, 10, "for nothing")
+	# Whole runs balance with it.
+	for bot in ["clearing", "jackpot", "perks"]:
+		var r := SimRun.play(SimBots.spec(bot), pack.forms, "FS-0", cfg)
+		check(r.balanced, "%s: balanced" % bot)
+		if bot == "perks":
+			check(int(r.stats.perks) >= 1, "perks: the starter's card taken (%d perks)" % int(r.stats.perks))
+
+
 ## sim_runs --set=key=value,... (RunConfig.parse_set, apply_set, set_text): the
 ## upgrade slots and the dealing experiments; an unknown key or a bad value is an error.
 func test_set_overrides() -> void:

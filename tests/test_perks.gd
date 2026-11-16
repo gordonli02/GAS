@@ -1384,6 +1384,68 @@ func test_starter_round() -> void:
 	check(not four.offers.slice(0, 3).has(four.offers[3]), "the fourth another perk (%s)" % str(four.offers[3]))
 
 
+## starter 2 (an experiment): the starter round of starter 1, its pick free like a
+## reward round's; a morning round in every other way: rerolled, it deals a paid round;
+## given up, an item. A save keeps it.
+func test_free_starter_round() -> void:
+	var s := _exp_run({"starter": 2}, "ST-1")
+	var e := s.new_economy()
+	eq(s.offers, _exp_run({"starter": 1}, "ST-1").offers, "the cards of starter 1")
+	check(s.starter_pick() and not s.offer_reward, "a free pick, still a morning round")
+	check(not _exp_run({"starter": 1}, "ST-1").starter_pick(), "starter 1: not free")
+	check(not _run().starter_pick(), "the standard config: not free")
+	var k := 0
+	for i in s.offers.size():
+		if s.perk_price(s.offers[i]) > s.perk_price(s.offers[k]):
+			k = i
+	var id: String = s.offers[k]
+	check(s.can_buy_offer(k, e), "the dearest card (%s, $%d) can be taken with $%d" % [id, s.perk_price(id), e.cash])
+	var cash := e.cash
+	check(s.buy_offer(k, e), "taken")
+	eq(s.level(id), 1, "held")
+	eq(e.cash, cash, "nothing paid")
+	eq(int(s.stats.shop), 0, "nothing counted as spent")
+	eq(int(s.stats.perks), 1, "a perk counted")
+	check(not s.offers_open and not s.starter_pick(), "the round is over")
+	check(e.balanced(), "ledger balanced")
+	# A CHEAT SHEET is not used up on it.
+	var c := _exp_run({"starter": 2}, "ST-1")
+	var ec := c.new_economy()
+	c.items["cheat"] = 1
+	check(c.buy_offer(0, ec, true), "taken with free set")
+	eq(c.held("cheat"), 1, "the CHEAT SHEET kept")
+	# Rerolled: a paid morning round, the usual deal.
+	var r := _exp_run({"starter": 2}, "ST-1")
+	var er := r.new_economy()
+	er.bonus(10000)
+	check(r.reroll_offers(er), "rerolled")
+	check(not r.starter_pick(), "no longer free")
+	var std := _exp_run({}, "ST-1")
+	std.offer_rerolls = 1
+	eq(r.offers, std.deal_offers(), "the usual deal")
+	var price := r.perk_price(r.offers[0])
+	cash = er.cash
+	check(r.buy_offer(0, er), "a card bought")
+	eq(cash - er.cash, price, "at its price")
+	# Saved and loaded with the round up: still free.
+	var sv := _exp_run({"starter": 2}, "ST-1")
+	var back := RunState.from_dict(sv.to_dict(), sv.config)
+	check(back.starter_pick(), "loaded: still the free pick")
+	eq(back.offers, sv.offers, "the same cards")
+	var eb := back.new_economy()
+	cash = eb.cash
+	check(back.buy_offer(k, eb), "taken after loading")
+	eq(eb.cash, cash, "for nothing")
+	# Given up for an item; the next morning is an ordinary round.
+	var g := _exp_run({"starter": 2}, "ST-1")
+	var eg := g.new_economy()
+	var gift := g.skip_offers()
+	check(gift != "" and g.held(gift) == 1, "given up: an item (%s)" % gift)
+	g.play(eg)
+	g.end_day(eg)
+	check(g.offers_open and not g.starter_pick(), "day 2: not free")
+
+
 ## offer_bonus in the config (an experiment): copied to the run when it starts.
 func test_offer_bonus_from_the_config() -> void:
 	var r := _exp_run({"offer_bonus": 1})

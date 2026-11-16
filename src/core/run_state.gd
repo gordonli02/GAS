@@ -1355,13 +1355,24 @@ func _free_ok(perk_id: String) -> bool:
 		and missing(perk_id).is_empty()
 
 
-## Whether card `k` can be taken now: on a reward round for nothing, on a morning round
-## from cash (a CHEAT SHEET's free pick is buy_offer's `free`).
+## Whether the round up is the free starter round (config.starter 2; an experiment for
+## roadmap 十三.5, off in the standard config; not a rule yet): the run's first morning
+## round, before any reroll, its pick taken for nothing like a reward round's. It is a
+## morning round in every other way (rerolled, it deals a paid round; it can be given up
+## for an item). Read from where the run stands, so a save keeps it.
+func starter_pick() -> bool:
+	return config != null and config.starter >= 2 and offers_open and not offer_reward \
+		and layer == 0 and day == 1 and offer_rerolls == 0
+
+
+## Whether card `k` can be taken now: on a reward round (or the free starter round) for
+## nothing, on a morning round from cash (a CHEAT SHEET's free pick is buy_offer's
+## `free`).
 func can_buy_offer(k: int, e: Economy) -> bool:
 	if not offers_open or k < 0 or k >= offers.size():
 		return false
 	var id := str(offers[k])
-	return _free_ok(id) if offer_reward else can_buy_perk(id, e)
+	return _free_ok(id) if offer_reward or starter_pick() else can_buy_perk(id, e)
 
 
 ## Takes card `k` of the round up: on a reward round for nothing; on a morning round
@@ -1377,6 +1388,11 @@ func buy_offer(k: int, e: Economy, free := false) -> bool:
 			return false
 		if level(id) > 0:
 			stats.reward_upgrades += 1
+		_level_up(id)
+	elif starter_pick():
+		# The free starter round (config.starter 2): nothing paid, a CHEAT SHEET not used.
+		if not _free_ok(id):
+			return false
 		_level_up(id)
 	elif free:
 		if held("cheat") <= 0 or not _free_ok(id):

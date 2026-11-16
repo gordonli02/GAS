@@ -449,8 +449,10 @@ static func _used(id: String, r: Dictionary) -> bool:
 ## the whole core when it ended), engine (the same for at least one engine), done (the
 ## median round, morning and reward rounds counted, at which the core was complete, of
 ## the runs that completed it; -1 when none did), never (the share of runs that never
-## did), cards ({id: [held share a layer]}), rerolls_run (a run), cost (dollars paid for
-## them a run), rounds (rounds dealt a run, morning and reward)}.
+## did), cards ({id: [held share a layer]}), rerolls_run (a run, free and paid),
+## free_run and paid_run (of them, the free ones, RunConfig.free_rerolls, and the paid
+## ones), cost (dollars paid for them a run), rounds (rounds dealt a run, morning and
+## reward)}.
 static func reach(line: String, base_forms: Array, runs: int, seed_prefix := "SIM", rerolls := 0,
 		config: RunConfig = null) -> Dictionary:
 	if config == null:
@@ -471,11 +473,13 @@ static func reach(line: String, base_forms: Array, runs: int, seed_prefix := "SI
 		cards[id] = whole.duplicate()
 	var done := []
 	var n_rerolls := 0
+	var n_free := 0
 	var cost := 0
 	var rounds := 0
 	for i in runs:
 		var r := SimRun.play(spec, base_forms, "%s-%d" % [seed_prefix, i], config)
 		n_rerolls += int(r.stats.rerolls)
+		n_free += int(r.stats.free_rerolls)
 		cost += int(r.counters.get("reroll_cost", 0))
 		rounds += int(r.stats.rounds) + int(r.stats.reward_rounds)
 		if r.counters.has("reach_round"):
@@ -501,7 +505,8 @@ static func reach(line: String, base_forms: Array, runs: int, seed_prefix := "SI
 	var n := maxf(1.0, runs)
 	return {"line": line, "rerolls": rerolls, "runs": runs, "core": core.duplicate(), "engines": engines,
 		"whole": share.call(whole), "engine": share.call(engine), "done": median(done) if not done.is_empty() else -1,
-		"never": 1.0 - done.size() / n, "cards": card_shares, "rerolls_run": n_rerolls / n, "cost": cost / n,
+		"never": 1.0 - done.size() / n, "cards": card_shares, "rerolls_run": n_rerolls / n, "free_run": n_free / n,
+		"paid_run": (n_rerolls - n_free) / n, "cost": cost / n,
 		"rounds": rounds / n}
 
 

@@ -77,7 +77,8 @@ extends Node
 ## round the first core card it lacks, rerolling when none is there. Per line and reroll
 ## count: the share of runs holding the whole core, and at least one engine, by the end
 ## of layer 1 / 2 / 3; the median round (morning and reward counted) the core was
-## complete at and the share that never completed it; rerolls a run and their cost; then
+## complete at and the share that never completed it; free and paid rerolls a run (two
+## columns) and what the paid ones cost; then
 ## each core card's held share by layer. Exit code 0: it is a report.
 ## --set=key=value[,key=value...]: the run's config with those fields overridden
 ## (RunConfig.SETTABLE: shelf_upgrades and the dealing experiments of roadmap 十三.5,
@@ -520,12 +521,12 @@ func _reach(lines: Array, runs: int, prefix: String, forms: Array, config: RunCo
 		print("\n%s: core %s%s; engines %s (%.1f s)" % [line, ", ".join(first.core),
 			"" if shelf.is_empty() else " (shelf bought: %s)" % ", ".join(shelf), ", ".join(first.engines),
 			(Time.get_ticks_msec() - t0) / 1000.0])
-		print("  %-7s %5s %5s %5s   %5s %5s %5s   %7s %6s   %7s %8s %6s" % ["rerolls", "core1", "core2", "core3", "eng1", "eng2",
-			"eng3", "done at", "never", "rr/run", "$ a run", "rounds"])
+		print("  %-7s %5s %5s %5s   %5s %5s %5s   %7s %6s   %7s %7s %8s %6s" % ["rerolls", "core1", "core2", "core3", "eng1", "eng2",
+			"eng3", "done at", "never", "free/r", "paid/r", "$ a run", "rounds"])
 		for r in rows:
 			var done := "-" if int(r.done) < 0 else str(int(r.done))
-			print("  %-7d %s   %s   %7s %5.0f%%   %7.2f %8.0f %6.1f" % [r.rerolls, _pcts(r.whole), _pcts(r.engine), done,
-				r.never * 100.0, r.rerolls_run, r.cost, r.rounds])
+			print("  %-7d %s   %s   %7s %5.0f%%   %7.2f %7.2f %8.0f %6.1f" % [r.rerolls, _pcts(r.whole), _pcts(r.engine), done,
+				r.never * 100.0, r.free_run, r.paid_run, r.cost, r.rounds])
 		print("  each core card held by the end of layer 1 / 2 / 3, percent of runs, at %s rerolls:" % ", ".join(rerolls.map(func(n): return str(n))))
 		for id in first.core:
 			var parts := []
