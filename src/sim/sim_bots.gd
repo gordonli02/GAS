@@ -53,9 +53,14 @@ extends RefCounted
 ##                      paid `push_paid` tickets
 ##            money     Lucky Spur, small batches, leaving at a cash `floor` (NET WORTH
 ##                      pays by the cash in the pocket; SAVINGS grows what is left)
-##            Each has 3 to 5 named variants of its params (VARIANTS: a line's strength is
-##            its best variant, roadmap 七.4), and a core set for the given-cards test
-##            (GIVEN, SIGNATURE: tools/sim_runs --given)
+##            Each has named variants of its params, about eight (VARIANTS: a line's
+##            strength is its best variant, roadmap 七.4; build has its reroll ones too),
+##            and a core set for the given-cards test (GIVEN, SIGNATURE: tools/sim_runs
+##            --given) and the deal's ceiling (reach_spec: tools/sim_runs --reach).
+##            M9.8 step 2, stage 2: `rerolls` and `reroll_share` (paying for a reroll of a
+##            morning round with no card it would take, SimBlocks._reroll) and
+##            `work_held` (a bankroll before the machine when holding an engine too),
+##            all off by default; variants try them
 ##   churn    a probe bot (PROBES, SimProbes), not a strategy bot: the exploit check for FIRST PULL x REGULAR (docs/perk_research.md 5.11):
 ##            buys both whenever it can pay for them, and at the machine buys CHURN
 ##            tickets of a column, then changes the box, again and again. Its return
@@ -89,6 +94,9 @@ const PARAMS := {
 	"bonus": 0,              # the run: dollars in the pocket from the start, as a prize (the rounds probe's cash)
 	"engine": [],            # perks "core", enter "line": the line's engines (holding none, it buys the first it can with all its cash)
 	"work_below": 0,         # enter "line": holding no engine, it works while the cash is under this (times the stake); 0 never
+	"work_held": 0,          # enter "line": 1 applies work_below holding an engine too (a bankroll before the machine); 0 only holding none
+	"rerolls": 0,            # perks "line", "core", "reach": the most rerolls of one morning round (0: never)
+	"reroll_share": 0.25,    # perks "line", "core": a reroll is paid only while its price is at most this share of the cash
 	"work_out": 0,           # enter "line": 1 works out a layer the wages for the days left can pay (0: plays and pays at once)
 	"stop": 1.0,             # the line stays: the share of the day's money it may lose while it buys perks (1: no stop-loss)
 	"endgame": 1,            # the line stays: on the layer's last this many days no stop-loss and no floor
@@ -133,21 +141,51 @@ const SPECS := {
 }
 
 
-## Each line bot's named variants: overrides laid over its spec (spec's `overrides`).
-## tools/sim_runs --variants runs them all; a line's strength is its best (roadmap 七.4).
-## The bot's own spec is one of them (named so, to be compared with the others).
+## Each line bot's named variants (and build's): overrides laid over its spec (spec's
+## `overrides`). tools/sim_runs --variants runs them all; a line's strength is its best
+## (roadmap 七.4). The bot's own spec is one of them (named so, to be compared with the
+## others). M9.8 step 2, stage 2 added to each (none is a default yet):
+##   reroll1, reroll2, reroll3  that many rerolls of a morning round with no card it
+##              would take, each at most a quarter of the cash (reroll_share 0.25:
+##              $20 of $200 at the start of a run is a tenth)
+##   reroll3t   three, at most a tenth of the cash (the share's effect against reroll3)
+##   bank       work_held 1: a line bot handed an engine with no bankroll still works
+##              first (the jackpot bot given BIG FISH by a reward round went to layer 2's
+##              machine with nothing); clearing and money, which work for none today,
+##              with a work_below of their own (clearing as its `work`, money 300)
 const VARIANTS := {
 	"clearing": {"stop50": {"params": {"stop": 0.5}}, "stop30": {"params": {"stop": 0.3}},
-		"nostop": {"params": {"stop": 1.0}}, "work": {"params": {"work_below": 150}}},
+		"nostop": {"params": {"stop": 1.0}}, "work": {"params": {"work_below": 150}},
+		"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
+		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
+		"bank": {"params": {"work_held": 1, "work_below": 150}}},
 	"jackpot": {"nowork": {"params": {"stop": 0.5, "work_below": 0}}, "nostop": {"params": {"stop": 1.0}},
-		"work300": {"params": {"work_below": 300}}, "fee15": {"params": {"fee_max": 15}}, "hunt0": {"params": {"hunt": 0}}},
+		"work300": {"params": {"work_below": 300}}, "fee15": {"params": {"fee_max": 15}}, "hunt0": {"params": {"hunt": 0}},
+		"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
+		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
+		"bank": {"params": {"work_held": 1}}},
 	"small": {"nowork": {"params": {"stop": 0.5, "work_below": 0}}, "nostop": {"params": {"stop": 1.0}},
-		"stop50": {"params": {"stop": 0.5}}, "plate": {"params": {"forms": ["plate"]}}},
+		"stop50": {"params": {"stop": 0.5}}, "plate": {"params": {"forms": ["plate"]}},
+		"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
+		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
+		"bank": {"params": {"work_held": 1}}},
 	"batch": {"push50": {"params": {"push": 0.5}}, "push25": {"params": {"push": 0.25}},
-		"work0": {"params": {"work_below": 0}}, "paid5": {"params": {"push_paid": 5}}, "stop50": {"params": {"stop": 0.5}}},
+		"work0": {"params": {"work_below": 0}}, "paid5": {"params": {"push_paid": 5}}, "stop50": {"params": {"stop": 0.5}},
+		"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
+		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
+		"bank": {"params": {"work_held": 1}}},
 	"money": {"floor100": {"params": {"floor": 100}}, "floor50": {"params": {"floor": 50}},
-		"nostop": {"params": {"stop": 1.0}}, "batch10": {"params": {"batch": 10}}},
+		"nostop": {"params": {"stop": 1.0}}, "batch10": {"params": {"batch": 10}},
+		"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
+		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}},
+		"bank": {"params": {"work_held": 1, "work_below": 300}}},
+	"build": {"reroll1": {"params": {"rerolls": 1}}, "reroll2": {"params": {"rerolls": 2}}, "reroll3": {"params": {"rerolls": 3}},
+		"reroll3t": {"params": {"rerolls": 3, "reroll_share": 0.1}}},
 }
+
+## The deal's ceiling (SimReport.reach): the line's bot's cash at the start, enough for
+## every card and reroll of the run.
+const REACH_CASH := 10000000
 
 
 ## The given-cards test (docs/roadmap.md M9.8 step 1 stage 3, "用得上"): each line's
@@ -189,6 +227,28 @@ static func given_spec(line: String, overrides: Dictionary = {}) -> Dictionary:
 static func control_spec(line: String) -> Dictionary:
 	var s := spec("blind", {"params": {"given": GIVEN.get(line, {}).duplicate()}})
 	s.name = line + " control"
+	return s
+
+
+## The deal's ceiling for `line` (SimReport.reach; roadmap 十二.3): work's play (it works
+## every day, so with REACH_CASH in the pocket it pays each layer on its last day: one
+## reward round a layer, never an early one) and the morning's perks block `reach`: the
+## shelf perks of the line's GIVEN core bought (`shelf`), and from every round the first
+## of its dealt ones (`perks`, in GIVEN's order) it does not hold, with up to `rerolls`
+## rerolls of a morning round. `engine` is the line's own, for the report. Named
+## "<line> reach r<rerolls>".
+static func reach_spec(line: String, rerolls: int) -> Dictionary:
+	var core := []
+	var shelf := []
+	for id in GIVEN.get(line, {}):
+		if Catalog.kind(Catalog.standard().perk(id)) == "shelf":
+			shelf.append(id)
+		else:
+			core.append(id)
+	var own: Dictionary = SPECS.get(line, {}).get("params", {})
+	var s := spec("work", {"blocks": {"perks": "reach"}, "params": {"perks": core, "shelf": shelf,
+		"engine": own.get("engine", []).duplicate(), "rerolls": rerolls, "bonus": REACH_CASH}})
+	s.name = "%s reach r%d" % [line, rerolls]
 	return s
 
 

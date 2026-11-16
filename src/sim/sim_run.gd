@@ -39,7 +39,8 @@ const DAY_CAP := 6000
 ##           there (paid, or the run failed in it)
 ##   offered_by  parallel to held_by: the perks dealt as a card by then ({id: times},
 ##           RunState.offered: every round, reroll and reward round, from the run's start)
-##   rounds  {morning, reward}: the rounds dealt in the run (RunState.stats)
+##   rounds  {morning, reward, rerolls}: the rounds dealt in the run and the rerolls paid
+##           for (RunState.stats)
 ##   counters  what the bot's blocks counted (SimCtx.counters)
 ## The same spec, forms, seed and config always give the same run.
 static func play(spec: Dictionary, base_forms: Array, seed_text: String, config: RunConfig = null) -> Dictionary:
@@ -101,7 +102,7 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 		"cash": e.cash, "spent": e.spent, "won": e.won, "balanced": e.balanced(), "stats": run.stats.duplicate(),
 		"idle_days": idle, "perks": perks, "fired": run.fired.duplicate(), "fired_pct": run.fired_pct.duplicate(),
 		"carry": carry, "death": death, "held_by": held_by, "offered_by": offered_by, "counters": ctx.counters.duplicate(),
-		"rounds": {"morning": int(run.stats.rounds), "reward": int(run.stats.reward_rounds)}}
+		"rounds": {"morning": int(run.stats.rounds), "reward": int(run.stats.reward_rounds), "rerolls": int(run.stats.rerolls)}}
 
 
 ## The `given` perks ({id: level}) put on a run before its first day, free (nothing is

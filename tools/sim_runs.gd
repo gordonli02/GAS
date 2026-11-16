@@ -56,15 +56,32 @@ extends Node
 ## by blind holding the same; per line the numbers of both arms and PASS / FAIL for each
 ## of the two criteria (fired, play) and the line, and the signature ratio as a reading
 ## (no verdict). Exit code 0 either way: it is a report.
-## With --variants the table is of every named variant of the line bots of --bots=
-## (SimBots.VARIANTS; default the five), a row each (<bot>/<variant>) beside the bot's
-## own spec, paired with it on the same seeds, and the best by clear rate named; on a tie
-## the higher layer-1 rate decides, then the higher return, and the line says which.
+## With --variants the table is of every named variant of the bots of --bots= that have
+## some (SimBots.VARIANTS: the five lines and build; default the five lines), a row each
+## (<bot>/<variant>) beside the bot's own spec, paired with it on the same seeds, with
+## its rerolls a run, and the best by clear rate named; on a tie the higher layer-1 rate
+## decides, then the higher return, and the line says which.
 ## In --detail's trigger table, L1 / L2 / L3 ("拿得到", roadmap 十三.10): of the runs
 ## that played the layer, the share holding the perk when it ended there; beside them
 ## D1 / D2 / D3, the share in which it had been dealt as a card by then (any round,
-## reroll or reward round), so "never dealt" and "dealt but not bought" read apart. And
-## under each bot the rounds a run (morning, reward).
+## reroll or reward round), so "never dealt" and "dealt but not bought" read apart (a
+## shelf perk, never dealt, prints "-"). And under each bot the rounds a run (morning,
+## reward) and the rerolls paid for a run.
+## With --reach the tool does only the deal's ceiling (SimReport.reach; roadmap 十二.3,
+## "are there enough picks for a line to come together", money left out) for the line
+## bots of --bots= (default the five), each at 0, 1, 2 and 3 rerolls a morning round: a
+## bot with plenty of cash that works every day (each layer paid on its last day, one
+## reward round a layer), buys the shelf perks of the line's core and takes from every
+## round the first core card it lacks, rerolling when none is there. Per line and reroll
+## count: the share of runs holding the whole core, and at least one engine, by the end
+## of layer 1 / 2 / 3; the median round (morning and reward counted) the core was
+## complete at and the share that never completed it; rerolls a run and their cost; then
+## each core card's held share by layer. Exit code 0: it is a report.
+## --upgrades=N: the run's config with N upgrade slots on the daily shelf
+## (RunConfig.shelf_upgrades; default the standard config's) for the table, --variants,
+## --given and --reach (not --baseline: the fixture is the standard config's). The
+## header says so when it is not the standard value, and --save writes it, so
+## --upgrades=2 --against=<a file saved at 1> pairs one slot against two on the same seeds.
 
 ## The roadmap's targets (docs/roadmap.md 一): [text, low, high] in percent of runs
 ## cleared ("<": under high). build and perks have none yet.
@@ -101,6 +118,8 @@ func _run() -> void:
 	var probes := false
 	var probe_runs := SimProbes.RUNS
 	var bots_set := false
+	var reach := false
+	var upgrades := -1
 	for a in OS.get_cmdline_user_args():
 		if a == "--detail":
 			detail = true
@@ -110,6 +129,10 @@ func _run() -> void:
 			variants = true
 		elif a == "--probes":
 			probes = true
+		elif a == "--reach":
+			reach = true
+		elif a.begins_with("--upgrades="):
+			upgrades = maxi(0, a.trim_prefix("--upgrades=").to_int())
 		elif a.begins_with("--probe-runs="):
 			probe_runs = maxi(1, a.trim_prefix("--probe-runs=").to_int())
 		elif a == "--early":
@@ -153,23 +176,35 @@ func _run() -> void:
 		var frozen: Array = bots if bots_set else RunSim.BOTS + SimBots.PROBES
 		get_tree().quit(_write_baseline(baseline, frozen, baseline_runs, res.pack.forms, config))
 		return
+	var slots := ""
+	if upgrades >= 0 and upgrades != config.shelf_upgrades:
+		slots = ", shelf upgrade slots %d (standard %d)" % [upgrades, config.shelf_upgrades]
+	if upgrades >= 0:
+		config.shelf_upgrades = upgrades
 	if probes:
 		get_tree().quit(_probes(probe_runs, churn_boxes, res.pack.forms))
 		return
 	var lines: Array = (bots if bots_set else SimBots.GIVEN.keys()).filter(func(b): return SimBots.GIVEN.has(b))
 	if given:
+		if slots != "":
+			print(slots.trim_prefix(", "))
 		_given(lines, runs, prefix, res.pack.forms, config)
 		get_tree().quit(0)
 		return
+	if reach:
+		_reach(lines, runs, prefix, res.pack.forms, config, slots)
+		get_tree().quit(0)
+		return
 	if variants:
-		_variants(lines, runs, prefix, res.pack.forms, config, detail)
+		var with_variants: Array = (bots if bots_set else SimBots.GIVEN.keys()).filter(func(b): return SimBots.VARIANTS.has(b))
+		_variants(with_variants, runs, prefix, res.pack.forms, config, detail, slots)
 		get_tree().quit(0)
 		return
 	var problems := config.problems()
 	for p in problems:
 		print("CONFIG: " + p)
 	print("work line: " + config.line_text())
-	print("%d runs per bot, seeds %s-0 .. %s-%d" % [runs, prefix, prefix, runs - 1])
+	print("%d runs per bot, seeds %s-0 .. %s-%d%s" % [runs, prefix, prefix, runs - 1, slots])
 	print("%-8s %7s %7s %7s %7s %6s %7s %7s %7s %5s %8s %8s %9s  %-6s %-4s %-5s" % ["bot", "cleared", "L1", "L2", "L3",
 		"days", "tickets", "return", "w/ fees", "perks", "best 50", "best 90", "best 99", "target", "met", "order"])
 	var rates := {}
@@ -205,7 +240,7 @@ func _run() -> void:
 	for row in rows:
 		_print_bot(row[1], detail)
 	if save != "":
-		_save(save, prefix, runs, rows)
+		_save(save, prefix, runs, rows, config.shelf_upgrades)
 	if against != "":
 		_against(against, prefix, rows)
 	if ev_boxes > 0:
@@ -354,7 +389,9 @@ func _print_bot(s: Dictionary, detail: bool) -> void:
 	if not detail:
 		return
 	var rd: Dictionary = s.get("rounds", {})
-	print("  rounds a run: morning %.1f, reward %.1f" % [float(rd.get("morning", 0.0)), float(rd.get("reward", 0.0))])
+	print("  rounds a run: morning %.1f, reward %.1f; rerolls %.2f" % [float(rd.get("morning", 0.0)),
+		float(rd.get("reward", 0.0)), float(rd.get("rerolls", 0.0))])
+	var cat := Catalog.standard()
 	if not s.triggers.is_empty():
 		print("  %-12s %5s %5s %8s %8s %6s  %5s %5s %5s  %5s %5s %5s" % ["perk", "held", "day", "fired/r", "/100 tk", "mean%",
 			"L1", "L2", "L3", "D1", "D2", "D3"])
@@ -363,8 +400,9 @@ func _print_bot(s: Dictionary, detail: bool) -> void:
 		for v in t.by_layer:
 			by.append("%4.0f%%" % (v * 100.0) if v >= 0.0 else "    -")
 		var dealt := []
+		var shelf := Catalog.kind(cat.perk(t.id)) == "shelf"   # never dealt
 		for v in t.get("offered_by", []):
-			dealt.append("%4.0f%%" % (v * 100.0) if v >= 0.0 else "    -")
+			dealt.append("%4.0f%%" % (v * 100.0) if v >= 0.0 and not shelf else "    -")
 		var layers := "  " + " ".join(by) + "  " + " ".join(dealt)
 		if t.held <= 0.0:
 			print("  %-12s %4.0f%% %5s %8s %8s %6s%s" % [t.id, 0.0, "-", "-", "-", "", layers])
@@ -433,13 +471,53 @@ func _given(lines: Array, runs: int, prefix: String, forms: Array, config: RunCo
 		print("  " + v)
 
 
+## --reach: the deal's ceiling of each line in `lines` (SimReport.reach) at 0 to 3
+## rerolls a morning round, printed.
+func _reach(lines: Array, runs: int, prefix: String, forms: Array, config: RunConfig, slots: String) -> void:
+	print("reach, the deal's ceiling (docs/roadmap.md 十二.3; money left out): %d runs a line and reroll count, seeds %s-0 .. %s-%d%s" % [
+		runs, prefix, prefix, runs - 1, slots])
+	print("the bot: $%d in the pocket, works every day (each layer paid on its last day: one reward round a layer), buys the shelf perks of the line's core, takes from every round the first core card it lacks; on a morning round with none, up to N rerolls" % SimBots.REACH_CASH)
+	for line in lines:
+		var t0 := Time.get_ticks_msec()
+		var rows := []
+		for n in 4:
+			rows.append(SimReport.reach(line, forms, runs, prefix, n, config))
+		var first: Dictionary = rows[0]
+		var shelf: Array = SimBots.reach_spec(line, 0).params.shelf
+		print("\n%s: core %s%s; engines %s (%.1f s)" % [line, ", ".join(first.core),
+			"" if shelf.is_empty() else " (shelf bought: %s)" % ", ".join(shelf), ", ".join(first.engines),
+			(Time.get_ticks_msec() - t0) / 1000.0])
+		print("  %-7s %5s %5s %5s   %5s %5s %5s   %7s %6s   %7s %8s %6s" % ["rerolls", "core1", "core2", "core3", "eng1", "eng2",
+			"eng3", "done at", "never", "rr/run", "$ a run", "rounds"])
+		for r in rows:
+			var done := "-" if int(r.done) < 0 else str(int(r.done))
+			print("  %-7d %s   %s   %7s %5.0f%%   %7.2f %8.0f %6.1f" % [r.rerolls, _pcts(r.whole), _pcts(r.engine), done,
+				r.never * 100.0, r.rerolls_run, r.cost, r.rounds])
+		print("  each core card held by the end of layer 1 / 2 / 3, percent of runs, at 0, 1, 2 and 3 rerolls:")
+		for id in first.core:
+			var parts := []
+			for r in rows:
+				var c: Array = r.cards[id]
+				parts.append("/".join(c.map(func(v): return "-" if v < 0.0 else "%.0f" % (v * 100.0))))
+			print("    %-12s %s" % [id, "   ".join(parts)])
+
+
+## Three shares (a layer each) as "  56%" columns, "-" for a layer none played.
+static func _pcts(v: Array) -> String:
+	var out := []
+	for x in v:
+		out.append("    -" if x < 0.0 else "%4.0f%%" % (x * 100.0))
+	return " ".join(out)
+
+
 ## --variants: each line in `lines` by its own spec and by every named variant
 ## (SimBots.VARIANTS), a row each, paired with the bot's own spec; the best by clear
 ## rate (then return) named.
-func _variants(lines: Array, runs: int, prefix: String, forms: Array, config: RunConfig, detail: bool) -> void:
-	print("variants: %d runs each, seeds %s-0 .. %s-%d (paired: the variant less the bot's own spec)" % [runs, prefix, prefix, runs - 1])
+func _variants(lines: Array, runs: int, prefix: String, forms: Array, config: RunConfig, detail: bool, slots := "") -> void:
+	print("variants: %d runs each, seeds %s-0 .. %s-%d%s (paired: the variant less the bot's own spec)" % [runs, prefix,
+		prefix, runs - 1, slots])
 	for line in lines:
-		print("\n%-20s %7s %13s %7s %7s %5s  %s" % ["bot", "cleared", "95%", "L1", "return", "perks", "paired"])
+		print("\n%-20s %7s %13s %7s %7s %5s %7s  %s" % ["bot", "cleared", "95%", "L1", "return", "perks", "rerolls", "paired"])
 		var own := SimReport.summary(SimBots.spec(line), forms, runs, prefix, config)
 		var rows := [[line + "/own", own, {}]]
 		var names: Array = SimBots.VARIANTS.get(line, {}).keys()
@@ -452,8 +530,8 @@ func _variants(lines: Array, runs: int, prefix: String, forms: Array, config: Ru
 			var s: Dictionary = row[1]
 			var p := SimReport.paired(s, own)
 			var pair := "" if row[0] == line + "/own" else "%+.1f points, 95%% %+.1f to %+.1f" % [p.diff * 100.0, p.low * 100.0, p.high * 100.0]
-			print("%-20s %6.1f%% %5.1f-%5.1f%% %6.1f%% %7.3f %5.1f  %s" % [row[0], s.cleared * 100.0, s.wilson[0] * 100.0,
-				s.wilson[1] * 100.0, s.layer_rates[0] * 100.0, s["return"], s.perks, pair])
+			print("%-20s %6.1f%% %5.1f-%5.1f%% %6.1f%% %7.3f %5.1f %7.2f  %s" % [row[0], s.cleared * 100.0, s.wilson[0] * 100.0,
+				s.wilson[1] * 100.0, s.layer_rates[0] * 100.0, s["return"], s.perks, float(s.rounds.get("rerolls", 0.0)), pair])
 			var b: Dictionary = best[1]
 			var by := ""
 			if s.cleared > b.cleared:
@@ -480,8 +558,9 @@ static func _file_path(path: String) -> String:
 	return path
 
 
-## --save: every bot's per-seed outcomes and headline numbers, as JSON.
-func _save(path: String, prefix: String, runs: int, rows: Array) -> void:
+## --save: every bot's per-seed outcomes and headline numbers, as JSON, with the
+## config's upgrade slots (--upgrades).
+func _save(path: String, prefix: String, runs: int, rows: Array, shelf_upgrades: int) -> void:
 	var bots := {}
 	for row in rows:
 		var s: Dictionary = row[1]
@@ -493,7 +572,8 @@ func _save(path: String, prefix: String, runs: int, rows: Array) -> void:
 	if f == null:
 		push_error("cannot write " + _file_path(path))
 		return
-	f.store_string(JSON.stringify({"seed_prefix": prefix, "runs": runs, "bots": bots}, "\t") + "\n")
+	f.store_string(JSON.stringify({"seed_prefix": prefix, "runs": runs, "shelf_upgrades": shelf_upgrades, "bots": bots},
+		"\t") + "\n")
 	f.close()
 	print("\nsaved " + _file_path(path))
 
@@ -504,7 +584,8 @@ func _against(path: String, prefix: String, rows: Array) -> void:
 	if not saved is Dictionary or not saved.has("bots"):
 		print("\nagainst %s: cannot read it" % path)
 		return
-	print("\nagainst %s (A: now, B: saved; seeds %s):" % [path, saved.get("seed_prefix", "?")])
+	print("\nagainst %s (A: now, B: saved; seeds %s; shelf upgrade slots there: %s):" % [path, saved.get("seed_prefix", "?"),
+		str(int(saved.shelf_upgrades)) if saved.has("shelf_upgrades") else "not saved"])
 	for row in rows:
 		var bot: String = row[0]
 		var s: Dictionary = row[1]

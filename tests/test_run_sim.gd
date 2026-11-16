@@ -6,7 +6,8 @@ extends "res://tests/test_case.gd"
 ## what the roadmap's bots table is measured by, and the measuring tools of M9.8 step 1
 ## stage 2 (the perks' trigger counts, the deaths, the carry, the common dice, the
 ## Wilson interval and the paired comparison) and stage 3 (the given-cards test's
-## mechanics, the line bots' blocks, their variants).
+## mechanics, the line bots' blocks, their variants); and M9.8 step 2 stage 2 (paying for
+## a reroll, a reward round's listed card, the bankroll rule, the deal's ceiling).
 
 
 func test_work_bot_clears_on_the_last_day() -> void:
@@ -561,7 +562,7 @@ func test_bot_specs_are_data() -> void:
 	for line in SimBots.VARIANTS:
 		check(SimBots.NAMES.has(line), "%s: variants of a bot" % line)
 		var vs: Dictionary = SimBots.VARIANTS[line]
-		check(vs.size() >= 3 and vs.size() <= 5, "%s: 3 to 5 variants (%d)" % [line, vs.size()])
+		check(vs.size() >= 3 and vs.size() <= 10, "%s: 3 to 10 variants (%d)" % [line, vs.size()])
 		for name in vs:
 			var o: Dictionary = vs[name]
 			for k in o:
@@ -576,3 +577,175 @@ func test_bot_specs_are_data() -> void:
 			check(not Catalog.standard().perk(id).is_empty(), "%s: given %s is in the catalog" % [line, id])
 		var sig: Array = SimBots.SIGNATURE.get(line, ["", ""])
 		check(["fired", "fired_pct"].has(sig[0]) and RunState.FIRED.has(sig[1]), "%s: the signature is a counted perk (%s)" % [line, str(sig)])
+	check(SimBots.VARIANTS.has("build"), "build has variants (the rerolls)")
+	for line in SimBots.VARIANTS:
+		for name in ["reroll1", "reroll2", "reroll3"]:
+			check(SimBots.VARIANTS[line].has(name), "%s: a %s variant" % [line, name])
+
+
+## A morning (or, with `reward`, a reward) round set by hand: a fresh run at stake 1,
+## the bot `spec` with `cash` in the pocket, the round's cards `offers`.
+func _hand_round(forms: Array, spec: Dictionary, cash: int, offers: Array, reward := false) -> SimCtx:
+	var run := RunState.start(RunConfig.standard(), "RR", ["diner", "bar", "bingo"])
+	var e := run.new_economy()
+	if cash > e.cash:
+		e.bonus(cash - e.cash)
+	elif cash < e.cash:
+		e.pay(e.cash - cash)
+	var ctx := SimCtx.of(run, e, run.new_machine(forms, true), spec)
+	run.offers = offers.duplicate()
+	run.offers_open = true
+	run.offer_reward = reward
+	run.offer_rerolls = 0
+	return ctx
+
+
+## M9.8 step 2, stage 2: paying for a reroll (SimBlocks._reroll). Only a morning round
+## with no card the bot would take, never past `rerolls`, never over `reroll_share` of
+## the cash, only when the cash left still buys a card it rerolls for; never a reward
+## round; `rerolls` 0 never.
+func test_rerolls() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var off := ["closer", "firstpull", "assembly"]   # none on build's list
+	var rich := 100000
+	var build := func(over: Dictionary) -> Dictionary: return SimBots.spec("build", {"params": over})
+	var c := _hand_round(pack.forms, build.call({}), rich, off)
+	SimBlocks._line_round(c)
+	eq(int(c.run.stats.rerolls), 0, "rerolls 0 (the default): never")
+	eq(int(c.run.stats.skipped_offers), 1, "the round given up for its item")
+	for i in 4:
+		c = _hand_round(pack.forms, build.call({"rerolls": 2, "reroll_share": 1.0}), rich, off)
+		c.run.seed = "RR-%d" % i
+		SimBlocks._line_round(c)
+		var n := int(c.run.stats.rerolls)
+		check(n >= 1 and n <= 2, "no card it wants: rerolls, at most 2 (%d)" % n)
+		check(int(c.run.stats.perks) == 1 or n == 2, "it stops rerolling once a card it wants is up (%d rerolls)" % n)
+		eq(int(c.counters.get("reroll_cost", 0)), [0, 20, 60][n], "what they cost: $20, then $40")
+	c = _hand_round(pack.forms, build.call({"rerolls": 2, "reroll_share": 1.0}), rich, ["closer", "penny", "firstpull"])
+	SimBlocks._line_round(c)
+	check(int(c.run.stats.rerolls) == 0 and c.run.level("penny") == 1, "a card it wants is up: taken, no reroll")
+	c = _hand_round(pack.forms, build.call({"rerolls": 2, "reroll_share": 0.0001}), rich, off)
+	SimBlocks._line_round(c)
+	eq(int(c.run.stats.rerolls), 0, "the price over reroll_share of the cash: no reroll")
+	c = _hand_round(pack.forms, build.call({"rerolls": 2, "reroll_share": 1.0, "reserve": 0}), 25, off)
+	SimBlocks._line_round(c)
+	eq(int(c.run.stats.rerolls), 0, "$25: the $20 reroll would leave nothing to buy a card with: no reroll")
+	c = _hand_round(pack.forms, build.call({"rerolls": 2, "reroll_share": 1.0}), rich, off, true)
+	SimBlocks._line_round(c)
+	eq(int(c.run.stats.rerolls), 0, "a reward round is never rerolled")
+	# core, holding no engine (jackpot: BIG FISH $300, DUE A WIN $200 at stake 1).
+	var jack := SimBots.spec("jackpot", {"params": {"rerolls": 2, "reroll_share": 1.0}})
+	c = _hand_round(pack.forms, jack, rich, ["closer", "penny", "scrap"])
+	SimBlocks._engine_round(c)
+	check(int(c.run.stats.rerolls) >= 1 and int(c.run.stats.rerolls) <= 2, "core, no engine up: rerolls (%d)" % int(c.run.stats.rerolls))
+	c = _hand_round(pack.forms, jack, 250, ["closer", "penny", "scrap"])
+	SimBlocks._engine_round(c)
+	check(int(c.run.stats.rerolls) >= 1, "$250: $230 left still pays DUE A WIN: rerolls")
+	c = _hand_round(pack.forms, jack, 210, ["closer", "penny", "scrap"])
+	SimBlocks._engine_round(c)
+	eq(int(c.run.stats.rerolls), 0, "$210: $190 left pays no engine: no reroll")
+	c = _hand_round(pack.forms, jack, rich, ["closer", "penny", "scrap"], true)
+	SimBlocks._engine_round(c)
+	eq(int(c.run.stats.rerolls), 0, "core: a reward round is never rerolled")
+	# Whole runs: never more than `rerolls` a morning round; the count in the result.
+	var any := 0
+	for line in ["clearing", "jackpot", "small", "batch", "money", "build"]:
+		for i in (3 if full else 1):
+			var r := SimRun.play(SimBots.spec(line, SimBots.VARIANTS[line].reroll3), pack.forms, "RR-%d" % i)
+			check(int(r.stats.rerolls) <= 3 * int(r.stats.rounds), "%s reroll3: at most 3 a morning round" % line)
+			eq(int(r.rounds.rerolls), int(r.stats.rerolls), "%s: the rerolls in the result" % line)
+			any += int(r.stats.rerolls)
+			check(r.balanced, "%s reroll3: balanced" % line)
+			var d := SimRun.play(SimBots.spec(line), pack.forms, "RR-%d" % i)
+			eq(int(d.stats.rerolls), 0, "%s: its own spec never rerolls" % line)
+	check(any > 0, "the reroll variants reroll (%d)" % any)
+
+
+## M9.8 step 2, stage 2: a reward round for a `core` bot holding no engine: an engine
+## first (free), else the first card on its `perks` list, else the item.
+func test_reward_round_without_an_engine() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var small := SimBots.spec("small")
+	var c := _hand_round(pack.forms, small, 200, ["consolation", "bigfish", "closer"], true)
+	SimBlocks._engine_round(c)
+	eq(c.run.level("consolation"), 1, "no engine up: the listed CONSOLATION, free")
+	eq(c.e.cash, 200, "for nothing")
+	c = _hand_round(pack.forms, small, 200, ["consolation", "scrap", "closer"], true)
+	SimBlocks._engine_round(c)
+	check(c.run.level("scrap") == 1 and c.run.level("consolation") == 0, "an engine up: the engine first")
+	c = _hand_round(pack.forms, small, 200, ["bigfish", "closer", "firstpull"], true)
+	SimBlocks._engine_round(c)
+	eq(int(c.run.stats.perks), 0, "nothing listed: no card")
+	eq(int(c.run.stats.skipped_offers), 1, "the item")
+	c = _hand_round(pack.forms, small, 200, ["consolation", "bigfish", "closer"])
+	SimBlocks._engine_round(c)
+	eq(c.run.level("consolation"), 0, "a morning round, no engine up: no listed card bought, as before")
+
+
+## M9.8 step 2, stage 2: work_held, the bankroll rule (enter "line").
+func test_work_held() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var run := RunState.start(RunConfig.standard(), "WH", ["diner", "bar", "bingo"])
+	var e := run.new_economy()
+	var m := run.new_machine(pack.forms, true)
+	run.perks["bigfish"] = 1
+	var own := SimCtx.of(run, e, m, SimBots.spec("jackpot"))
+	var held := SimCtx.of(run, e, m, SimBots.spec("jackpot", SimBots.VARIANTS.jackpot.bank))
+	check(e.cash < int(own.param("work_below")) * run.stake(), "the cash under work_below ($%d)" % e.cash)
+	check(SimBlocks.enter(own), "holding an engine: to the machine (work_held 0)")
+	check(not SimBlocks.enter(held), "work_held 1: works first for a bankroll")
+	e.bonus(1000)
+	check(SimBlocks.enter(held), "work_held 1, the bankroll there: to the machine")
+	e.pay(1000)
+	run.day = run.days()
+	check(SimBlocks.enter(held), "the endgame: to the machine")
+	run.day = 1
+	run.perks.erase("bigfish")
+	check(not SimBlocks.enter(own), "holding none: works under work_below, as before")
+
+
+## M9.8 step 2, stage 2: the deal's ceiling (SimReport.reach), through the code path on
+## a few seeds: a bot with plenty of cash that works every day takes only its core,
+## rerolls only as asked, and with more rerolls holds no fewer core cards.
+func test_reach() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var seeds := 3 if full else 2
+	var held := [0, 0]
+	for line in SimBots.GIVEN:
+		for i in seeds:
+			for k in 2:
+				var spec := SimBots.reach_spec(line, [0, 3][k])
+				var r := SimRun.play(spec, pack.forms, "RC-%d" % i)
+				eq(r.status, RunState.CLEARED, "%s r%d: cleared (plenty of cash)" % [line, spec.params.rerolls])
+				eq(int(r.tickets), 0, "%s: works every day" % line)
+				eq(int(r.rounds.reward), 2, "%s: one reward round a layer paid, none early" % line)
+				for id in spec.params.shelf:
+					check(r.perks.has(id) and int(r.perks[id].day) == 1, "%s: shelf %s bought on day 1" % [line, id])
+				for id in r.perks:
+					check(spec.params.perks.has(id) or spec.params.shelf.has(id), "%s: %s is of its core" % [line, id])
+				if k == 0:
+					eq(int(r.stats.rerolls), 0, "%s r0: no reroll" % line)
+				else:
+					check(int(r.stats.rerolls) <= 3 * int(r.stats.rounds), "%s r3: at most 3 a morning round" % line)
+				var whole: bool = spec.params.perks.all(func(id): return r.held_by[2].has(id))
+				eq(r.counters.has("reach_round"), whole, "%s: the round it was complete at, when it was" % line)
+				for l in r.held_by.size():
+					for id in spec.params.perks:
+						held[k] += 1 if r.held_by[l].has(id) else 0
+	note("core cards held at the layers' ends, summed: r0 %d, r3 %d" % held)
+	check(held[1] >= held[0], "more rerolls hold no fewer core cards (%d >= %d)" % [held[1], held[0]])
+	var s := SimReport.reach("small", pack.forms, 2, "RC", 1)
+	for key in ["whole", "engine", "done", "never", "cards", "rerolls_run", "cost", "rounds"]:
+		check(s.has(key), "reach reports %s" % key)
+	eq(s.whole.size(), 3, "a share a layer")
+	eq(s.cards.keys(), SimBots.reach_spec("small", 1).params.perks, "a row a core card")
+	eq(SimBots.reach_spec("jackpot", 0).params.shelf, ["read1", "regular"], "jackpot's shelf: READ THE FLARE and REGULAR")
+	eq(SimBots.reach_spec("money", 0).params.perks, ["worth", "middle"], "money's dealt core")

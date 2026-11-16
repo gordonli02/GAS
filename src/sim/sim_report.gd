@@ -4,8 +4,10 @@ extends RefCounted
 ## balance pass looks at, and the measures of docs/roadmap.md 七.3, 七.5, 七.6 and
 ## 十二.6), the paired comparison of two summaries on the same seeds, the given-cards
 ## test of a line (given: two criteria, fired and play, judged by judge_fired and
-## judge_return, and the signature as a reading), the paired mean (paired_mean), the row the baseline
-## fixture keeps of one run, percentiles, the Wilson interval.
+## judge_return, and the signature as a reading), the deal's ceiling of a line (reach:
+## how soon a bot taking only its core holds it, with plenty of cash), the paired mean
+## (paired_mean), the row the baseline fixture keeps of one run, percentiles, the
+## Wilson interval.
 
 const BEST_PCT := [50, 90, 99]   ## the percentiles of each run's best prize summary gives
 const Z95 := 1.96                ## the normal quantile of a two-sided 95% interval
@@ -37,7 +39,8 @@ const FIRED_MIN := 0.9           ## given: a given core perk fires in at least t
 ##              failed; -1 when none played it), offered_by (the same, the share in
 ##              which it had been dealt as a card by then: "dealt but not bought"
 ##              against "never dealt", roadmap 十.8)}
-##   rounds     {morning, reward}: the rounds dealt a run, the mean
+##   rounds     {morning, reward, rerolls}: the rounds dealt a run and the rerolls paid
+##              for, the mean
 ##   deaths     share of all runs that failed in each layer
 ##   death_blocks  per layer with DEATHS_MIN deaths or more: {layer (1-based), n, cash,
 ##              short, shifts, tickets (medians), sets ([[perk ids joined, share of the
@@ -74,7 +77,7 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 	played_in.fill(0)
 	var held_in := {}     # perk id -> [runs holding it when each layer ended]
 	var offered_in := {}  # perk id -> [runs it had been offered in by the time each layer ended]
-	var rounds := {"morning": 0, "reward": 0}
+	var rounds := {"morning": 0, "reward": 0, "rerolls": 0}
 	var dead := []   # the death of each failed run
 	var carry := []
 	carry.resize(maxi(0, layers - 1))
@@ -154,7 +157,7 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 		"return_fees": float(won) / (spent + fees) if spent + fees > 0 else 0.0, "fees": fees / n,
 		"days_spared": spared / n, "perks": perks / n, "best": percentiles(bests, BEST_PCT), "outcomes": outcomes,
 		"wilson": wilson(cleared, played), "triggers": _triggers(spec, held, played, played_in, held_in, offered_in),
-		"rounds": {"morning": rounds.morning / n, "reward": rounds.reward / n},
+		"rounds": {"morning": rounds.morning / n, "reward": rounds.reward / n, "rerolls": rounds.rerolls / n},
 		"deaths": _deaths(dead, layers, played),
 		"death_blocks": _death_blocks(dead, layers), "carry": carry_rows, "stopped": stopped}
 
@@ -428,6 +431,70 @@ static func _used(id: String, r: Dictionary) -> bool:
 		"read1":
 			return int(r.counters.get("flare_left", 0)) > 0
 	return false
+
+
+## The deal's ceiling of `line` (docs/roadmap.md 十二.3, "are there enough picks for a
+## line to come together", money left out): `runs` whole runs of
+## SimBots.reach_spec(line, rerolls), seeds `seed_prefix`-0 .. Returns {line, rerolls,
+## runs, core (the dealt core, in GIVEN's order), engines (the line's `engine` perks that
+## are dealt), whole ([a share a layer]: of the runs that played the layer, those holding
+## the whole core when it ended), engine (the same for at least one engine), done (the
+## median round, morning and reward rounds counted, at which the core was complete, of
+## the runs that completed it; -1 when none did), never (the share of runs that never
+## did), cards ({id: [held share a layer]}), rerolls_run (a run), cost (dollars paid for
+## them a run), rounds (rounds dealt a run, morning and reward)}.
+static func reach(line: String, base_forms: Array, runs: int, seed_prefix := "SIM", rerolls := 0,
+		config: RunConfig = null) -> Dictionary:
+	if config == null:
+		config = RunConfig.standard()
+	var layers := config.layers.size()
+	var spec := SimBots.reach_spec(line, rerolls)
+	var core: Array = spec.params.perks
+	var engines: Array = spec.params.engine.filter(func(id): return Catalog.kind(Catalog.standard().perk(id)) != "shelf")
+	var played := []
+	var whole := []
+	var engine := []
+	for l in layers:
+		played.append(0)
+		whole.append(0)
+		engine.append(0)
+	var cards := {}
+	for id in core:
+		cards[id] = whole.duplicate()
+	var done := []
+	var n_rerolls := 0
+	var cost := 0
+	var rounds := 0
+	for i in runs:
+		var r := SimRun.play(spec, base_forms, "%s-%d" % [seed_prefix, i], config)
+		n_rerolls += int(r.stats.rerolls)
+		cost += int(r.counters.get("reroll_cost", 0))
+		rounds += int(r.stats.rounds) + int(r.stats.reward_rounds)
+		if r.counters.has("reach_round"):
+			done.append(int(r.counters.reach_round))
+		for l in mini(layers, r.held_by.size()):
+			var held: Dictionary = r.held_by[l]
+			played[l] += 1
+			if core.all(func(id): return int(held.get(id, 0)) > 0):
+				whole[l] += 1
+			if engines.any(func(id): return int(held.get(id, 0)) > 0):
+				engine[l] += 1
+			for id in core:
+				if int(held.get(id, 0)) > 0:
+					cards[id][l] += 1
+	var share := func(counts: Array) -> Array:
+		var out := []
+		for l in layers:
+			out.append(float(counts[l]) / played[l] if played[l] > 0 else -1.0)
+		return out
+	var card_shares := {}
+	for id in core:
+		card_shares[id] = share.call(cards[id])
+	var n := maxf(1.0, runs)
+	return {"line": line, "rerolls": rerolls, "runs": runs, "core": core.duplicate(), "engines": engines,
+		"whole": share.call(whole), "engine": share.call(engine), "done": median(done) if not done.is_empty() else -1,
+		"never": 1.0 - done.size() / n, "cards": card_shares, "rerolls_run": n_rerolls / n, "cost": cost / n,
+		"rounds": rounds / n}
 
 
 ## The 95% Wilson score interval of `k` successes in `n`: [low, high] ([0, 1] for none).

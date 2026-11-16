@@ -26,7 +26,9 @@ var day_money := 0
 var payable_at := -1
 ## What a bot's blocks count over the run (SimRun.play returns it): "flare_left", the
 ## boxes the jackpot line left because READ THE FLARE said their top prize was gone; the
-## rounds probe's "grab_*" (SimBlocks.grab).
+## rounds probe's "grab_*" (SimBlocks.grab); "reroll_cost", dollars paid for rerolls
+## (SimBlocks._reroll, reach); "reach_round", when the deal's ceiling bot held its whole
+## core (SimBlocks.reach).
 var counters := {}
 ## The rounds dealt (RunState.stats rounds + reward_rounds) when the rounds probe's bot
 ## last took a card (SimBlocks.grab); -1 before.
