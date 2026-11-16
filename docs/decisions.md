@@ -1760,3 +1760,80 @@ target and does not rank it (`664ba20`).
   in the standard table its layer-1 deaths hold SCRAP DEALER (77%) or nothing. build
   falls because SCRAP DEALER stands before PENNY JAR on its list and day 1 now always
   offers it: SCRAP DEALER as a first card is far the weaker of the two.
+
+## M9.8 step 3: box reading, and the bots' items
+
+The rules are `docs/roadmap.md` "数值方向" 三, items 10 to 12 (G, 2026-11-16). Data
+only: the UI got the smallest edits that keep it consistent; the ledger's statistics
+menu (三.9) waits. Commits `3296c2a` (the flow study), `b6d5463` (the rules), `15cf8c9`
+and `e2e30f6` (four fixes, the bots' items).
+
+- **The flow, measured first** (`sim_runs --flow`: 2,000 boxes a form as layer 1 makes
+  them, cut at 25 / 50 / 75% sold; past = prizes paid by the tickets sold over their
+  cost, rest = prize money left over the cost of the tickets left). A box that has
+  paid more holds more: thirds by past, the rest is 0.565 / 0.725 / 0.873 at 25% sold,
+  0.547 / 0.756 / 0.863 at 50%, 0.539 / 0.810 / 0.814 at 75% (the mean 0.72; Spearman
+  +0.45, Pearson about 0: a few boxes with a top prize left carry the money). The
+  flow is the box's type showing through, blurred: the best third stays under 1. The
+  flare says far more of far fewer boxes (at 50% sold a top is in 5% of boxes, rest
+  5.00 against 0.478), and within "no top" the thirds still part (0.325 / 0.507 /
+  0.603). On Big Catch the thirds are flat. G keeps it for now.
+- **The chain** (`BoxReading.FLARE`, `FLOW`, `LEFT`; `RunState.reading()` is the highest
+  held): READ THE FLARE `read1` $200 (a top prize in or not), READ THE FLOW `flow`
+  $350 (about how many sold, to the nearest 50, and what they paid, exact;
+  `BoxReading.flow`), ROUGH COUNT `readleft` $600 (about how many left, to the nearest
+  50). The prices are the chain's old first three; nothing was retuned. Both counts
+  share one grain so that a count sold never gives an exact count left. Tickets a
+  FAST FORWARD made go unsold are in neither side of the flow (the box logs them in
+  `ops`, so a save and SEAL keep it).
+- **Gone**: READ THE BOX (fat, even, lean), HOT OR COLD, COUNT IT, KEEP BOOKS and the
+  notepad's line a box; TIP-OFF (it chose by the money left); BOX REPORT is out of the
+  catalog until step 4 gives it "what the part others bought paid". `BoxReading.read`
+  stays as the internal measure, never shown. An old save's removed perks and items
+  are dropped on load.
+- **Every place a player still learns of a box's rest**, gone through with G: kept on
+  purpose: the flare, the rough count, PEEK, INFORMANT, MAGNIFIER, MARKED, REEL IN,
+  and the height of the stack on the machine; changed: SEAL's choice card names the
+  column and the form only, and SEAL's default is the box with most tickets left;
+  QUEUE JUMP, SURE THING and REEL IN only say USED and are used up on a box with
+  nothing to move (an item staying in the pocket would tell for free).
+- **RETURN SLIP and the last sale: a mechanic** (G). Buying the rest of a box
+  unopened pays the last sale and the cleared-box perks at the sale; the slip then
+  returns the tickets at full price. Returned tickets never go back into the machine
+  (`test_returned_tickets_stay_out_of_the_box`), so it is once a box.
+- **The bots' items block** (`SimBlocks.items`: `none`, `use`, `blind`): `use` plays
+  what is held. PEEK before a batch: the next N are bought only when their winners
+  reach the form's own mean (`peek_min`; jackpot: any winner at all), else FAST
+  FORWARD or SHUFFLE if held, else another column, else home; LUCKY COIN at once
+  (it waits on the column's next prize whichever ticket that is); HAPPY HOUR on a
+  day the money buys `happy_min` tickets; MAGNIFIER on leaving (one more ticket on a
+  yes) or in front of a SURE THING; SAFETY NET on a day of play; OVERTIME after a
+  shift; CHEAT SHEET on the dearest wanted card; the SURE items on its column; the
+  slip as above. Buying from the shelf is a variant (`usebuy`), not adopted: within a
+  point of `use`, the bots have no spare cash.
+- **Whole runs** (300, SIM seeds; the reading rules alone moved no bot beyond noise:
+  build -0.3, perks -1.0; then `use` against none, paired): small 47.0 to 52.7% (+5.7,
+  +2.7 to +8.6), batch 9.0 to 15.7% (+6.7, +3.2 to +10.2), build 17.0 to 21.0% (+4.0,
+  +1.8 to +6.2), jackpot 11.3 to 15.0% (+3.7, +0.1 to +7.3), clearing 4.0 to 7.7%
+  (+3.7, +1.5 to +5.8), money 6.7 to 9.0% (+2.3, -0.2 to +4.8); jackpot buying
+  INFORMANT 13.3% (level). `use` is the default of the five lines and build. The
+  table the step ends on: small 52.7% (56.0 / 95.2 / 98.8) 1.876; build 21.0% (31.0 /
+  71.0 / 95.5) 2.279; batch 15.7% (21.0 / 76.2 / 97.9) 1.419; jackpot 15.0% (31.7 / 54.7
+  / 86.5) 3.713; money 9.0% (36.0 / 42.6 / 58.7) 0.927; clearing 7.7% (23.7 / 43.7 /
+  74.2) 1.208; perks 5.7%; borrow 0.3%; gamble, blind, skip 0.0%; work 100%. The plain
+  given-cards test reads as in step 1; both probes pass.
+- **Given cards and given items** (`sim_runs --given --items`: every arm holds the
+  core and, topped up each morning, a PEEK, a MAGNIFIER, a LUCKY COIN and a HAPPY
+  HOUR; careful use / blind use / held and not used; cleared, then the return):
+  clearing 88.0 / 82.7 / 56.3, 2.67 / 2.46 / 2.07; jackpot 86.7 / 43.3 / 95.7, 9.08 / 1.80
+  / 6.51; small 100 / 100 / 100, 3.13 / 2.94 / 2.61; batch 60.7 / 38.0 / 12.3, 2.73 /
+  2.49 / 2.04; money 50.3 / 37.3 / 11.7, 1.82 / 1.44 / 1.24. Careful against blind,
+  the return paired: jackpot +9.05 (+7.73 to +10.37), money +0.88 (+0.52 to +1.24),
+  batch +0.38 (+0.04 to +0.71) better; clearing +0.44 (-0.46 to +1.33) and small
+  -0.38 (-0.77 to +0.01) level: all five pass "careful is not under blind".
+- **What it says.** Items weigh a great deal (a HAPPY HOUR and a coin a day take
+  batch from 12 to 61% cleared): step 8 has their prices and sizes to look at. Care
+  adds little over blind use off the jackpot line. Two readings are the bot, not the
+  item: small's careful arm buys a quarter fewer tickets for leaving on a bad PEEK
+  (the line lives on volume), and jackpot's stops for the day on one, clearing less
+  often than without items though it returns more.
