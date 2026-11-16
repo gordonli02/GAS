@@ -14,7 +14,9 @@ extends RefCounted
 ##             opening), box
 ##   evening   the day ends; a layer paid brings a new machine
 ## A spec's `given` perks ({id: level}) are held from the start, free (the "given
-## cards" test, docs/roadmap.md M9.8 step 1 stage 3; only the simulator does this).
+## cards" test, docs/roadmap.md M9.8 step 1 stage 3), and its `bonus` dollars are in the
+## pocket from the start, as a prize (the rounds probe's plenty of cash); only the
+## simulator does these.
 
 ## A day at the machine has no limit; a bot stops after this many tickets so that a
 ## run always ends.
@@ -35,6 +37,9 @@ const DAY_CAP := 6000
 ##           {} for a run that did not fail
 ##   held_by for each layer the run played: the perks held ({id: level}) when it ended
 ##           there (paid, or the run failed in it)
+##   offered_by  parallel to held_by: the perks dealt as a card by then ({id: times},
+##           RunState.offered: every round, reroll and reward round, from the run's start)
+##   rounds  {morning, reward}: the rounds dealt in the run (RunState.stats)
 ##   counters  what the bot's blocks counted (SimCtx.counters)
 ## The same spec, forms, seed and config always give the same run.
 static func play(spec: Dictionary, base_forms: Array, seed_text: String, config: RunConfig = null) -> Dictionary:
@@ -46,6 +51,8 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 	ctx.run = RunState.start(config, seed_text, ["diner", "bar", "bingo"])
 	give(ctx.run, spec.params.get("given", {}))
 	ctx.e = ctx.run.new_economy()
+	if int(spec.params.get("bonus", 0)) > 0:
+		ctx.e.bonus(int(spec.params.bonus))
 	ctx.m = ctx.run.new_machine(base_forms, true)
 	var run := ctx.run
 	var e := ctx.e
@@ -54,6 +61,7 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 	var held := {}  # perk id -> {day, tickets: stats.tickets when it was bought}
 	var carry := []
 	var held_by := []
+	var offered_by := []
 	var at_layer := _layer_mark(run)
 	while run.playing() and guard < 1000:
 		guard += 1
@@ -73,6 +81,7 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 			run.end_day(e)
 		if not run.playing() or run.layer != layer:
 			held_by.append(run.perks.duplicate())
+			offered_by.append(run.offered.duplicate())
 		if run.playing() and run.layer != layer:
 			carry.append(float(e.cash) / maxi(1, run.due()))
 			at_layer = _layer_mark(run)
@@ -91,13 +100,15 @@ static func play(spec: Dictionary, base_forms: Array, seed_text: String, config:
 	return {"status": run.status, "layer": run.layer, "days": int(run.stats.days), "tickets": int(run.stats.tickets),
 		"cash": e.cash, "spent": e.spent, "won": e.won, "balanced": e.balanced(), "stats": run.stats.duplicate(),
 		"idle_days": idle, "perks": perks, "fired": run.fired.duplicate(), "fired_pct": run.fired_pct.duplicate(),
-		"carry": carry, "death": death, "held_by": held_by, "counters": ctx.counters.duplicate()}
+		"carry": carry, "death": death, "held_by": held_by, "offered_by": offered_by, "counters": ctx.counters.duplicate(),
+		"rounds": {"morning": int(run.stats.rounds), "reward": int(run.stats.reward_rounds)}}
 
 
 ## The `given` perks ({id: level}) put on a run before its first day, free (nothing is
 ## paid or counted as bought), with the requirements they lack at the level asked (of
-## `requires_any`, the first), so the state is one a run could reach; the day's offers
-## are dealt again for what it now holds. Only the simulator does this.
+## `requires_any`, the first), so the state is one a run could reach; the day's round
+## and upgrade slots are dealt again for what it now holds (the first deal's cards are no
+## longer counted as offered; the round is still counted once). Only the simulator does this.
 static func give(run: RunState, given: Dictionary) -> void:
 	if given.is_empty():
 		return
@@ -120,6 +131,10 @@ static func give(run: RunState, given: Dictionary) -> void:
 					short = true
 	run.offers = run.deal_offers()
 	run.offers_open = not run.offers.is_empty()
+	run.offered = {}
+	for id in run.offers:
+		run.offered[id] = 1
+	run.upgrades = run.deal_upgrades()
 
 
 ## A run's dice for the bot (SimCtx.rng). Common random numbers (docs/roadmap.md 七.6):

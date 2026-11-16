@@ -12,15 +12,17 @@ extends RefCounted
 ##   gamble   plays by default, works only when its cash cannot pay for a day's tickets
 ##            (`gamble_day` tickets at the machine's cheapest price): the steady gambler
 ##            who builds nothing
-##   perks    as blind, but every round of perk offers it buys the cheapest offer that
-##            costs no more than half its cash, then the next, and so on (the perks
-##            are where a run grows); it opens in batches when it has QUICK HANDS
+##   perks    as blind, but every morning round of perk offers it takes the cheapest
+##            card that costs no more than half its cash (else the item), every reward
+##            round its first card, then any upgrade slot within half its cash (the
+##            perks are where a run grows); it opens in batches when it has QUICK HANDS
 ##            (never in a run now: QUICK HANDS waits for M13)
-##   skip     as blind, but never buys a perk: every round of offers is skipped for its
+##   skip     as blind, but never buys a perk: every round of offers is given up for its
 ##            item (which it never uses)
-##   build    as blind, but each morning it buys its shelf perks, then the first of its
-##            dealt perks offered (in its order of preference), each while it costs at
-##            most `share` of the cash and leaves `reserve` tickets, and skips the rest:
+##   build    as blind, but each morning it buys its shelf perks, then from each round
+##            the first of its dealt perks offered (in its order of preference), on a
+##            morning round while it costs at most `share` of the cash and leaves
+##            `reserve` tickets (else the item), then an upgrade slot of one of them:
 ##            the perks that lift the return of any ticket. HIGH ROLLER is the bet
 ##            (fixed): a level is bought only when the cash left after it holds
 ##            `high_roller_cash` tickets at the new price. With ALL IN it stakes a
@@ -84,6 +86,7 @@ const PARAMS := {
 	"reserve": 0,            # perks "line": a dealt perk is bought only if the cash left holds this many tickets of the cheapest price
 	"high_roller_cash": 25,  # perks "line": HIGH ROLLER only if the cash then holds this many tickets (G: 20 to 30)
 	"given": {},             # the run: perks held from the start, free ({id: level}; the given-cards test)
+	"bonus": 0,              # the run: dollars in the pocket from the start, as a prize (the rounds probe's cash)
 	"engine": [],            # perks "core", enter "line": the line's engines (holding none, it buys the first it can with all its cash)
 	"work_below": 0,         # enter "line": holding no engine, it works while the cash is under this (times the stake); 0 never
 	"work_out": 0,           # enter "line": 1 works out a layer the wages for the days left can pay (0: plays and pays at once)

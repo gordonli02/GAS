@@ -28,6 +28,11 @@ const STANDARD := {
 	## keeps the web build's boxes. Measured with tools/sim_runs (SimData.box_return, 4000 boxes a form, two seeds):
 	## no perks 0.783 and 0.780 averaged, each form within 0.77 to 0.80.
 	"payout": 0.735,
+	## Upgrade slots on each morning's shelf (RunState.deal_upgrades). G, 2026-11-16: one,
+	## not two: with five dealt perks held, two slots show a given one within a layer 92%
+	## of the time, which only waits on the money; one shows it 67%, a matter of luck too.
+	## A placeholder for step 8; a simulator run may be given a config with 2.
+	"shelf_upgrades": 1,
 	"layers": [
 		{
 			"days": 5,
@@ -67,6 +72,7 @@ const SAVINGS := "savings"
 var start_cash := 200
 var loan_interest := 15
 var payout := 1.0            ## the boxes' prize totals times this (BoxModel.payout)
+var shelf_upgrades := 1      ## upgrade slots on each morning's shelf
 var layers: Array = []
 var catalog: Catalog = null
 
@@ -85,6 +91,7 @@ static func from_dict(d: Dictionary, cat: Catalog = null) -> RunConfig:
 	c.start_cash = int(d.get("start_cash", 200))
 	c.loan_interest = int(d.get("loan_interest", 15))
 	c.payout = float(d.get("payout", 1.0))
+	c.shelf_upgrades = int(d.get("shelf_upgrades", 1))
 	c.layers = d.get("layers", []).duplicate(true)
 	c.catalog = cat if cat != null else Catalog.standard()
 	var line := c.work_line()
@@ -262,6 +269,8 @@ func problems() -> PackedStringArray:
 		out.append("no loan interest")
 	if payout <= 0.0:
 		out.append("payout not above 0")
+	if shelf_upgrades < 0:
+		out.append("upgrade slots under 0")
 	return out
 
 

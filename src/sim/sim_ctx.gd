@@ -25,8 +25,12 @@ var day_money := 0
 ## instead (SimBlocks.pay, stay "hunt"); -1 before.
 var payable_at := -1
 ## What a bot's blocks count over the run (SimRun.play returns it): "flare_left", the
-## boxes the jackpot line left because READ THE FLARE said their top prize was gone.
+## boxes the jackpot line left because READ THE FLARE said their top prize was gone; the
+## rounds probe's "grab_*" (SimBlocks.grab).
 var counters := {}
+## The rounds dealt (RunState.stats rounds + reward_rounds) when the rounds probe's bot
+## last took a card (SimBlocks.grab); -1 before.
+var taken_on := -1
 
 
 ## A context over an existing run (tests, or a bot's block asked outside a run). `spec`

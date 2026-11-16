@@ -14,8 +14,11 @@ extends RefCounted
 ##               shown and levels to plan for: what opens a new move (reading, the
 ##               loan, SAVINGS, the bet, picking a form, the tab; bigger batches wait
 ##               for M13)
-##   the offers  every other perk is dealt (RunState.deal_offers), a few each morning,
-##               the day's choice; its requirements are not shown
+##   the offers  every other perk is dealt in rounds (RunState.deal_offers): each
+##               morning a pick of one among a few perks not held yet, and reward
+##               rounds when a layer is paid (RunState.deal_reward); its requirements
+##               are not shown. A dealt perk held is levelled up from the daily shelf's
+##               upgrade slots (RunState.deal_upgrades) or a reward round's upgrade card
 ## Every dealt perk has a kind (kind()): "build" (the lines a build is made of; each
 ## is a branch: clearing, jackpot, small, batch, money, luck), "risk" (strong, with a
 ## price written at every level: `cost`), "twist" (a rule of the day changed) or "sure"
@@ -119,14 +122,13 @@ extends RefCounted
 ## (G, 2026-11-07: no batch opening in the run until then).
 ## Items are used up: each one held is one use. `use`: "column" (pick a column at the
 ## machine), "now" (used from the phone), "auto" (works by itself), "offer" (a key on
-## the day's perk offers).
+## a morning round of perk offers).
 ## Services: a contact sells them on the phone; `per_layer` caps them in each layer.
 
-const OFFERS := 3                ## perk offers dealt each time (a bonus from outside the run adds to it)
-const SHELF := 4                 ## items on the phone's shelf each day
+const OFFERS := 3                ## cards a round of perk offers (a bonus from outside the run adds to it)
+const SHELF := 4                 ## items on the phone's shelf each day (never rerolled)
 const ITEM_CAP := 3              ## items held at once, before pockets
-const OFFER_REROLL := 20         ## stake 1; doubles with each reroll the same day
-const SHELF_REROLL := 10
+const OFFER_REROLL := 20         ## stake 1; doubles with each reroll of the same round
 const FIRST_TICKETS := 20
 const FORTUNE_TRIES := 12
 const WORTH_STEP := 100
@@ -157,7 +159,7 @@ const ALL_IN_SHARE := {"core:catch": 100, "core:plate": 60, "core:spur": 60, "co
 	"core:kabawk": 50, "core:flock": 45, "core:nugget": 45, "core:peckeye": 60}
 const ALL_IN_DEFAULT := 65
 const RARITY_WEIGHT := {"common": 10, "rare": 5, "legendary": 2}
-## The deal at each layer (RunState.deal_offers), one entry per layer, the last one
+## The deal at each layer (RunState.deal_offers, deal_reward), one entry per layer, the last one
 ## for any layer after it: the weight of each rarity (0 deals none) and the kinds left
 ## out (G, docs/perk_research.md section 5.12). Layer 1 is mostly common, a few rare,
 ## a legendary now and then (G: the first layer must be able to raise a player's

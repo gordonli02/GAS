@@ -2,7 +2,7 @@ class_name SimBlocks
 extends RefCounted
 ## A bot's day cut into six blocks (docs/roadmap.md 七.2), each asked by the run's loop
 ## (SimRun) at its point of the day:
-##   perks   the morning: the dealt offers and the shelf (perks)
+##   perks   the morning: the rounds of perk offers, the shelf and its upgrade slots (perks)
 ##   items   using an item, in the morning and at the machine before each batch (items)
 ##   enter   go to the machine or work, borrowing first (enter); and, at the machine,
 ##           whether to borrow when the money runs short (refill)
@@ -35,7 +35,7 @@ const VARIANTS := {
 	"enter": ["play", "work", "gamble", "borrow", "line"],
 	"column": ["pick", "clear", "top"],
 	"stay": ["batches", "stop", "clear", "windows", "floor", "hunt"],
-	"perks": ["none", "savings", "cheapest", "skip", "line", "core"],
+	"perks": ["none", "savings", "cheapest", "skip", "line", "core", "grab"],
 	"items": ["none"],
 	"box": ["keep", "churn", "flare", "magnet"],
 }
@@ -359,47 +359,76 @@ static func push(ctx: SimCtx) -> void:
 
 # --- perks -----------------------------------------------------------------------
 
-## The morning's offers and the shelf. Variants:
-##   none      leaves everything alone (the offers stay open)
+## The morning: every round of perk offers that is up (after a layer is paid the reward
+## rounds come first, then the morning's: RunState.offers_open stays true until they are
+## all done), the shelf's perks and its upgrade slots. A round ends with its pick (one
+## card) or given up for its item (RunState.skip_offers); no bot rerolls yet. Variants:
+##   none      leaves everything alone: going to the machine or to work throws the
+##             rounds away (RunState.play, work)
 ##   savings   the work line's morning: one level of SAVINGS off the shelf when the
-##             layer allows it and the cash is there (RunConfig.line_buys)
-##   cheapest  the cheapest offer that costs at most `share` of the cash, again and
-##             again; then the offers are closed
-##   skip      closes every round of offers for its item (never used)
+##             layer allows it and the cash is there (RunConfig.line_buys); the rounds
+##             as `none`
+##   cheapest  a morning round: the cheapest card that costs at most `share` of the
+##             cash, else the item; a reward round: the first card. Then any upgrade
+##             slot that costs at most `share` of the cash
+##   skip      every round given up for its item (which it never uses)
 ##   line      the `shelf` perks, every level it can pay with `share` of the cash
 ##             (SAVINGS as `savings` buys it; HIGH ROLLER only while the cash left holds
-##             `high_roller_cash` tickets at the new bet); then the first of the dealt
-##             `perks` offered (in that order of preference), each while it costs at
-##             most `share` of the cash and leaves `reserve` tickets of the cheapest
-##             price; then the offers are closed (an item if nothing was bought)
+##             `high_roller_cash` tickets at the new bet); a morning round: the first of
+##             its dealt `perks` offered (in that order of preference) that costs at most
+##             `share` of the cash and leaves `reserve` tickets of the cheapest price,
+##             else the item; a reward round: the first of its `perks` among the cards
+##             (an upgrade card of one counts), else the item (it never takes a card off
+##             its list: some would hurt it). Then an upgrade slot of a perk on its list,
+##             within `share` and `reserve`
 ##   core      the line bots: the line's core first. While it holds none of its
-##             `engine` perks it buys the first of them it can, on the shelf or dealt,
-##             with all its cash (no share, no reserve); once it holds one, as `line`
-##             (the stop-loss keeps money for the next card, stay)
+##             `engine` perks it buys the first of them on the shelf it can, with all
+##             its cash; then, still holding none, from each round the first engine it
+##             can get with all its cash (free on a reward round), else the item. Once
+##             it holds one, as `line` (the stop-loss keeps money for the next card, stay)
+##   grab      the rounds probe's bot (SimProbes "rounds"): every round, every card
+##             tried, rerolls tried before and after, in every order; it counts in
+##             ctx.counters what a sound run must refuse (grab)
 static func perks(ctx: SimCtx) -> void:
-	match ctx.variant("perks"):
+	var v := ctx.variant("perks")
+	match v:
 		"none":
 			return
 		"savings":
 			_save(ctx.run, ctx.e)
 			return
-		"cheapest":
-			_cheapest(ctx)
-			return
 		"skip":
-			ctx.run.close_offers(true)
+			var g := 0
+			while ctx.run.offers_open and g < 50:
+				g += 1
+				ctx.run.skip_offers()
 			return
-		"line":
-			_line(ctx)
+		"grab":
+			grab(ctx)
 			return
-		"core":
-			if _engine(ctx):
-				_line(ctx)
-				return
-			_first_engine(ctx)
-			ctx.run.close_offers(true)
+		"cheapest", "line", "core":
+			pass
+		_:
+			assert(false, "unknown perks variant")
 			return
-	assert(false, "unknown perks variant")
+	if v == "core" and not _engine(ctx):
+		_shelf_engine(ctx)
+	var lined := v == "line" or v == "core" and _engine(ctx)
+	if lined:
+		_shelf(ctx)
+	var guard := 0
+	while ctx.run.offers_open and guard < 50:
+		guard += 1
+		if v == "cheapest":
+			_cheapest_round(ctx)
+		elif v == "line" or _engine(ctx):
+			_line_round(ctx)
+		else:
+			_engine_round(ctx)
+	if v == "cheapest":
+		_upgrades(ctx, false)
+	elif v == "line" or _engine(ctx):
+		_upgrades(ctx, true)
 
 
 ## Whether the run holds one of the bot's `engine` perks.
@@ -410,19 +439,25 @@ static func _engine(ctx: SimCtx) -> bool:
 	return false
 
 
-## The first of the `engine` perks the cash pays for, off the shelf or out of the offers.
-static func _first_engine(ctx: SimCtx) -> void:
+## The first of the `engine` perks on the shelf the cash pays for.
+static func _shelf_engine(ctx: SimCtx) -> void:
+	var run := ctx.run
+	for id in ctx.param("engine"):
+		if run.shelf_perks().has(id) and run.buy_perk(id, ctx.e):
+			run.apply(ctx.m)
+			return
+
+
+## A round, holding no engine: the first of the `engine` perks among its cards that
+## the cash pays for (or free, on a reward round), else the item.
+static func _engine_round(ctx: SimCtx) -> void:
 	var run := ctx.run
 	for id in ctx.param("engine"):
 		var k := run.offers.find(id)
-		var ok := false
-		if run.shelf_perks().has(id):
-			ok = run.buy_perk(id, ctx.e)
-		elif k >= 0:
-			ok = run.buy_offer(k, ctx.e)
-		if ok:
+		if k >= 0 and run.buy_offer(k, ctx.e):
 			run.apply(ctx.m)
 			return
+	run.skip_offers()
 
 
 static func _save(run: RunState, e: Economy) -> void:
@@ -430,31 +465,31 @@ static func _save(run: RunState, e: Economy) -> void:
 		run.buy_perk(RunConfig.SAVINGS, e)
 
 
-static func _cheapest(ctx: SimCtx) -> void:
+## A round for `cheapest`: on a reward round the first card; on a morning round the
+## cheapest card within `share` of the cash; else the item.
+static func _cheapest_round(ctx: SimCtx) -> void:
 	var run := ctx.run
 	var e := ctx.e
 	var share := float(ctx.param("share"))
-	var guard := 0
-	while run.offers_open and guard < 10:
-		guard += 1
-		var best := -1
+	var best := -1
+	if run.offer_reward:
+		best = 0
+	else:
 		for k in run.offers.size():
 			var p := run.perk_price(str(run.offers[k]))
 			if p > 0 and p <= e.cash * share and (best < 0 or p < run.perk_price(str(run.offers[best]))):
 				best = k
-		if best < 0 or not run.buy_offer(best, e):
-			break
+	if best >= 0 and run.buy_offer(best, e):
 		run.apply(ctx.m)
-	run.close_offers(true)
+		return
+	run.skip_offers()
 
 
-static func _line(ctx: SimCtx) -> void:
+## The `shelf` perks for `line`: every level it can pay with `share` of the cash.
+static func _shelf(ctx: SimCtx) -> void:
 	var run := ctx.run
 	var e := ctx.e
-	var m := ctx.m
 	var share := float(ctx.param("share"))
-	var prefs: Array = ctx.param("perks")
-	var keep: int = int(ctx.param("reserve")) * m.min_price()
 	for id in ctx.param("shelf"):
 		if id == RunConfig.SAVINGS:
 			_save(run, e)
@@ -465,21 +500,94 @@ static func _line(ctx: SimCtx) -> void:
 			var p := run.perk_price(id)
 			if p <= 0 or p > e.cash * share or (id == "bet" and not _rolls(ctx)) or not run.buy_perk(id, e):
 				break
-		run.apply(m)
+		run.apply(ctx.m)
+
+
+## A round for `line`: the first of its `perks` among the cards (in its order of
+## preference), within `share` and `reserve` on a morning round, free on a reward
+## round; else the item.
+static func _line_round(ctx: SimCtx) -> void:
+	var run := ctx.run
+	var e := ctx.e
+	var prefs: Array = ctx.param("perks")
+	var share := float(ctx.param("share"))
+	var keep: int = int(ctx.param("reserve")) * ctx.m.min_price()
+	var best := -1
+	for k in run.offers.size():
+		var id := str(run.offers[k])
+		var p := run.perk_price(id)
+		if not prefs.has(id) or p <= 0:
+			continue
+		if not run.offer_reward and (p > e.cash * share or e.cash - p < keep):
+			continue
+		if best < 0 or prefs.find(id) < prefs.find(str(run.offers[best])):
+			best = k
+	if best >= 0 and run.buy_offer(best, e):
+		run.apply(ctx.m)
+		return
+	run.skip_offers()
+
+
+## The shelf's upgrade slots: each one costing at most `share` of the cash; with `line`
+## only a perk on the bot's `perks` list that leaves `reserve` tickets too.
+static func _upgrades(ctx: SimCtx, line: bool) -> void:
+	var run := ctx.run
+	var e := ctx.e
+	var share := float(ctx.param("share"))
+	var keep: int = int(ctx.param("reserve")) * ctx.m.min_price() if line else 0
+	for id in run.upgrades.duplicate():
+		var p := run.perk_price(id)
+		if p <= 0 or p > e.cash * share or e.cash - p < keep or (line and not ctx.param("perks").has(id)):
+			continue
+		if run.buy_upgrade(id, e):
+			run.apply(ctx.m)
+
+
+## The rounds probe's morning (SimProbes.check_rounds): with plenty of cash, every round
+## up attacked: a reroll tried first; every card tried in order, a reroll, every card
+## again in the other order, a reroll; then SKIP FOR AN ITEM on whatever is still up.
+## A take may bring the next round up (a reward chain), and the cards tried after it
+## then try that one, as a player's presses would. Counted in ctx.counters:
+##   grab_taken          cards taken
+##   grab_twice          a card taken on a round a card was already taken on (the
+##                       rounds dealt, RunState.stats rounds + reward_rounds, had not
+##                       moved since the last take): must stay 0
+##   grab_reward_reroll  a reward round rerolled: must stay 0
+static func grab(ctx: SimCtx) -> void:
+	var run := ctx.run
 	var guard := 0
-	while run.offers_open and guard < 10:
+	while run.offers_open and guard < 50:
 		guard += 1
-		var best := -1
-		for k in run.offers.size():
-			var id := str(run.offers[k])
-			var p := run.perk_price(id)
-			if prefs.has(id) and p > 0 and p <= e.cash * share and e.cash - p >= keep \
-					and (best < 0 or prefs.find(id) < prefs.find(str(run.offers[best]))):
-				best = k
-		if best < 0 or not run.buy_offer(best, e):
-			break
-		run.apply(m)
-	run.close_offers(true)
+		_grab_reroll(ctx)
+		for pass_no in 2:
+			var ks := range(run.offers.size())
+			if pass_no == 1:
+				ks.reverse()
+			for k in ks:
+				_grab_take(ctx, k)
+			_grab_reroll(ctx)
+		run.skip_offers()
+
+
+static func _grab_reroll(ctx: SimCtx) -> void:
+	var reward := ctx.run.offer_reward
+	if ctx.run.reroll_offers(ctx.e) and reward:
+		ctx.counters["grab_reward_reroll"] = int(ctx.counters.get("grab_reward_reroll", 0)) + 1
+
+
+static func _grab_take(ctx: SimCtx, k: int) -> void:
+	var run := ctx.run
+	if k >= run.offers.size():
+		return
+	var at := int(run.stats.rounds) + int(run.stats.reward_rounds)
+	if not run.buy_offer(k, ctx.e):
+		return
+	run.apply(ctx.m)
+	var c := ctx.counters
+	c["grab_taken"] = int(c.get("grab_taken", 0)) + 1
+	if at == ctx.taken_on:
+		c["grab_twice"] = int(c.get("grab_twice", 0)) + 1
+	ctx.taken_on = at
 
 
 ## Whether the next level of HIGH ROLLER leaves the cash, once it is paid, with

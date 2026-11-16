@@ -136,6 +136,59 @@ func test_churn_does_not_pay() -> void:
 	check(not SimProbes.find("churn").is_empty() and SimProbes.find("nobody").is_empty(), "find: a probe by name")
 
 
+## The rounds probe (M9.8 step 2): a bot with plenty of cash that tries every card of
+## every round, rerolling before and after, never gets more than one perk a round, nor
+## rerolls a reward round.
+func test_rounds_probe() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	eq(SimProbes.all().map(func(p): return p.name), ["churn", "rounds"], "two probes")
+	var r := SimProbes.run("rounds", pack.forms, 12 if full else 4)
+	note(r.text)
+	check(r.ok, "the rounds probe holds")
+	var n: Dictionary = r.numbers
+	eq(n.over, 0, "no run took more perks than it was dealt rounds")
+	eq(n.twice, 0, "no second card from a round")
+	eq(n.reward_rerolls, 0, "no reward round rerolled")
+	check(n.reward_rounds > 0 and n.taken > 0 and n.rerolls > 0, "it took cards, rerolled, and saw reward rounds (%s)" % str(n))
+	eq(n.taken, n.rounds + n.reward_rounds, "with the cash for all of them, one card from every round")
+	eq(SimProbes.rounds_spec().blocks.perks, "grab", "the probe's bot")
+
+
+## How the bots meet the rounds (M9.8 step 2), and the measures of them: the perks dealt
+## by the end of each layer (offered_by) and the rounds a run.
+func test_bots_and_the_rounds() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var skip := RunSim.play("skip", pack.forms, "RO-0")
+	eq(int(skip.stats.perks), 0, "skip takes no perk")
+	eq(int(skip.stats.skipped_offers), int(skip.stats.rounds) + int(skip.stats.reward_rounds), "skip gives up every round it is dealt")
+	var blind := RunSim.play("blind", pack.forms, "RO-0")
+	eq(int(blind.stats.skipped_offers), 0, "blind gives up none (it walks away)")
+	eq(blind.offered_by.size(), blind.held_by.size(), "offered_by beside held_by")
+	check(not blind.offered_by[0].is_empty(), "perks were dealt in layer 1")
+	eq(blind.rounds.morning, int(blind.stats.rounds), "the rounds a run")
+	var perks := RunSim.play("perks", pack.forms, "RO-1")
+	for l in perks.held_by.size():
+		for id in perks.held_by[l]:
+			if Catalog.kind(Catalog.standard().perk(id)) != "shelf":
+				check(perks.offered_by[l].has(id), "perks: %s held at the end of layer %d was dealt by then" % [id, l + 1])
+	var dealt_held := 0
+	for id in perks.perks:
+		if Catalog.kind(Catalog.standard().perk(id)) != "shelf":
+			dealt_held += 1
+	check(dealt_held > 0 and dealt_held <= int(perks.stats.rounds) + int(perks.stats.reward_rounds),
+		"perks: no more dealt perks held than rounds dealt (%d)" % dealt_held)
+	var s := RunSim.summary("small", pack.forms, 4, "RO")
+	for t in s.triggers:
+		eq(t.offered_by.size(), 3, "%s: a dealt share a layer" % t.id)
+		check(t.offered_by[0] >= t.by_layer[0] or Catalog.kind(Catalog.standard().perk(t.id)) == "shelf",
+			"%s: held by the end of layer 1 means dealt by then, for a dealt perk" % t.id)
+	check(s.rounds.morning > 0.0, "morning rounds a run (%.1f)" % s.rounds.morning)
+
+
 func test_summary_carries_the_targets_numbers() -> void:
 	var pack := core_pack()
 	if pack == null:

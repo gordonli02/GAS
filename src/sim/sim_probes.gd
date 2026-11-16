@@ -8,6 +8,8 @@ extends RefCounted
 ##   how     one line on how it is run
 ##   check   a Callable(forms, runs, boxes) -> {ok: bool, text: String, numbers: Dictionary}
 ##           (runs: whole runs of the probe bot; boxes: boxes a column at fixed perks)
+## Two so far: churn (FIRST PULL x REGULAR) and rounds (a round of perk offers is a pick
+## of one, M9.8 step 2).
 ## To add a probe for a new rule (the next ones, not written yet: boxes partly sold by
 ## other customers x the last sale; the held column): write its check here, in two parts
 ## where it can be two (the data layer at fixed perks, SimData; whole runs of a bot
@@ -23,6 +25,9 @@ const SEED := "CH"
 ## nothing (tools/sim_runs --churn-boxes, --probe-runs; the test uses fewer).
 const BOXES := 200
 const RUNS := 100
+## The rounds probe's bot's cash at the start (rounds_spec): enough for every card of
+## every layer.
+const ROUNDS_CASH := 10000000
 
 
 ## Every probe, in the order tools/sim_runs prints them.
@@ -32,6 +37,10 @@ static func all() -> Array:
 		"rule": "FIRST PULL x REGULAR (docs/perk_research.md 5.11): 20 tickets a box, then a new box, must not pay once the fees count (the fee's floor)",
 		"how": "fixed perks (SimData.churn_return at each of CHURN_SETS), then the churn bot playing whole runs holding FIRST PULL 2 and REGULAR 2",
 		"check": Callable(SimProbes, "check_churn")},
+		{"name": "rounds",
+		"rule": "a round of perk offers is a pick of one (docs/roadmap.md 十.1-3): one card a round, nothing taken once it ended, no reroll of a reward round",
+		"how": "whole runs of a bot with plenty of cash that tries every card of every round, in both orders, rerolling before and after (SimBlocks.grab)",
+		"check": Callable(SimProbes, "check_rounds")},
 	]
 
 
@@ -63,6 +72,44 @@ static func churn_given_spec() -> Dictionary:
 	s.blocks.perks = "none"
 	s.params.given = {"firstpull": 2, "regular": 2}
 	return s
+
+
+## The rounds probe's bot: blind's play, the morning's perks block `grab` (every card of
+## every round tried, rerolls before and after), with ROUNDS_CASH in the pocket from
+## the start (a probe's plenty: it pays every layer on its first day, so every layer
+## also brings its most reward rounds).
+static func rounds_spec() -> Dictionary:
+	var s := SimBots.spec("blind", {"blocks": {"perks": "grab"}, "params": {"bonus": ROUNDS_CASH}})
+	s.name = "grab"
+	return s
+
+
+## The rounds probe: `runs` whole runs of rounds_spec(). In each run the perks taken from
+## rounds (the bot buys nothing else, so RunState.stats.perks) are never more than the
+## rounds dealt (stats rounds + reward_rounds), no card was taken on a round already
+## taken from (counters grab_twice) and no reward round was rerolled (grab_reward_reroll).
+## numbers: {runs, taken, rounds, reward_rounds (summed over the runs), over (runs that
+## took more than they were dealt), twice, reward_rerolls, rerolls}.
+static func check_rounds(forms: Array, runs: int, _boxes: int) -> Dictionary:
+	var spec := rounds_spec()
+	var n := {"runs": runs, "taken": 0, "rounds": 0, "reward_rounds": 0, "over": 0, "twice": 0, "reward_rerolls": 0,
+		"rerolls": 0}
+	for i in runs:
+		var r := SimRun.play(spec, forms, "%s-R%d" % [SEED, i])
+		var dealt := int(r.stats.rounds) + int(r.stats.reward_rounds)
+		n.taken += int(r.stats.perks)
+		n.rounds += int(r.stats.rounds)
+		n.reward_rounds += int(r.stats.reward_rounds)
+		n.rerolls += int(r.stats.rerolls)
+		if int(r.stats.perks) > dealt:
+			n.over += 1
+		n.twice += int(r.counters.get("grab_twice", 0))
+		n.reward_rerolls += int(r.counters.get("grab_reward_reroll", 0))
+	var ok: bool = n.over == 0 and n.twice == 0 and n.reward_rerolls == 0 and n.taken > 0 and n.reward_rounds > 0
+	var text := "  whole runs, %d, $%d at the start: %d perks taken from %d rounds (%d morning, %d reward; %d rerolls); runs over one a round %d, second takes %d, reward rerolls %d  %s" % [
+		runs, ROUNDS_CASH, n.taken, n.rounds + n.reward_rounds, n.rounds, n.reward_rounds, n.rerolls, n.over, n.twice,
+		n.reward_rerolls, "ok" if ok else "BROKEN"]
+	return {"ok": ok, "text": text, "numbers": n}
 
 
 ## The churn probe. 1: SimData.churn_return at each of CHURN_SETS, return with the fees

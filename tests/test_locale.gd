@@ -8,6 +8,10 @@ const EXTRA_KEYS := ["DINER", "BAR", "BINGO", "MUTED", "SOUND", "HELD", "OPENED"
 	"LOAN", "SHOP", "CONTACTS", "SHELF", "TODAY", "ITEMS", "HOT", "FAIR", "COLD",
 	"JACKPOT FORM", "ALL OR NOTHING", "SMALL PRIZES FORM", "MIDDLE PRIZES FORM", "BY GROUP",
 	"TOP IN", "NO TOP", "FAT BOX", "EVEN BOX", "LEAN BOX", "NEXT ONE LOSES", "INSERT COINS"]
+## Rows the rounds (M9.8 step 2) left without a use: LATER, DONE on the offers card and
+## NEW SHELF are gone. Kept until the UI pass decides what to do with ui.csv's rows (it
+## removes them, or uses them again); then this list goes.
+const LEFT_FOR_THE_UI := ["DONE", "NEW SHELF %s", "LATER"]
 const PATTERNS := [
 	"\\btr\\(\"([^\"]+)\"",
 	"\\bset_status\\(\"([^\"]+)\"",
@@ -52,6 +56,8 @@ func _used_keys() -> Array:
 						found[k] = file
 	for k in EXTRA_KEYS:
 		found[k] = "tables"
+	for k in LEFT_FOR_THE_UI:
+		found[k] = "left for the UI pass"
 	for k in Catalog.standard().text_keys():
 		found[k] = "catalog"   # the phone's shop and contacts (src/core/catalog.gd)
 	return found.keys()

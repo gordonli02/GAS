@@ -77,10 +77,11 @@ func _run() -> void:
 	await _shot("02_story_intro")
 	_card("ok")
 	await _wait(0.3)
-	# The perk offers come first, at the start of the run and after every day.
+	# The perk offers come first, at the start of the run and after every day: a round
+	# is a pick of one (M9.8 step 2), taken on its card.
 	_expect(run.story == "" and game.run_card.visible and game.run_card.key("offer_done") != null, "then the perk offers")
 	_expect(game.run_card.key("offer_0") != null and run.offers.size() == Catalog.OFFERS, "three offers, a key each")
-	_expect(game.run_card.key("offer_later") != null, "LATER while nothing is bought")
+	_expect(game.run_card.key("offer_later") == null, "no LATER: the round is taken here or given up")
 	await _shot("02b_offers")
 	game.set_language("zh")
 	await _wait(0.3)
@@ -90,23 +91,19 @@ func _run() -> void:
 	e.bonus(1000)
 	game._show_run_card()
 	await _wait(0.2)
-	var offered: String = run.offers[0]
-	var price := run.perk_price(offered)
-	var cash := e.cash
-	_card("offer_0")
-	await _wait(0.3)
-	_expect(run.level(offered) == 1 and e.cash == cash - price and run.offers.size() == Catalog.OFFERS - 1, "BUY: %s for %s, gone from the offers" % [offered, Hud._money(price)])
 	var reroll := run.reroll_price()
-	cash = e.cash
+	var cash := e.cash
 	_card("offer_reroll")
 	await _wait(0.3)
-	_expect(e.cash == cash - reroll and run.offers.size() == Catalog.OFFERS and run.reroll_price() == reroll * 2, "REROLL: three new offers for %s, the next costs double" % Hud._money(reroll))
+	_expect(e.cash == cash - reroll and run.offers.size() == Catalog.OFFERS and run.reroll_price() == reroll * 2, "REROLL before the pick: three new offers for %s, the next costs double" % Hud._money(reroll))
 	await _shot("02d_offers_rerolled")
-	_expect(game.run_card.key("offer_later") == null, "something bought: DONE, no LATER")
-	_card("offer_done")
+	var offered: String = run.offers[0]
+	var price := run.perk_price(offered)
+	cash = e.cash
+	_card("offer_0")
 	await _wait(0.3)
-	_expect(not run.offers_open and run.items_held() == 0, "DONE: closed, no item (something was bought)")
-	_expect(run.offers.size() == Catalog.OFFERS - 1, "the other offers wait for the day (the phone's TODAY page)")
+	_expect(run.level(offered) == 1 and e.cash == cash - price, "BUY: %s for %s" % [offered, Hud._money(price)])
+	_expect(not run.offers_open and run.offers.is_empty() and run.items_held() == 0, "the pick ends the round: the other offers are gone, no item")
 	# The checks that follow count on a run without perks and the first day's money.
 	run.perks = {}
 	run.apply(game.machine)
@@ -200,8 +197,8 @@ func _run() -> void:
 	_key(KEY_SPACE)
 	await _wait(1.0)
 
-	# The shop: SHELF (the shelf's perks for sale, the build held), TODAY (the day's
-	# offers, still for sale, and the item shelf), ITEMS (what is held).
+	# The shop: SHELF (the shelf's perks for sale, the build held), TODAY (the item
+	# shelf), ITEMS (what is held).
 	e.bonus(3000)
 	cash = e.cash
 	_key(KEY_P)
@@ -212,15 +209,8 @@ func _run() -> void:
 	await _shot("07a_shop_shelf")
 	_phone("tab_today")
 	await _wait(0.2)
-	_expect(game.phone.row("offer_0") != null and _pkey("buy_offer_0") != null and _pkey("reroll_offers") != null, "TODAY: the day's offers, still for sale")
-	_expect(_pkey("skip_offers") == null, "something was bought: no SKIP")
+	_expect(game.phone.row("offer_0") == null and _pkey("buy_offer_0") == null and _pkey("reroll_offers") == null, "TODAY: no perk offers on the phone (a round is taken on its card)")
 	await _shot("07b_shop_today")
-	var left := run.offers.size()
-	cash = e.cash
-	var offer_price := run.perk_price(str(run.offers[0]))
-	_phone("buy_offer_0")
-	await _wait(0.2)
-	_expect(run.offers.size() == left - 1 and e.cash == cash - offer_price, "an offer bought from the phone at the machine")
 	cash = e.cash
 	# Perks for the checks below (the offers are random): LUCKY STREAK, REGULAR, CLOSER
 	# and the reading chain to HOT OR COLD.
@@ -236,7 +226,7 @@ func _run() -> void:
 	_expect(game.phone.row("build_closer") != null and game.phone.row("build_luck") != null, "YOUR BUILD: the dealt perks held")
 	_phone("tab_today")
 	await _wait(0.2)
-	_expect(_pkey("buy_peek") != null and _pkey("reroll_shelf") != null, "today's shelf, and a key for another")
+	_expect(_pkey("buy_peek") != null and _pkey("reroll_shelf") == null, "today's shelf, not rerolled")
 	_phone("buy_peek")
 	await _wait(0.15)
 	_phone("buy_coin")
@@ -535,7 +525,7 @@ func _run() -> void:
 	e = game.economy
 	_expect(run != null and run.layer == 0 and run.day == 1 and e.cash == 200, "a new run")
 	var guard := 0
-	while run.playing() and guard < 80:
+	while run.playing() and guard < 120:
 		guard += 1
 		if game.run_card.key("ok") != null:
 			_card("ok")
@@ -572,9 +562,12 @@ func _run() -> void:
 	get_tree().quit(1 if failures > 0 else 0)
 
 
-## The perk offers, when they are up: closed without buying (an item for it).
+## The rounds of perk offers, while one is up: each given up for an item (after a layer
+## is paid the reward rounds come before the morning's).
 func _skip_offers() -> void:
-	if game.run_card.visible and game.run_card.key("offer_done") != null:
+	var guard := 0
+	while game.run_card.visible and game.run_card.key("offer_done") != null and guard < 12:
+		guard += 1
 		_card("offer_done")
 		await _wait(0.3)
 

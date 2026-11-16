@@ -13,9 +13,17 @@ extends RefCounted
 ## Perks, items and contacts' services are data (Catalog); what they do is here, in the
 ## effect hooks: effect(name) sums the levels of every perk on that effect (effect_x
 ## multiplies the "x" ones), and the rules ask it. The tree is mixed (G, M9.5): the
-## shelf's perks are always for sale (buy_perk), the others are dealt (deal_offers) at
-## the start of the run and after every day, and the player buys any they can pay for;
-## the items on the phone's shelf change every day (deal_shelf).
+## shelf's perks are always for sale (buy_perk); the others are dealt in rounds
+## (docs/roadmap.md 十, M9.8 step 2). A round is a pick of one: offer_count() cards of
+## perks not held yet (deal_offers), one taken (buy_offer, from cash or free with a
+## CHEAT SHEET) ends it, a reroll before that deals it again (reroll_offers), or it is
+## given up for an item (skip_offers); nothing of a round outlives it. Each morning has
+## one round. Paying a layer (not the last) gives reward rounds before the new layer's
+## morning round, one plus one a day paid early: free, rare or better, one card a free
+## upgrade of a perk held (deal_reward). Going to the machine or to work with rounds
+## still up throws them away (play, work). A dealt perk held is levelled up from the
+## daily shelf's upgrade slots (deal_upgrades, buy_upgrade), which also holds the
+## day's items (deal_shelf); neither is rerolled.
 ## Everything is bought from cash at the layer's stake, and counted in the ledger as paid.
 ## Every prize goes through pay_ticket, which is the one formula of Catalog's header.
 ## A sure win (STAKEOUT, INSURANCE, the SURE items) is never a new prize: a winner of
@@ -41,12 +49,14 @@ var items := {}            ## item id -> how many are held
 var extra_days := 0        ## days this layer was given on top of its own (a service)
 var services := {}         ## service id -> times bought in this layer
 var reports := {}          ## BOX REPORT: form uid -> seed of the box read in full
-var offers: Array = []     ## perk ids offered now (bought ones leave the list)
-var offers_open := false   ## the offers are waiting to be looked at (the day's card shows them first)
-var offer_rerolls := 0     ## rerolls of this round of offers (each costs double)
-var offer_bought := false  ## something was bought from this round
+var offers: Array = []     ## the cards of the round up now, perk ids (a held perk's id on a reward round is its free upgrade)
+var offers_open := false   ## a round is up (its cards in offers), waiting for its pick
+var offer_reward := false  ## the round up is a reward round (free pick, no reroll)
+var offer_rerolls := 0     ## rerolls of the round up (each costs double)
+var rewards_pending := 0   ## reward rounds still to come after the one up, before the morning round
+var reward_no := 0         ## reward rounds dealt in this layer (each one's seed)
 var shelf: Array = []      ## item ids on the phone's shelf today (bought ones leave it)
-var shelf_rerolls := 0
+var upgrades: Array = []   ## the shelf's upgrade slots today: dealt perks held, a level each (bought ones leave it)
 var last_item := ""        ## the item bought last (COPIER copies it)
 var day_tickets := 0       ## tickets bought today (STAKEOUT's first)
 var forms_today := {}      ## form uid -> true, forms bought today (LOYAL, VARIETY)
@@ -94,7 +104,8 @@ var stats := {"days": 0, "play_days": 0, "shifts": 0, "tickets": 0, "wages": 0, 
 	"interest": 0, "repaid": 0, "box_changes": 0, "fees": 0, "last_sales": 0, "days_spared": 0,
 	"layers_cleared": 0, "discarded": 0,   ## discarded: tickets bought and thrown away unopened
 	"shop": 0, "perks": 0, "items": 0, "services": 0, "bonus": 0,   ## shop: money spent there; bonus: prize money from perks and coins
-	"rerolls": 0, "skipped_offers": 0, "savings": 0, "insured": 0, "boxes_cleared": 0, "best_prize": 0,
+	"rerolls": 0, "skipped_offers": 0, "rounds": 0, "reward_rounds": 0,   ## rounds: morning rounds dealt; reward_rounds: reward rounds dealt
+	"savings": 0, "insured": 0, "boxes_cleared": 0, "best_prize": 0,
 	"sure_wins": 0, "refunded": 0, "sealed": 0,   ## sure_wins: prizes moved forward; refunded: tickets given back
 	"staked": 0, "push_won": 0, "push_lost": 0}   ## ALL IN: stakes put up, what came back (x3), stakes lost
 ## What the perks did this run, for the simulator's reports (docs/roadmap.md 七.3: a
@@ -110,6 +121,10 @@ var fired := {}
 ## report can give the mean size: NET WORTH, DUE A WIN, TRASH KING, JACKPOT HUNTER,
 ## STREAK, SNOWBALL (its x as a percent).
 var fired_pct := {}
+## The perks dealt to this run as cards (perk id -> times), every round, reroll and reward
+## round counted, an upgrade card included: for the simulator's "dealt but not bought"
+## against "never dealt" (docs/roadmap.md 十.8). Not saved, never shown.
+var offered := {}
 ## What `fired` counts, and where:
 ##   pay_ticket  a winner: bigfish, flare (a top prize multiplied), middle, penny (a mid
 ##               or small prize multiplied; PACKED's pieces are not), stacker,
@@ -296,9 +311,11 @@ func can_choose() -> bool:
 
 
 ## Spends the day at the machine. `e`: the ledger, to measure the day by (SAFETY NET).
+## Rounds still up are thrown away (drop_rounds).
 func play(e: Economy = null) -> bool:
 	if not can_choose():
 		return false
+	drop_rounds()
 	today = "play"
 	stats.play_days += 1
 	if e != null:
@@ -317,10 +334,12 @@ func can_work() -> bool:
 
 
 ## Spends the day at work: the wage now, less MOONLIGHTING's cut (twice that under
-## OVERTIME); no tickets opened today (MOONLIGHTING buys them, for tomorrow).
+## OVERTIME); no tickets opened today (MOONLIGHTING buys them, for tomorrow). Rounds
+## still up are thrown away (drop_rounds).
 func work(e: Economy) -> bool:
 	if not can_work():
 		return false
+	drop_rounds()
 	var w := shift_wage() * (2 if overtime else 1)
 	e.earn(w)
 	today = "work"
@@ -450,7 +469,9 @@ func can_pay(e: Economy) -> bool:
 ## Pays the layer in full and moves on at once: the next layer starts on a new day,
 ## or the run is cleared. Days left over are counted as spared. With SEAL and the
 ## machine given, the boxes the player chose (`keep`: column indices) come along, or
-## the hottest when none were chosen (new_machine puts them in).
+## the hottest when none were chosen (new_machine puts them in). A layer paid that is
+## not the last gives reward rounds, before the new layer's morning round (deal_reward):
+## one, and one more for every day paid early (early_days).
 func pay(e: Economy, m: MachineLogic = null, keep: Array = []) -> bool:
 	if not can_pay(e):
 		return false
@@ -458,6 +479,7 @@ func pay(e: Economy, m: MachineLogic = null, keep: Array = []) -> bool:
 	_settle_day(e)
 	if m != null and effect("seal") > 0:
 		_seal(m, keep)
+	var rewards := 1 + early_days()
 	var amount := due()
 	e.pay(amount)
 	stats.repaid += amount
@@ -482,8 +504,17 @@ func pay(e: Economy, m: MachineLogic = null, keep: Array = []) -> bool:
 	layer_tops = 0
 	story = "twist"
 	e.bills = RunConfig.bills(stake())
+	rewards_pending = rewards
+	reward_no = 0
 	_new_day()
 	return true
+
+
+## The days the layer would be paid early if it were paid today: its own days (SHORT
+## WEEK's taken off) less today. A day bought from the lender (extra_days) is not one
+## of its own, so buying a day and paying mints no reward round.
+func early_days() -> int:
+	return maxi(0, int(stage().days) - effect("day_cut") - day)
 
 
 ## The columns SEAL could carry along (tickets left in the box).
@@ -572,7 +603,8 @@ func _settle_day(e: Economy) -> void:
 	happy = false
 
 
-## A new day (or the start of the run, or of a layer): new perk offers, a new shelf.
+## A new day (or the start of the run, or of a layer): a new shelf (items and upgrade
+## slots), then the rounds: the reward rounds pending, then the morning's.
 func _new_day() -> void:
 	happy = false
 	safety = false
@@ -581,18 +613,15 @@ func _new_day() -> void:
 	sure_armed = false
 	day_tickets = 0
 	forms_today = {}
-	offer_rerolls = 0
-	offer_bought = false
-	offers = deal_offers()
-	offers_open = not offers.is_empty()
-	shelf_rerolls = 0
 	shelf = deal_shelf()
+	upgrades = deal_upgrades()
+	_next_round(true)
 
 
 func _close_shop() -> void:
-	offers = []
-	offers_open = false
+	drop_rounds()
 	shelf = []
+	upgrades = []
 
 
 # --- effects -------------------------------------------------------------------------
@@ -1036,14 +1065,16 @@ func missing(perk_id: String) -> Dictionary:
 	return out
 
 
-## Perks that can be offered: off the shelf, requirements met, not at the top level,
-## of a kind and a rarity the layer's deal has (Catalog.DEAL). A perk of a form (`form`,
-## a form's uid) only while that form is on the machine: `forms`, the uids of the
-## machine's columns (no perk has one yet; the callers pass none until there are some).
+## Perks that can be dealt: off the shelf, not held yet (a held perk is levelled up from
+## the shelf's upgrade slots, or a reward round's upgrade card, never dealt again),
+## requirements met, of a kind and a rarity the layer's deal has (Catalog.DEAL). A perk
+## of a form (`form`, a form's uid) only while that form is on the machine: `forms`, the
+## uids of the machine's columns (no perk has one yet; the callers pass none until there
+## are some).
 func offerable(forms: Array = []) -> Array:
 	var out := []
 	for p in catalog.dealt():
-		if level(p.id) >= p.levels.size() or not missing(p.id).is_empty():
+		if level(p.id) > 0 or not missing(p.id).is_empty():
 			continue
 		if Catalog.deal_weight(p, layer) <= 0.0:
 			continue
@@ -1062,35 +1093,76 @@ func shelf_perks() -> Array:
 	return out
 
 
-## This round's offers: offer_count() perks out of offerable(), drawn by the layer's
-## rarity weights (Catalog.DEAL), from the run's seed, the layer, the day and the reroll
-## (so a save cannot be rerolled by loading it). A level up of a perk held, and a perk
-## its requirements opened, weigh more, so that a build comes together. The first
-## Catalog.OFFERS of them hold two kinds at least (build / risk / twist / sure) and two
-## branches, when the pool has them: the last of those is drawn again, among the others,
-## when it would leave the deal with one. Offers past those (DOUBLE DOWN, a bonus from
-## outside the run) are drawn freely.
+## The morning round's cards: offer_count() perks out of offerable(), drawn by the
+## layer's rarity weights (Catalog.DEAL), from the run's seed, the layer, the day and the
+## reroll (so a save cannot be rerolled by loading it). A perk its requirements opened
+## weighs double, so that a build comes together. The first Catalog.OFFERS of them hold
+## two kinds at least (build / risk / twist / sure) and two branches, when the pool has
+## them (_deal). Cards past those (DOUBLE DOWN, a bonus from outside the run) are drawn
+## freely.
 func deal_offers(forms: Array = []) -> Array:
 	var r := SeededRng.new("%s|offer|%d|%d|%d" % [seed, layer, day, offer_rerolls])
-	var pool := []
+	var out := []
+	_deal(out, _pool(offerable(forms)), offer_count(), r)
+	return out.map(func(c): return c.id)
+
+
+## A reward round's cards (a layer paid, docs/roadmap.md 十.7): offer_count() of them,
+## from the seed, the layer and the reward's index in it (reward_no), so loading a save
+## cannot reroll one. New perks of rarity rare or legendary at the layer's weights
+## (common weighs 0), by the same two-kinds rule as a morning; when fewer of those are
+## offerable than there are cards, commons fill the rest (by their weight) rather than
+## the round coming short. When a dealt perk held is below its top level, the last card
+## is a free upgrade of one of them instead (upgradable(), one drawn from the seed): the
+## card is that perk's id.
+func deal_reward(forms: Array = []) -> Array:
+	var r := SeededRng.new("%s|reward|%d|%d" % [seed, layer, reward_no])
+	var n := offer_count()
+	var ups := upgradable()
+	var up := str(ups[r.next_int(ups.size())]) if not ups.is_empty() else ""
+	var fresh := n - (1 if up != "" else 0)
+	var rare := []
+	var common := []
 	for id in offerable(forms):
+		if str(catalog.perk(id).rarity) == "common":
+			common.append(id)
+		else:
+			rare.append(id)
+	var out := []
+	_deal(out, _pool(rare), fresh, r)
+	_deal(out, _pool(common), fresh, r)
+	var ids: Array = out.map(func(c): return c.id)
+	if up != "":
+		ids.append(up)
+	return ids
+
+
+## The pool a deal draws from: [{id, w, branch, kind}], each perk at its layer's weight,
+## doubled for a perk with requirements.
+func _pool(ids: Array) -> Array:
+	var pool := []
+	for id in ids:
 		var p := catalog.perk(id)
 		var w := Catalog.deal_weight(p, layer)
-		if level(id) > 0:
-			w *= 1.5
 		if not p.get("requires", {}).is_empty():
 			w *= 2.0
 		pool.append({"id": id, "w": w, "branch": p.branch, "kind": Catalog.kind(p)})
-	var n := offer_count()
+	return pool
+
+
+## Draws from `pool` into `out` (pool entries) until `out` holds `n` or the pool is
+## empty. The first Catalog.OFFERS cards hold two kinds and two branches when the pool
+## allows: when the last of those would leave `out` with one, it is drawn again among
+## the other kinds, failing that (the pool has one kind) among the other branches.
+static func _deal(out: Array, pool: Array, n: int, r: SeededRng) -> void:
 	var last := mini(Catalog.OFFERS, n) - 1
-	var out := []
-	var kinds := {}
-	var branches := {}
 	while out.size() < n and not pool.is_empty():
 		var pick := _draw(pool, r)
 		if out.size() == last and out.size() > 0:
 			for key in ["kind", "branch"]:
-				var seen: Dictionary = kinds if key == "kind" else branches
+				var seen := {}
+				for c in out:
+					seen[c[key]] = true
 				if seen.size() >= 2 or not seen.has(pool[pick][key]):
 					continue
 				var other := []
@@ -1100,11 +1172,8 @@ func deal_offers(forms: Array = []) -> Array:
 				if not other.is_empty():
 					pick = pool.find(other[_draw(other, r)])
 					break
-		out.append(pool[pick].id)
-		kinds[pool[pick].kind] = true
-		branches[pool[pick].branch] = true
+		out.append(pool[pick])
 		pool.remove_at(pick)
-	return out
 
 
 ## A weighted pick out of [{w}], as an index.
@@ -1118,6 +1187,58 @@ static func _draw(list: Array, r: SeededRng) -> int:
 		if at < 0.0:
 			return k
 	return list.size() - 1
+
+
+## The next round, after one ended (a pick or an item) or on a new day (`morning`: the
+## morning's round follows the rewards). A reward round pending comes first (one that
+## finds nothing to deal is passed over); once the rewards are done the morning round
+## comes, so the morning round follows a reward round and nothing follows the morning's.
+func _next_round(morning: bool) -> void:
+	offers = []
+	offers_open = false
+	offer_reward = false
+	offer_rerolls = 0
+	while rewards_pending > 0:
+		rewards_pending -= 1
+		var cards := deal_reward()
+		reward_no += 1
+		if not cards.is_empty():
+			_open_round(cards, true)
+			return
+	if morning:
+		_open_round(deal_offers(), false)
+
+
+## Puts a round's cards up (none: no round) and counts them.
+func _open_round(cards: Array, reward: bool) -> void:
+	offers = cards
+	offers_open = not cards.is_empty()
+	offer_reward = reward and offers_open
+	if not offers_open:
+		return
+	stats["reward_rounds" if reward else "rounds"] += 1
+	_note_offered()
+
+
+func _note_offered() -> void:
+	for id in offers:
+		offered[str(id)] = int(offered.get(str(id), 0)) + 1
+
+
+## The round up has ended (its pick, or given up for an item): the next comes.
+func _end_round() -> void:
+	_next_round(offer_reward)
+
+
+## Every round still up or to come today is thrown away, without an item: the run went
+## to the machine or to work (play, work; the game never lets a player leave a round
+## unresolved, the simulator's bots that buy no perks do), or the shop closed.
+func drop_rounds() -> void:
+	offers = []
+	offers_open = false
+	offer_reward = false
+	offer_rerolls = 0
+	rewards_pending = 0
 
 
 ## The next level's price at this layer's stake, or -1 at the top level.
@@ -1136,14 +1257,14 @@ func can_buy_perk(perk_id: String, e: Economy) -> bool:
 
 
 ## Buys the next level of a shelf perk from cash (the dealt ones come through
-## buy_offer). The caller puts it into the machine (apply).
+## buy_offer and buy_upgrade). The caller puts it into the machine (apply).
 func buy_perk(perk_id: String, e: Economy) -> bool:
 	if Catalog.kind(catalog.perk(perk_id)) != "shelf":
 		return false
 	return _buy_level(perk_id, e)
 
 
-## The purchase itself, shelf or offer.
+## The purchase itself, shelf, offer or upgrade.
 func _buy_level(perk_id: String, e: Economy) -> bool:
 	if not can_buy_perk(perk_id, e):
 		return false
@@ -1160,62 +1281,87 @@ func _level_up(perk_id: String) -> void:
 	stats.perks += 1
 
 
-## The day's offers last until the day ends (G: "当天有效，钱够随时买"): the card put
-## away, they wait on the phone's TODAY page.
+## Whether a card can be taken for nothing (a reward round, a CHEAT SHEET): its next
+## level exists, it is sold in a run and its requirements are met.
+func _free_ok(perk_id: String) -> bool:
+	return playing() and perk_price(perk_id) > 0 and not Catalog.meta(catalog.perk(perk_id)) \
+		and missing(perk_id).is_empty()
+
+
+## Whether card `k` can be taken now: on a reward round for nothing, on a morning round
+## from cash (a CHEAT SHEET's free pick is buy_offer's `free`).
 func can_buy_offer(k: int, e: Economy) -> bool:
-	return k >= 0 and k < offers.size() and can_buy_perk(str(offers[k]), e)
-
-
-## Offer `k` bought, from cash, or for free with a CHEAT SHEET. It leaves the offers.
-func buy_offer(k: int, e: Economy, free := false) -> bool:
-	if not playing() or k < 0 or k >= offers.size():
+	if not offers_open or k < 0 or k >= offers.size():
 		return false
 	var id := str(offers[k])
-	if free:
-		if held("cheat") <= 0 or perk_price(id) < 0 or not missing(id).is_empty() or not playing():
+	return _free_ok(id) if offer_reward else can_buy_perk(id, e)
+
+
+## Takes card `k` of the round up: on a reward round for nothing; on a morning round
+## from cash, or with `free` for a CHEAT SHEET (used up). It is the round's pick: the
+## round ends and its other cards go (the next round, if any, comes up). The caller puts
+## the perk into the machine (apply).
+func buy_offer(k: int, e: Economy, free := false) -> bool:
+	if not playing() or not offers_open or k < 0 or k >= offers.size():
+		return false
+	var id := str(offers[k])
+	if offer_reward:
+		if not _free_ok(id):
+			return false
+		_level_up(id)
+	elif free:
+		if held("cheat") <= 0 or not _free_ok(id):
 			return false
 		_use_up("cheat")
 		_level_up(id)
 	elif not _buy_level(id, e):
 		return false
-	offers.remove_at(k)
-	offer_bought = true
+	_end_round()
 	return true
 
 
-## What another deal of offers costs now (it doubles each time in a round).
+## What another deal of the morning round costs now (it doubles each time in a round).
 func reroll_price() -> int:
 	return Catalog.OFFER_REROLL * stake() * (1 << offer_rerolls)
 
 
+## A reroll is only for a morning round still up (before its pick: a pick ends it), with
+## something left to deal and the cash for it. A reward round has none.
+func can_reroll_offers(e: Economy) -> bool:
+	return playing() and offers_open and not offer_reward and not offerable().is_empty() and e.cash >= reroll_price()
+
+
+## The morning round dealt again for reroll_price().
 func reroll_offers(e: Economy) -> bool:
-	var price := reroll_price()
-	if not playing() or offers.is_empty() or not e.pay(price):
+	if not can_reroll_offers(e):
 		return false
+	var price := reroll_price()
+	e.pay(price)
 	stats.shop += price
 	offer_rerolls += 1
 	stats.rerolls += 1
 	offers = deal_offers()
+	offers_open = not offers.is_empty()
+	_note_offered()
 	return true
 
 
-## Can the round still be skipped for an item: nothing bought from it, offers left.
+## Whether the round up can be given up for an item (any round, before its pick).
 func can_skip_offers() -> bool:
-	return playing() and not offer_bought and not offers.is_empty()
+	return playing() and offers_open
 
 
-## The offers card put away. Without `take_item` (LATER, DONE) the offers stay for the
-## day, buyable from the phone. With it (SKIP FOR AN ITEM) and nothing bought, the round
-## is given up for an item (if there is room) and the offers go. Returns that item's id,
-## or "".
-func close_offers(take_item := false) -> String:
-	offers_open = false
-	if not take_item or not can_skip_offers():
+## SKIP FOR AN ITEM: the round up is given up for an item (if there is room; drawn from
+## the seed, the layer and the day, or the reward's index on a reward round) and ends.
+## Returns that item's id, or "".
+func skip_offers() -> String:
+	if not can_skip_offers():
 		return ""
 	var gift := ""
 	stats.skipped_offers += 1
 	if room() > 0:
-		var r := SeededRng.new("%s|skip|%d|%d" % [seed, layer, day])
+		var r := SeededRng.new("%s|skip|%d|r%d" % [seed, layer, reward_no] if offer_reward
+			else "%s|skip|%d|%d" % [seed, layer, day])
 		var pool := []
 		for it in catalog.items:
 			if it.use != "offer":
@@ -1223,8 +1369,50 @@ func close_offers(take_item := false) -> String:
 		if not pool.is_empty():
 			gift = pool[_draw(pool, r)].id
 			items[gift] = held(gift) + 1
-	offers = []
+	_end_round()
 	return gift
+
+
+# --- the shelf's upgrade slots -------------------------------------------------------
+
+## The dealt perks held below their top level (not the shelf's, not `meta`): what an
+## upgrade slot, or a reward round's upgrade card, levels up.
+func upgradable() -> Array:
+	var out := []
+	for p in catalog.dealt():
+		var lv := level(p.id)
+		if lv > 0 and lv < p.levels.size():
+			out.append(p.id)
+	return out
+
+
+## Today's upgrade slots: config.shelf_upgrades of the upgradable() perks, different
+## ones, drawn from the seed, the layer and the day (fewer when fewer are held). Drawn
+## with the morning's shelf, before the morning round: a perk taken from today's round
+## is not on today's slots, it can be tomorrow's.
+func deal_upgrades() -> Array:
+	var r := SeededRng.new("%s|upgrade|%d|%d" % [seed, layer, day])
+	var pool := upgradable()
+	var out := []
+	while out.size() < config.shelf_upgrades and not pool.is_empty():
+		var k := r.next_int(pool.size())
+		out.append(pool[k])
+		pool.remove_at(k)
+	return out
+
+
+func can_buy_upgrade(perk_id: String, e: Economy) -> bool:
+	return upgrades.has(perk_id) and can_buy_perk(perk_id, e)
+
+
+## The next level of a perk in today's upgrade slots, from cash at its price
+## (perk_price), any time of the day; it leaves the slots. The caller puts it into the
+## machine (apply).
+func buy_upgrade(perk_id: String, e: Economy) -> bool:
+	if not can_buy_upgrade(perk_id, e) or not _buy_level(perk_id, e):
+		return false
+	upgrades.erase(perk_id)
+	return true
 
 
 # --- items -----------------------------------------------------------------------------
@@ -1246,9 +1434,11 @@ func room() -> int:
 	return maxi(0, item_cap() - items_held())
 
 
-## Today's shelf: SHELF items drawn by rarity, from the seed, the layer, the day, the reroll.
+## Today's shelf: SHELF items drawn by rarity, from the seed, the layer and the day. It
+## is not rerolled (docs/roadmap.md 十.5): each morning brings another. (The trailing 0
+## was the reroll's count; kept so the shelves stay the ones the seeds always dealt.)
 func deal_shelf() -> Array:
-	var r := SeededRng.new("%s|shelf|%d|%d|%d" % [seed, layer, day, shelf_rerolls])
+	var r := SeededRng.new("%s|shelf|%d|%d|0" % [seed, layer, day])
 	var pool := []
 	for it in catalog.items:
 		pool.append({"id": it.id, "w": float(Catalog.ITEM_WEIGHT.get(it.rarity, 1))})
@@ -1258,20 +1448,6 @@ func deal_shelf() -> Array:
 		out.append(pool[k].id)
 		pool.remove_at(k)
 	return out
-
-
-func shelf_price() -> int:
-	return Catalog.SHELF_REROLL * stake() * (1 << shelf_rerolls)
-
-
-func reroll_shelf(e: Economy) -> bool:
-	var price := shelf_price()
-	if not playing() or not e.pay(price):
-		return false
-	stats.shop += price
-	shelf_rerolls += 1
-	shelf = deal_shelf()
-	return true
 
 
 ## RETURNS and a RETURN SLIP: tray entries ({form, ticket, bet}) given back to the
@@ -1481,17 +1657,17 @@ func buy_service(service_id: String, e: Economy) -> bool:
 # --- save ------------------------------------------------------------------------------
 
 const _INTS := ["layer", "day", "shifts", "borrowed", "loan_due", "loan_bonus", "extra_days", "offer_bonus",
-	"offer_rerolls", "shelf_rerolls", "dry", "snow", "layer_losers", "layer_tops", "day_spent", "day_won",
+	"offer_rerolls", "rewards_pending", "reward_no", "dry", "snow", "layer_losers", "layer_tops", "day_spent", "day_won",
 	"day_tickets", "noback_days", "window_n", "window_printed", "window_paid", "window_wins", "streak",
 	"push_stake", "push_printed", "window_bar", "push_need"]
-const _BOOLS := ["offers_open", "offer_bought", "happy", "safety", "sure_armed", "overtime"]
+const _BOOLS := ["offers_open", "offer_reward", "happy", "safety", "sure_armed", "overtime"]
 
 
 func to_dict() -> Dictionary:
 	var d := {"seed": seed, "scenes": scenes.duplicate(), "today": today, "status": status, "story": story, "scrap": scrap,
 		"stats": stats.duplicate(), "perks": perks.duplicate(), "items": items.duplicate(),
 		"services": services.duplicate(), "reports": reports.duplicate(), "offers": offers.duplicate(),
-		"shelf": shelf.duplicate(), "last_item": last_item, "forms_today": forms_today.duplicate(),
+		"shelf": shelf.duplicate(), "upgrades": upgrades.duplicate(), "last_item": last_item, "forms_today": forms_today.duplicate(),
 		"coin_on": coin_on.duplicate(), "sealed": sealed.duplicate(true), "last_window": last_window.duplicate()}
 	for k in _INTS + _BOOLS:
 		d[k] = get(k)
@@ -1499,7 +1675,10 @@ func to_dict() -> Dictionary:
 
 
 ## A run saved with to_dict(), or null if it does not fit the config. A run saved
-## before the perk offers loads with none waiting (they come with the next day).
+## before the perk offers loads with none waiting (they come with the next day); so does
+## one saved before the rounds (M9.8 step 2) whose offers were put away (LATER) or had
+## had something bought from them: under the rounds those had ended. One saved before
+## the upgrade slots loads without them (the next morning draws them).
 static func from_dict(d: Dictionary, run_config: RunConfig) -> RunState:
 	var r := RunState.new()
 	r.config = run_config
@@ -1544,7 +1723,16 @@ static func from_dict(d: Dictionary, run_config: RunConfig) -> RunState:
 			r.items.erase(id)
 	r.offers = _ids(d.get("offers"), func(id): return not r.catalog.perk(id).is_empty() and not Catalog.meta(r.catalog.perk(id)))
 	r.shelf = _ids(d.get("shelf"), func(id): return not r.catalog.item(id).is_empty())
-	r.offers_open = r.offers_open and not r.offers.is_empty()
+	r.upgrades = _ids(d.get("upgrades"), func(id): return r.upgradable().has(id))
+	if not r.offers_open or bool(d.get("offer_bought", false)):
+		r.offers = []
+	r.offers_open = not r.offers.is_empty()
+	r.offer_reward = r.offer_reward and r.offers_open
+	r.offer_rerolls = maxi(0, r.offer_rerolls)
+	# Reward rounds: only after a layer was paid, at most one plus that layer's days.
+	var most := 0 if r.layer <= 0 else int(run_config.layer(r.layer - 1).days) + 1
+	r.rewards_pending = clampi(r.rewards_pending, 0, most)
+	r.reward_no = maxi(0, r.reward_no)
 	r.last_item = str(d.get("last_item", ""))
 	r.scrap = clampf(float(d.get("scrap", 0.0)), 0.0, 1.0e9)
 	if r.catalog.item(r.last_item).is_empty():

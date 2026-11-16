@@ -24,8 +24,9 @@ extends Node
 ## lies wholly outside the target's band ("(stopped at N)"). Off by default: the death
 ## report wants every run.
 ## --save=<path>: writes each bot's per-seed outcomes and headline numbers as JSON.
-## --against=<path>: reads such a file and, for each bot in both with the same seed
-## prefix and run count, prints the paired comparison (SimReport.paired: the same bot
+## --against=<path>: reads such a file (one saved before a field was added still reads:
+## only the outcomes, the clear rate and the run count are used) and, for each bot in
+## both with the same seed prefix and run count, prints the paired comparison (SimReport.paired: the same bot
 ## before and after a number change; the bots' dice are seeded by the seed alone, so the
 ## same seeds play the same boxes and draw the same dice).
 ## Then what a dollar of tickets pays back at some perk levels (whole boxes bought
@@ -60,7 +61,10 @@ extends Node
 ## own spec, paired with it on the same seeds, and the best by clear rate named; on a tie
 ## the higher layer-1 rate decides, then the higher return, and the line says which.
 ## In --detail's trigger table, L1 / L2 / L3 ("拿得到", roadmap 十三.10): of the runs
-## that played the layer, the share holding the perk when it ended there.
+## that played the layer, the share holding the perk when it ended there; beside them
+## D1 / D2 / D3, the share in which it had been dealt as a card by then (any round,
+## reroll or reward round), so "never dealt" and "dealt but not bought" read apart. And
+## under each bot the rounds a run (morning, reward).
 
 ## The roadmap's targets (docs/roadmap.md 一): [text, low, high] in percent of runs
 ## cleared ("<": under high). build and perks have none yet.
@@ -349,13 +353,19 @@ func _print_bot(s: Dictionary, detail: bool) -> void:
 	print("  carry (cash / next due): " + "; ".join(c))
 	if not detail:
 		return
+	var rd: Dictionary = s.get("rounds", {})
+	print("  rounds a run: morning %.1f, reward %.1f" % [float(rd.get("morning", 0.0)), float(rd.get("reward", 0.0))])
 	if not s.triggers.is_empty():
-		print("  %-12s %5s %5s %8s %8s %6s  %5s %5s %5s" % ["perk", "held", "day", "fired/r", "/100 tk", "mean%", "L1", "L2", "L3"])
+		print("  %-12s %5s %5s %8s %8s %6s  %5s %5s %5s  %5s %5s %5s" % ["perk", "held", "day", "fired/r", "/100 tk", "mean%",
+			"L1", "L2", "L3", "D1", "D2", "D3"])
 	for t in s.triggers:
 		var by := []
 		for v in t.by_layer:
 			by.append("%4.0f%%" % (v * 100.0) if v >= 0.0 else "    -")
-		var layers := "  " + " ".join(by)
+		var dealt := []
+		for v in t.get("offered_by", []):
+			dealt.append("%4.0f%%" % (v * 100.0) if v >= 0.0 else "    -")
+		var layers := "  " + " ".join(by) + "  " + " ".join(dealt)
 		if t.held <= 0.0:
 			print("  %-12s %4.0f%% %5s %8s %8s %6s%s" % [t.id, 0.0, "-", "-", "-", "", layers])
 			continue
@@ -477,7 +487,8 @@ func _save(path: String, prefix: String, runs: int, rows: Array) -> void:
 		var s: Dictionary = row[1]
 		bots[row[0]] = {"runs": s.runs, "layers": s.layers, "outcomes": s.outcomes, "cleared": s.cleared,
 			"wilson": s.wilson, "layer_rates": s.layer_rates, "days": s.days, "tickets": s.tickets,
-			"return": s["return"], "return_fees": s.return_fees, "perks": s.perks, "stopped": s.stopped}
+			"return": s["return"], "return_fees": s.return_fees, "perks": s.perks, "stopped": s.stopped,
+			"rounds": s.rounds}
 	var f := FileAccess.open(_file_path(path), FileAccess.WRITE)
 	if f == null:
 		push_error("cannot write " + _file_path(path))

@@ -2,7 +2,7 @@ class_name Phone
 extends CanvasLayer
 ## The player's phone, screen cracked (G's to-do list, item 10): the LOAN app in both
 ## modes; in the run also the SHOP (three pages: SHELF, the shelf's perks for sale and
-## the build held; TODAY, the day's perk offers and item shelf; ITEMS, the items held)
+## the build held; TODAY, the day's item shelf; ITEMS, the items held)
 ## and CONTACTS (calling the people in it; who they are and what they sell comes in
 ## M12, this is the shell).
 ## Opened by the PHONE key, P, the phone on the table or the PHONE key on the run's card.
@@ -12,8 +12,7 @@ extends CanvasLayer
 ## translated, except the phone's own words (tr here). While it is up nothing reaches
 ## the table, the machine or the card behind it.
 
-## loan, buy_perk, buy_offer, offer_free, reroll_offers, skip_offers, buy_item,
-## reroll_shelf, use_item, buy_service
+## loan, buy_perk, buy_item, use_item, buy_service
 signal acted(action: String, id: String)
 signal closed
 
@@ -44,7 +43,7 @@ var _back: Button
 var _page: VBoxContainer
 var _scroll: ScrollContainer
 var _buttons := {}
-var _rows := {}                  ## tools: the cards on the page by id (shelf_<perk>, build_<perk>, offer_<k>)
+var _rows := {}                  ## tools: the cards on the page by id (shelf_<perk>, build_<perk>)
 var _shade := ColorRect.new()
 
 
@@ -191,7 +190,7 @@ func key(id: String) -> Button:
 	return b if is_instance_valid(b) else null
 
 
-## Tools: a card on the page (shelf_<perk id>, build_<perk id>, offer_<k>), or null.
+## Tools: a card on the page (shelf_<perk id>, build_<perk id>), or null.
 func row(id: String) -> Control:
 	var c = _rows.get(id)
 	return c if is_instance_valid(c) else null
@@ -343,62 +342,12 @@ func _shelf_tab() -> void:
 			v.add_child(l)
 
 
-## TODAY: the day's perk offers (the morning's card, buyable until the day ends: BUY,
-## FREE with a CHEAT SHEET, REROLL, SKIP FOR AN ITEM while nothing was bought), then
-## today's item shelf (BUY, NEW SHELF).
+## TODAY: today's item shelf (BUY; it is not rerolled). A round of perk offers is only
+## on its card (M9.8 step 2), so it is not here.
 func _today_tab() -> void:
-	_page.add_child(_label(str(_st.get("offers_line", "")), 20, DIM))
-	for o in _st.get("offers", []):
-		var k := int(o.k)
-		# The rarity is not written (G): the name is in its colour.
-		var v := _card("offer_%d" % k, str(o.name), str(o.kind), _tint(str(o.get("rarity_id", ""))))
-		var desc := _label(str(o.desc), 20, DIM)
-		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		v.add_child(desc)
-		var keys := HBoxContainer.new()
-		keys.add_theme_constant_override("separation", 8)
-		var b := _button(str(o.buy_text), GREEN, Color("#08200f"), 20)
-		b.custom_minimum_size = Vector2(0, 40)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.disabled = not o.can_buy
-		b.pressed.connect(func(): _tap(); acted.emit("buy_offer", str(k)))
-		keys.add_child(b)
-		_buttons["buy_offer_%d" % k] = b
-		if str(o.get("free_text", "")) != "":
-			var f := _button(str(o.free_text), BLUE, TEXT, 20)
-			f.custom_minimum_size = Vector2(84, 40)
-			f.pressed.connect(func(): _tap(); acted.emit("offer_free", str(k)))
-			keys.add_child(f)
-			_buttons["offer_free_%d" % k] = f
-		v.add_child(keys)
-	var ends := HBoxContainer.new()
-	ends.add_theme_constant_override("separation", 8)
-	for a in [["reroll_offers", PANEL.lightened(0.1)], ["skip_offers", PANEL.lightened(0.1)]]:
-		var d: Dictionary = _st.get(a[0], {})
-		if d.is_empty():
-			continue
-		var b := _button(str(d.text), a[1], TEXT, 20)
-		b.custom_minimum_size = Vector2(0, 42)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.disabled = not d.get("ok", false)
-		var action: String = a[0]
-		b.pressed.connect(func(): _tap(); acted.emit(action, ""))
-		ends.add_child(b)
-		_buttons[action] = b
-	if ends.get_child_count() > 0:
-		_page.add_child(ends)
-	_gap(4)
 	_page.add_child(_label(str(_st.get("shelf_line", "")), 20, DIM))
 	for it in _st.get("shelf", []):
 		_page.add_child(_item_card(it, false))
-	var re: Dictionary = _st.get("reroll_shelf", {})
-	if not re.is_empty():
-		var b := _button(str(re.text), PANEL.lightened(0.1), TEXT, 20)
-		b.custom_minimum_size = Vector2(0, 42)
-		b.disabled = not re.get("ok", false)
-		b.pressed.connect(func(): acted.emit("reroll_shelf", ""))
-		_page.add_child(b)
-		_buttons["reroll_shelf"] = b
 
 
 ## A card on the page with its name and a note at the top right; returns the column the

@@ -34,7 +34,10 @@ const FIRED_MIN := 0.9           ## given: a given core perk fires in at least t
 ##              firing, -1 when it adds none), won (ALL IN only: pushes won per holder),
 ##              by_layer ("拿得到", roadmap 十三.10: for each layer, of the runs that
 ##              played it, the share holding the perk when it ended there, paid or
-##              failed; -1 when none played it)}
+##              failed; -1 when none played it), offered_by (the same, the share in
+##              which it had been dealt as a card by then: "dealt but not bought"
+##              against "never dealt", roadmap 十.8)}
+##   rounds     {morning, reward}: the rounds dealt a run, the mean
 ##   deaths     share of all runs that failed in each layer
 ##   death_blocks  per layer with DEATHS_MIN deaths or more: {layer (1-based), n, cash,
 ##              short, shifts, tickets (medians), sets ([[perk ids joined, share of the
@@ -70,6 +73,8 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 	played_in.resize(layers)
 	played_in.fill(0)
 	var held_in := {}     # perk id -> [runs holding it when each layer ended]
+	var offered_in := {}  # perk id -> [runs it had been offered in by the time each layer ended]
+	var rounds := {"morning": 0, "reward": 0}
 	var dead := []   # the death of each failed run
 	var carry := []
 	carry.resize(maxi(0, layers - 1))
@@ -113,6 +118,14 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 					held_in[id].resize(layers)
 					held_in[id].fill(0)
 				held_in[id][l] += 1
+			for id in (r.offered_by[l] if l < r.get("offered_by", []).size() else {}):
+				if not offered_in.has(id):
+					offered_in[id] = []
+					offered_in[id].resize(layers)
+					offered_in[id].fill(0)
+				offered_in[id][l] += 1
+		for k in rounds:
+			rounds[k] += int(r.get("rounds", {}).get(k, 0))
 		if not r.death.is_empty():
 			dead.append(r.death)
 		for k in mini(carry.size(), r.carry.size()):
@@ -140,13 +153,15 @@ static func summary(spec: Dictionary, base_forms: Array, runs: int, seed_prefix 
 		"layer_rates": rates, "days": days / n, "tickets": tickets / n, "return": float(won) / spent if spent > 0 else 0.0,
 		"return_fees": float(won) / (spent + fees) if spent + fees > 0 else 0.0, "fees": fees / n,
 		"days_spared": spared / n, "perks": perks / n, "best": percentiles(bests, BEST_PCT), "outcomes": outcomes,
-		"wilson": wilson(cleared, played), "triggers": _triggers(spec, held, played, played_in, held_in),
+		"wilson": wilson(cleared, played), "triggers": _triggers(spec, held, played, played_in, held_in, offered_in),
+		"rounds": {"morning": rounds.morning / n, "reward": rounds.reward / n},
 		"deaths": _deaths(dead, layers, played),
 		"death_blocks": _death_blocks(dead, layers), "carry": carry_rows, "stopped": stopped}
 
 
 ## The trigger table's rows (summary's `triggers`).
-static func _triggers(spec: Dictionary, held: Dictionary, runs: int, played_in: Array, held_in: Dictionary) -> Array:
+static func _triggers(spec: Dictionary, held: Dictionary, runs: int, played_in: Array, held_in: Dictionary,
+		offered_in: Dictionary = {}) -> Array:
 	var ids := []
 	for id in spec.params.engine + spec.params.perks + spec.params.shelf + spec.params.given.keys():
 		if not ids.has(id):
@@ -161,16 +176,24 @@ static func _triggers(spec: Dictionary, held: Dictionary, runs: int, played_in: 
 		var h: Dictionary = held.get(id, {"n": 0, "day": 0, "tickets": 0, "fired": 0, "pct": 0, "won": 0})
 		var counted := RunState.FIRED.has(id)
 		var hn := maxi(1, int(h.n))
-		var by := []
-		for l in played_in.size():
-			by.append(float(held_in.get(id, [])[l]) / played_in[l] if held_in.has(id) and played_in[l] > 0
-				else (0.0 if played_in[l] > 0 else -1.0))
+		var by := _shares(held_in, id, played_in)
+		var dealt := _shares(offered_in, id, played_in)
 		rows.append({"id": id, "held": float(h.n) / maxi(1, runs), "day": float(h.day) / hn,
 			"per_run": float(h.fired) / hn if counted else -1.0,
 			"per_100": float(h.fired) * 100.0 / h.tickets if counted and h.tickets > 0 else (0.0 if counted else -1.0),
 			"pct": float(h.pct) / h.fired if h.pct != 0 and h.fired > 0 else -1.0,
-			"won": float(h.won) / hn if id == "allin" else -1.0, "by_layer": by})
+			"won": float(h.won) / hn if id == "allin" else -1.0, "by_layer": by, "offered_by": dealt})
 	return rows
+
+
+## For each layer, of the runs that played it (`played_in`), the share counted for `id`
+## in `counts` (id -> [runs a layer]); -1 for a layer none played.
+static func _shares(counts: Dictionary, id: String, played_in: Array) -> Array:
+	var out := []
+	for l in played_in.size():
+		out.append(float(counts.get(id, [])[l]) / played_in[l] if counts.has(id) and played_in[l] > 0
+			else (0.0 if played_in[l] > 0 else -1.0))
+	return out
 
 
 ## The share of all `runs` that died in each layer.

@@ -318,13 +318,11 @@ func test_savings_grow_every_morning() -> void:
 	var r := _run()
 	var e := r.new_economy()
 	r.perks = {"savings": 3}
-	r.close_offers()
 	r.work(e)
 	var cash := e.cash
 	r.end_day(e)
 	eq(e.cash, cash + roundi(cash * 0.3), "SAVINGS 3: +30% the morning after a shift too (G)")
 	var grown := roundi(cash * 0.3)
-	r.close_offers()
 	r.play(e)
 	cash = e.cash
 	r.end_day(e)
@@ -365,12 +363,10 @@ func test_risk_perks_have_their_price() -> void:
 	check(not r3.can_work(), "NO WAY BACK: no shift")
 	check(not r3.work(e3), "work refused")
 	eq(e3.earned, 0, "no wage")
-	r3.close_offers()
 	r3.play(e3)
 	r3.end_day(e3)
 	eq(r3.noback_days, 1, "a day of play since")
 	eq(_pays(r3, _ticket(2)), 110, "+10%")
-	r3.close_offers()
 	r3.play(e3)
 	r3.end_day(e3)
 	eq(_pays(r3, _ticket(2)), 120, "+20% after two")
@@ -408,7 +404,6 @@ func test_twist_perks() -> void:
 	eq(r2.prize_pct(null), 40, "four forms: VARIETY's +40%, LOYAL is off")
 	eq(r2.day_tickets, 20, "tickets of the day counted")
 	var e2 := r2.new_economy()
-	r2.close_offers()
 	r2.play(e2)
 	r2.end_day(e2)
 	eq(r2.prize_pct(null), 0, "a new day: nothing bought yet")
@@ -514,7 +509,6 @@ func test_twist_perks() -> void:
 	var e7 := r7.new_economy()
 	r7.perks = {"account": 1}
 	var m7 := r7.new_machine(pack.forms, true)
-	r7.close_offers()
 	r7.play(e7)
 	check(e7.tab_on, "the tab is open")
 	eq(e7.tab_limit, r7.loan_left(), "as far as the house line")
@@ -543,7 +537,6 @@ func test_twist_perks() -> void:
 	var wage := r8.wage()
 	r8.perks = {"moonlight": 1}
 	eq(r8.shift_wage(), wage * 70 / 100, "MOONLIGHTING 1: the wage -30%")
-	r8.close_offers()
 	var before := e8.cash
 	r8.work(e8)
 	eq(e8.cash - before, wage * 70 / 100, "a day of work pays the wage less the cut")
@@ -559,7 +552,6 @@ func test_twist_perks() -> void:
 	eq(sold, 30, "no limit: the machine sells what the money buys")
 	r8.count_sales(sold, 0, "core:catch")
 	r8.end_day(e8)
-	r8.close_offers()
 	r8.play(e8)
 	check(r8.can_open(), "the tickets open the next day")
 	r8.perks = {"moonlight": 2}
@@ -577,7 +569,6 @@ func test_sure_wins_move_a_prize_forward() -> void:
 	var r := _run()
 	r.perks = {"stakeout": 1}
 	var e := r.new_economy()
-	r.close_offers()
 	r.play(e)
 	var m := r.new_machine(pack.forms, true)
 	check(m.sure_next.is_valid(), "the machine asks the run")
@@ -606,7 +597,6 @@ func test_sure_wins_move_a_prize_forward() -> void:
 	var r2 := _run()
 	r2.perks = {"insurance": 2}
 	var e2 := r2.new_economy()
-	r2.close_offers()
 	r2.play(e2)
 	var m2 := r2.new_machine(pack.forms, true)
 	e2.credit = 100
@@ -731,91 +721,471 @@ func test_offers_are_dealt_each_day() -> void:
 	var res := _rich(100000)
 	var r: RunState = res[0]
 	var e: Economy = res[1]
-	check(r.offers_open, "offers wait at the start of the run")
-	eq(r.offers.size(), Catalog.OFFERS, "three of them")
+	check(r.offers_open and not r.offer_reward, "a morning round is up at the start of the run")
+	eq(r.offers.size(), Catalog.OFFERS, "three cards")
+	eq(r.stats.rounds, 1, "counted")
 	var again := _run()
 	eq(again.offers, r.offers, "the same seed deals the same")
 	var branches := {}
 	for id in r.offers:
 		check(r.missing(id).is_empty(), "%s: its requirements are met" % id)
 		check(not r.catalog.perk(id).get("shelf", false), "%s: not a shelf perk" % id)
+		eq(int(r.offered.get(id, 0)), 1, "%s: counted as offered" % id)
 		branches[r.catalog.perk(id).branch] = true
 	check(branches.size() >= 2, "from two branches at least")
 	var plus := _run()
 	plus.offer_bonus = 2
 	eq(plus.deal_offers().size(), 5, "a bonus from outside the run deals more")
-	# Buying: from cash, at the layer's stake; it leaves the offers.
+	# Taking one: from cash, at the layer's stake; it is the round's pick.
 	var id: String = r.offers[0]
 	var price := r.perk_price(id)
 	var cash := e.cash
-	check(r.buy_offer(0, e), "buy the first offer")
+	check(r.buy_offer(0, e), "buy the first card")
 	eq(r.level(id), 1, "the perk is held")
 	eq(cash - e.cash, price, "for its price")
-	eq(r.offers.size(), Catalog.OFFERS - 1, "it leaves the offers")
-	check(not r.can_skip_offers(), "something bought: no skipping for an item")
-	eq(r.close_offers(true), "", "something bought: no gift for skipping")
-	check(not r.offers_open, "closed")
-	eq(r.offers.size(), Catalog.OFFERS - 1, "the rest stay for the day")
-	# Rerolls cost double each time.
+	check(not r.offers_open and r.offers.is_empty(), "the round is over: the other cards are gone")
+	# A new day, a new round; rerolls cost double; giving it up gives an item.
 	r.play(e)
 	r.end_day(e)
-	check(r.offers_open and r.day == 2, "new offers after the day")
+	check(r.offers_open and r.day == 2 and not r.offer_reward, "a new round the next morning")
+	eq(r.stats.rounds, 2, "counted")
 	var p1 := r.reroll_price()
 	check(r.reroll_offers(e), "reroll")
 	eq(r.reroll_price(), p1 * 2, "the next costs double")
-	# Skipping a whole round gives an item.
-	var gift := r.close_offers(true)
-	check(gift != "" and r.held(gift) == 1, "skipped: an item for it (%s)" % gift)
+	eq(r.stats.rounds, 2, "a reroll is the same round")
+	var gift := r.skip_offers()
+	check(gift != "" and r.held(gift) == 1, "given up: an item for it (%s)" % gift)
 	eq(r.stats.skipped_offers, 1, "counted")
+	check(not r.offers_open, "and the round is over")
 	check(e.balanced(), "ledger balanced")
-	# The next layer deals again, at its stake.
+	# The next layer deals again, at its stake (after its reward rounds).
 	var r2 := _run()
 	var e2 := r2.new_economy()
 	e2.bonus(10000)
 	r2.pay(e2)
-	check(r2.layer == 1 and r2.offers_open, "offers for the new layer")
+	_past_rewards(r2)
+	check(r2.layer == 1 and r2.offers_open and not r2.offer_reward, "a morning round for the new layer")
 	eq(r2.perk_price(r2.offers[0]), int(r2.catalog.perk(r2.offers[0]).levels[0].price) * 5, "at stake 5")
 
 
-## G: "当天有效，钱够随时买": the card put away (LATER), the offers stay buyable and
-## rerollable until the day ends; SKIP FOR AN ITEM gives them up; a new day deals anew.
-func test_offers_last_the_day() -> void:
+## The reward rounds up, each given up for nothing in particular (an item if there is room).
+func _past_rewards(r: RunState) -> void:
+	var guard := 0
+	while r.offers_open and r.offer_reward and guard < 20:
+		guard += 1
+		r.skip_offers()
+
+
+## G (docs/roadmap.md 十.1-4, M9.8 step 2): a round is a pick of one. It ends with one
+## card taken (bought, or free with a CHEAT SHEET) or given up for an item; a reroll
+## comes only before the pick. Every order of those.
+func test_a_round_is_a_pick_of_one() -> void:
+	# Buy first: nothing more of the round, no reroll, no item.
 	var res := _rich(100000)
 	var r: RunState = res[0]
 	var e: Economy = res[1]
-	var dealt := r.offers.duplicate()
-	eq(r.close_offers(), "", "LATER: no item")
-	check(not r.offers_open, "the card is put away")
-	eq(r.offers, dealt, "the offers wait")
-	check(r.can_skip_offers(), "still skippable for an item")
-	check(r.play(e), "the day goes on")
-	check(r.can_buy_offer(0, e), "an offer is still for sale at the machine")
-	var id: String = r.offers[1]
-	check(r.buy_offer(1, e), "and bought")
-	eq(r.level(id), 1, "held")
-	check(not r.can_skip_offers() and r.close_offers(true) == "", "something bought: no item for skipping")
-	eq(r.offers.size(), dealt.size() - 1, "the others stay")
-	check(r.reroll_offers(e), "a reroll after the card was put away")
-	check(not r.offers.is_empty(), "a new deal")
-	# The next day's offers replace them.
+	check(r.buy_offer(1, e), "buy the second card")
+	var cash := e.cash
+	for k in Catalog.OFFERS:
+		check(not r.can_buy_offer(k, e) and not r.buy_offer(k, e), "card %d: no second pick" % k)
+	check(not r.can_reroll_offers(e) and not r.reroll_offers(e), "no reroll after the pick")
+	check(not r.can_skip_offers() and r.skip_offers() == "", "no item after the pick")
+	eq(e.cash, cash, "nothing more paid")
+	eq(r.stats.perks, 1, "one perk from the round")
+	# Reroll, then buy: the new deal's card; then nothing more.
+	res = _rich(100000)
+	r = res[0]
+	e = res[1]
+	var first := r.offers.duplicate()
+	check(r.reroll_offers(e) and r.reroll_offers(e), "two rerolls before the pick")
+	check(r.offers.size() == Catalog.OFFERS and r.offers != first, "a new deal")
+	eq(r.offer_rerolls, 2, "rerolled twice")
+	var id: String = r.offers[2]
+	check(r.buy_offer(2, e) and r.level(id) == 1, "then a pick")
+	check(not r.reroll_offers(e) and not r.buy_offer(0, e), "and nothing after it")
+	# Reroll, then give up: an item, and nothing after.
+	res = _rich(100000)
+	r = res[0]
+	e = res[1]
+	r.reroll_offers(e)
+	var gift := r.skip_offers()
+	check(gift != "", "rerolled, then given up for an item (%s)" % gift)
+	check(not r.buy_offer(0, e) and not r.reroll_offers(e) and r.skip_offers() == "", "nothing after it")
+	eq(r.stats.perks, 0, "no perk")
+	# Give up first: nothing to buy after.
+	res = _rich(100000)
+	r = res[0]
+	e = res[1]
+	check(r.skip_offers() != "", "given up at once")
+	check(not r.buy_offer(0, e, false) and not r.reroll_offers(e), "nothing to buy or reroll")
+	# A CHEAT SHEET's free card is the pick.
+	res = _rich(100000)
+	r = res[0]
+	e = res[1]
+	r.items = {"cheat": 2}
+	cash = e.cash
+	check(r.buy_offer(0, e, true), "a card free")
+	check(not r.buy_offer(1, e, true) and not r.buy_offer(1, e), "no second, free or bought")
+	eq(r.held("cheat"), 1, "one CHEAT SHEET used")
+	eq(e.cash, cash, "nothing paid")
+	# A round no card of which the cash covers: still given up, or rerolled when it can.
+	var poor := _run()
+	var pe := poor.new_economy()
+	pe.pay(pe.cash)
+	check(not poor.can_buy_offer(0, pe) and not poor.reroll_offers(pe), "no money: no buy, no reroll")
+	check(poor.can_skip_offers(), "but the item")
+	# DOUBLE DOWN: more cards to choose among, still one pick.
+	res = _rich(100000)
+	r = res[0]
+	e = res[1]
+	r.perks = {"double": 2}
+	r.reroll_offers(e)
+	eq(r.offers.size(), Catalog.OFFERS + 2, "DOUBLE DOWN 2: five cards")
+	check(r.buy_offer(4, e) and not r.offers_open, "one pick of five ends it")
+	check(e.balanced(), "ledger balanced")
+
+
+## G (docs/roadmap.md 十.4): the game never lets a player leave a round unresolved; the
+## run itself throws a round away (no item) when the day is spent at the machine or at
+## work with one still up, and the reward rounds pending with it.
+func test_walking_away_throws_the_rounds_away() -> void:
+	var res := _rich(100000)
+	var r: RunState = res[0]
+	var e: Economy = res[1]
+	var cards := r.offers.duplicate()
+	check(r.play(e), "a day of play with the round up")
+	check(not r.offers_open and r.offers.is_empty(), "the round is gone")
+	eq(r.items_held(), 0, "no item for it")
+	eq(r.stats.skipped_offers, 0, "not counted as given up")
+	check(not r.buy_offer(0, e) and not r.reroll_offers(e) and r.skip_offers() == "", "nothing of it at the machine")
+	eq(r.stats.perks, 0, "nothing bought")
 	r.end_day(e)
-	check(r.offers_open and r.day == 2, "a new day: a new round, the card up")
-	check(r.can_skip_offers(), "nothing bought from it yet")
-	var held := r.items_held()
-	r.close_offers()
-	check(r.play(e), "LATER, then a day of play")
-	var gift := r.close_offers(true)
-	check(gift != "" and r.items_held() == held + 1, "SKIP from the phone: an item (%s)" % gift)
-	check(r.offers.is_empty() and not r.can_skip_offers(), "the offers are gone")
-	eq(r.close_offers(true), "", "and only one item a round")
-	check(not r.buy_offer(0, e) and not r.reroll_offers(e), "nothing left to buy or reroll")
+	check(r.offers_open and r.offers != cards, "the next morning: a new round")
+	check(r.work(e) and not r.offers_open, "a shift throws it away too")
 	r.end_day(e)
-	eq(r.offers.size(), Catalog.OFFERS, "the next morning deals again")
-	# Saved and loaded with the card away: the offers stay.
-	r.close_offers()
+	# A layer paid early: reward rounds up and pending; a day of play throws them all away.
+	var r2 := _run()
+	var e2 := r2.new_economy()
+	e2.bonus(100000)
+	r2.pay(e2)
+	check(r2.offer_reward and r2.rewards_pending > 0, "reward rounds up after paying early")
+	check(r2.play(e2), "a day of play instead")
+	check(not r2.offers_open and r2.rewards_pending == 0 and not r2.offer_reward, "every round of the morning gone")
+	eq(r2.items_held(), 0, "without an item")
+	r2.end_day(e2)
+	check(r2.offers_open and not r2.offer_reward, "the next morning: only the morning's round")
+
+
+## G (docs/roadmap.md 十.6): only perks not held are dealt; a held one is levelled up
+## from the shelf's upgrade slots or a reward round's upgrade card.
+func test_only_new_perks_are_dealt() -> void:
+	var r := _run()
+	r.layer = 1
+	r.perks = {"closer": 1, "penny": 1, "luck": 2, "prizes": 1, "shark": 1, "magnet": 1, "stakeout": 1}
+	for i in 60:
+		r.seed = "NEW-%d" % i
+		for k in 3:
+			r.offer_rerolls = k
+			for id in r.deal_offers():
+				eq(r.level(id), 0, "%s: held, not dealt" % id)
+		r.reward_no = i % 4
+		for id in r.deal_reward():
+			check(r.level(id) == 0 or r.upgradable().has(id), "a reward card is new or an upgrade (%s)" % id)
+	for id in r.perks:
+		check(not r.offerable().has(id), "%s: held, not offerable" % id)
+	# Every dealt perk held, none at its top: no morning round.
+	var all := _run()
+	var e := all.new_economy()
+	for p in all.catalog.dealt():
+		all.perks[p.id] = 1
+	eq(all.offerable(), [], "nothing left to deal")
+	eq(all.deal_offers(), [], "a morning deals nothing")
+	all.play(e)
+	all.end_day(e)
+	check(not all.offers_open and all.offers.is_empty(), "no round when nothing is left to deal")
+	eq(all.stats.rounds, 1, "the first morning's round only")
+	check(not all.reroll_offers(e) and all.skip_offers() == "", "nothing to reroll or give up")
+	# A reward round with nothing new: only its upgrade card.
+	all.reward_no = 0
+	var cards := all.deal_reward()
+	eq(cards.size(), 1, "only the upgrade card")
+	check(all.level(str(cards[0])) == 1, "a perk held (%s)" % str(cards[0]))
+
+
+## G (docs/roadmap.md 十.5-6, M9.8 step 2): the shelf is not rerolled; each morning it
+## holds config.shelf_upgrades upgrade slots, each a dealt perk held below its top,
+## bought from cash at its next level's price, once, that day.
+func test_upgrade_slots() -> void:
+	var res := _rich(100000)
+	var r: RunState = res[0]
+	var e: Economy = res[1]
+	check(not r.has_method("reroll_shelf"), "the shelf has no reroll")
+	eq(r.upgrades, [], "nothing held: no slot")
+	var held := {"closer": 1, "penny": 1, "luck": 2, "stakeout": 1, "savings": 1, "combo": 1}
+	r.perks = held.duplicate()
+	eq(r.upgradable(), ["closer", "penny", "luck"], "the dealt perks held below their top (not STAKEOUT at its top, SAVINGS on the shelf, CHAIN parked)")
+	var seen := {}
+	for i in 60:
+		r.seed = "UP-%d" % i
+		var ups := r.deal_upgrades()
+		eq(ups.size(), 1, "one slot")
+		check(r.upgradable().has(ups[0]), "drawn among them (%s)" % str(ups))
+		seen[ups[0]] = true
+		eq(r.deal_upgrades(), ups, "the same seed, layer and day draw the same")
+	eq(seen.size(), 3, "each of them now and then")
+	# Bought once, at the perk's next price.
+	r.seed = "P-1"
+	r.upgrades = r.deal_upgrades()
+	var id: String = r.upgrades[0]
+	var off: String = ["closer", "luck", "penny"].filter(func(x): return x != id)[0]
+	check(not r.can_buy_upgrade(off, e) and not r.buy_upgrade(off, e), "a perk not in today's slots: not sold")
+	var price := r.perk_price(id)
+	var cash := e.cash
+	check(r.buy_upgrade(id, e), "the slot's upgrade bought")
+	eq(r.level(id), int(held[id]) + 1, "a level up")
+	eq(cash - e.cash, price, "at its next price")
+	check(not r.upgrades.has(id) and not r.buy_upgrade(id, e), "it leaves the slot: once")
+	# Gone the next day: the next morning draws anew.
+	r.play(e)
+	r.end_day(e)
+	eq(r.upgrades, r.deal_upgrades(), "the next morning's slot")
+	# A perk taken from this morning's round is not on today's slots (they were drawn
+	# first); it can be tomorrow's.
+	var t := _rich(100000)
+	var tr2: RunState = t[0]
+	var te: Economy = t[1]
+	var taken: String = tr2.offers[0]
+	check(tr2.buy_offer(0, te), "a card taken")
+	check(not tr2.upgrades.has(taken), "not on today's slots")
+	if tr2.upgradable().has(taken):
+		tr2.play(te)
+		tr2.end_day(te)
+		eq(tr2.upgrades, [taken], "tomorrow's, the only one held")
+	# The config's count: two slots, two different perks; none.
+	var d: Dictionary = RunConfig.STANDARD.duplicate(true)
+	d.shelf_upgrades = 2
+	var two := RunState.start(RunConfig.from_dict(d), "P-1", ["diner", "bar", "bingo"])
+	two.perks = held.duplicate()
+	var ups2 := two.deal_upgrades()
+	check(ups2.size() == 2 and ups2[0] != ups2[1], "two slots, two perks (%s)" % str(ups2))
+	d.shelf_upgrades = 0
+	var none := RunState.start(RunConfig.from_dict(d), "P-1", ["diner", "bar", "bingo"])
+	none.perks = held.duplicate()
+	eq(none.deal_upgrades(), [], "no slot")
+	eq(RunConfig.standard().shelf_upgrades, 1, "the standard config: one (G)")
+	# Saved and loaded.
+	r.perks = held.duplicate()
+	r.upgrades = r.deal_upgrades()
 	var back := RunState.from_dict(r.to_dict(), r.config)
-	check(not back.offers_open and back.offers == r.offers, "a save keeps the day's offers with the card away")
-	check(back.can_skip_offers(), "and SKIP with them")
+	eq(back.upgrades, r.upgrades, "the slots are saved")
+	check(e.balanced(), "ledger balanced")
+
+
+## Pays layer `r`'s debt on its current day (cash put in first).
+func _pay_now(r: RunState, e: Economy) -> bool:
+	e.bonus(maxi(0, r.due() - e.cash) + 10)
+	return r.pay(e)
+
+
+## How many reward rounds come up in a row, each given up for its item.
+func _count_rewards(r: RunState) -> int:
+	var n := 0
+	while r.offers_open and r.offer_reward and n < 20:
+		n += 1
+		r.skip_offers()
+	return n
+
+
+## G (docs/roadmap.md 十.7, M9.8 step 2): paying a layer (not the last) gives a reward
+## round, and one more for every day paid early, counted against the layer's own days
+## (SHORT WEEK's taken off), not a day bought from the lender.
+func test_reward_rounds_by_days_paid_early() -> void:
+	var r := _run()
+	var e := r.new_economy()
+	check(_pay_now(r, e), "layer 1 paid on day 1 of 5")
+	eq(r.rewards_pending + 1, 5, "one and four for the days early")
+	eq(_count_rewards(r), 5, "five reward rounds in a row")
+	check(r.offers_open and not r.offer_reward, "then the morning's round")
+	eq(r.stats.reward_rounds, 5, "counted")
+	# On the last day: one.
+	var last := _run()
+	var le := last.new_economy()
+	last.day = 5
+	_pay_now(last, le)
+	eq(_count_rewards(last), 1, "paid on the last day: one")
+	# A day bought from the lender is not one of the layer's own: buying it and paying
+	# mints nothing.
+	var plain := _run()
+	var pe := plain.new_economy()
+	plain.day = 3
+	_pay_now(plain, pe)
+	var bought := _run()
+	var be := bought.new_economy()
+	bought.day = 3
+	be.bonus(10000)
+	check(bought.buy_service("more_time", be), "a day bought")
+	eq(bought.days(), 6, "six days now")
+	_pay_now(bought, be)
+	eq(_count_rewards(plain), 3, "paid on day 3 of 5: three")
+	eq(_count_rewards(bought), 3, "the same with a day bought: three, not four")
+	var late := _run()
+	var lae := late.new_economy()
+	late.day = 5
+	lae.bonus(10000)
+	late.buy_service("more_time", lae)
+	late.day = 6
+	_pay_now(late, lae)
+	eq(_count_rewards(late), 1, "paid on the bought sixth day: one")
+	# SHORT WEEK: the layer's own days are fewer.
+	var short := _run()
+	var se := short.new_economy()
+	short.perks = {"shortweek": 1}
+	_pay_now(short, se)
+	eq(_count_rewards(short), 4, "SHORT WEEK 1, paid on day 1 of 4: four")
+	# The last layer paid clears the run: no reward round.
+	var end := _run()
+	var ee := end.new_economy()
+	end.layer = 2
+	_pay_now(end, ee)
+	check(end.status == RunState.CLEARED and not end.offers_open and end.rewards_pending == 0, "the run cleared: none")
+
+
+## A reward round (docs/roadmap.md 十.7): free, new perks of rarity rare or legendary
+## (commons fill when too few are left), one card a free upgrade of a perk held when one
+## is below its top, no reroll, given up for an item like any round; seeded by the
+## seed, the layer and the reward's index, saved and loaded mid-chain.
+func test_reward_rounds() -> void:
+	var r := _run()
+	var e := r.new_economy()
+	r.perks = {"closer": 1}
+	_pay_now(r, e)
+	check(r.offer_reward and r.offers.size() == Catalog.OFFERS, "a reward round of three cards")
+	eq(r.offers[r.offers.size() - 1], "closer", "the last is CLOSER's free upgrade (the only perk held)")
+	for k in r.offers.size() - 1:
+		var p := r.catalog.perk(str(r.offers[k]))
+		check(p.rarity != "common" and r.level(p.id) == 0, "%s: a new perk, rare or better" % p.id)
+	# No reroll.
+	e.pay(e.cash)
+	e.bonus(100000)
+	var cash := e.cash
+	check(not r.can_reroll_offers(e) and not r.reroll_offers(e), "a reward round has no reroll")
+	eq(e.cash, cash, "nothing paid")
+	# Free: taken with no cash at all.
+	var spend := e.cash
+	e.pay(spend)
+	var shop := int(r.stats.shop)
+	check(r.can_buy_offer(0, e), "free, the pocket empty")
+	var id: String = r.offers[0]
+	check(r.buy_offer(0, e), "taken")
+	eq(r.level(id), 1, "held")
+	eq(int(r.stats.shop), shop, "nothing spent")
+	check(r.offer_reward and r.rewards_pending == 3, "the next reward round up, three more to come")
+	# The upgrade card: taken, a level up for nothing.
+	var up := str(r.offers[r.offers.size() - 1])
+	check(r.level(up) > 0, "the upgrade card is a perk held (%s)" % up)
+	var lv := r.level(up)
+	check(r.buy_offer(r.offers.size() - 1, e), "the upgrade taken")
+	eq(r.level(up), lv + 1, "a level up")
+	# Given up for an item, like any round.
+	var gift := r.skip_offers()
+	check(gift != "" and r.held(gift) == 1, "a reward round given up: an item (%s)" % gift)
+	# Seeded by the seed, the layer and the index: the same cards whatever the order.
+	var a := _run()
+	var b := _run()
+	a.layer = 1
+	b.layer = 1
+	for k in 4:
+		a.reward_no = k
+		b.reward_no = k
+		eq(a.deal_reward(), b.deal_reward(), "reward %d: the same seed deals the same" % k)
+	# Saved and loaded mid-chain: the round up and the ones to come.
+	var d := r.to_dict()
+	var back := RunState.from_dict(d, r.config)
+	eq(back.offers, r.offers, "the round up")
+	check(back.offers_open and back.offer_reward == r.offer_reward, "a reward round still")
+	eq(back.rewards_pending, r.rewards_pending, "the reward rounds to come")
+	eq(back.reward_no, r.reward_no, "and where the chain is")
+	var be := Economy.new()
+	be.cash = 0
+	var seq_a := []
+	var seq_b := []
+	for run_e in [[r, e, seq_a], [back, be, seq_b]]:
+		var x: RunState = run_e[0]
+		var guard := 0
+		while x.offers_open and guard < 10:
+			guard += 1
+			run_e[2].append(x.offers.duplicate())
+			if x.offer_reward:
+				x.buy_offer(0, run_e[1])
+			else:
+				x.skip_offers()
+	eq(seq_b, seq_a, "the loaded run deals the same rounds after it")
+	# Commons fill the cards when too few rare-or-better perks are left to deal.
+	var c := _run()
+	c.layer = 1
+	for p in c.catalog.dealt():
+		if p.rarity != "common":
+			c.perks[p.id] = 1
+	c.reward_no = 0
+	var cards := c.deal_reward()
+	eq(cards.size(), c.offer_count(), "not short")
+	var commons := 0
+	for k in cards.size() - 1:
+		if c.catalog.perk(str(cards[k])).rarity == "common" and c.level(str(cards[k])) == 0:
+			commons += 1
+	eq(commons, cards.size() - 1, "new commons beside the upgrade card")
+	# The two-kinds rule where the pool allows: at the second layer's weights.
+	var w := _run()
+	w.layer = 1
+	var deals := []
+	for i in 40:
+		w.seed = "RW-%d" % i
+		w.reward_no = i % 3
+		deals.append(w.deal_reward())
+	_two_and_two(w, deals, "reward rounds")
+	for dl in deals:
+		for cid in dl:
+			check(w.catalog.perk(str(cid)).rarity != "common", "nothing held: every card rare or better (%s)" % cid)
+
+
+## Saves made before the rounds (M9.8 step 2) load by the new rules.
+func test_old_saves_and_the_rounds() -> void:
+	var res := _rich(1000)
+	var r: RunState = res[0]
+	var d := r.to_dict()
+	# Offers put away with LATER: the round had ended.
+	var later := d.duplicate(true)
+	later.offers_open = false
+	later.shelf_rerolls = 2
+	later.erase("upgrades")
+	later.erase("offer_reward")
+	later.erase("rewards_pending")
+	later.erase("reward_no")
+	var a := RunState.from_dict(later, r.config)
+	check(a != null, "loads")
+	check(a.offers.is_empty() and not a.offers_open, "with no offers")
+	eq(a.upgrades, [], "no upgrade slots until the next morning")
+	check(not a.offer_reward and a.rewards_pending == 0, "no reward round")
+	# Offers with something bought from them (the old card stayed up): over too.
+	var bought := d.duplicate(true)
+	bought.offer_bought = true
+	var b := RunState.from_dict(bought, r.config)
+	check(b.offers.is_empty() and not b.offers_open, "something bought from them: no offers")
+	# An open round with nothing bought loads as it was.
+	var open := RunState.from_dict(d, r.config)
+	eq(open.offers, r.offers, "an open round loads")
+	check(open.offers_open and not open.offer_reward, "a morning round")
+	# Odd values are kept within bounds.
+	var odd := d.duplicate(true)
+	odd.rewards_pending = 40
+	odd.offer_reward = true
+	odd.offers = []
+	var o := RunState.from_dict(odd, r.config)
+	check(o.rewards_pending == 0 and not o.offer_reward, "layer 1: no reward rounds pending, none up without cards")
+	odd.layer = 1
+	odd.rewards_pending = 40
+	o = RunState.from_dict(odd, r.config)
+	eq(o.rewards_pending, int(r.config.layer(0).days) + 1, "at most the paid layer's days and one")
 
 
 func test_offers_only_what_is_open() -> void:
@@ -1036,11 +1406,11 @@ func test_the_shelf() -> void:
 	check(r.buy_item(id, e), "one that is")
 	check(not r.shelf.has(id), "it leaves the shelf")
 	eq(r.last_item, id if id != "copy" else "", "the last item bought")
+	# Not rerolled (M9.8 step 2): the next morning brings another.
 	var before := r.shelf.duplicate()
-	var p := r.shelf_price()
-	check(r.reroll_shelf(e), "a new shelf")
-	eq(r.shelf_price(), p * 2, "the next costs double")
-	check(r.shelf.size() == Catalog.SHELF and r.shelf != before, "four others")
+	r.play(e)
+	r.end_day(e)
+	check(r.shelf.size() == Catalog.SHELF and r.shelf != before, "a new shelf the next morning")
 	r.items = {"peek": 3}
 	r.shelf = ["magnifier"]
 	check(not r.can_buy_item("magnifier", e), "no room past three")
@@ -1131,7 +1501,6 @@ func test_items_used_now() -> void:
 	r.items = {"happy": 1, "safety": 1, "tip": 1, "slip": 1}
 	check(not r.can_use_now("happy"), "HAPPY HOUR only on a day of play")
 	check(not r.can_use_now("slip"), "a RETURN SLIP too")
-	r.close_offers()
 	r.play(e)
 	eq(r.use_now("tip", m).get("column"), BoxReading.hottest(m.boxes), "TIP-OFF names the hottest box")
 	check(not r.use_now("happy").is_empty() and r.happy, "HAPPY HOUR on")
@@ -1156,18 +1525,15 @@ func test_items_used_now() -> void:
 	r2.items = {"overtime": 2}
 	check(r2.can_use_now("overtime"), "before the day is chosen")
 	check(r2.use_now("overtime").get("on", false), "on")
-	r2.close_offers()
 	var w2 := r2.wage()
 	r2.work(e2)
 	eq(e2.earned, 2 * w2, "the shift paid double")
 	check(not r2.can_use_now("overtime"), "once a day")
 	r2.end_day(e2)
-	r2.close_offers()
 	r2.work(e2)
 	check(r2.use_now("overtime", null, e2).get("on", false), "after a shift")
 	eq(e2.earned, 4 * w2, "the wage again")
 	r2.end_day(e2)
-	r2.close_offers()
 	r2.play(e2)
 	r2.items = {"overtime": 1}
 	check(not r2.can_use_now("overtime"), "not on a day of play")
@@ -1230,7 +1596,6 @@ func _window(r: RunState, e: Economy, tiers: Array) -> void:
 ## A run on a day of play with `cash` in hand.
 func _playing(cash: int) -> Array:
 	var res := _rich(cash)
-	res[0].close_offers()
 	res[0].play(res[1])
 	return res
 
@@ -1628,7 +1993,6 @@ func test_buying_anything_breaks_the_work_only_line() -> void:
 	r.shelf = ["magnifier"]
 	check(r.buy_item("magnifier", e), "an $8 MAGNIFIER on day one")
 	while r.playing():
-		r.close_offers()
 		r.work(e)
 		r.end_day(e)
 	eq(r.status, RunState.FAILED, "then working every day is not enough")

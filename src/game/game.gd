@@ -942,18 +942,17 @@ func _on_seal(id: String) -> void:
 	_show_run_card()
 
 
-## A key on the card of perk offers: buy one (or take it free with a CHEAT SHEET),
-## reroll them, put them away for later (they wait on the phone's TODAY page until
-## the day ends), or be done (skipping them all gives an item).
+## A key on the card of a round of perk offers: take one (buy it, take it free with a
+## CHEAT SHEET, or for nothing on a reward round), which ends the round; reroll it
+## (a morning round, before its pick); or give it up for an item. The next round, if
+## any, then comes up on the same card.
 func _on_offer(id: String) -> void:
 	Sfx.play("button")
 	var ok := false
 	if id == "offer_reroll":
 		ok = run.reroll_offers(economy)
-	elif id == "offer_later":
-		run.close_offers()
 	elif id == "offer_done":
-		var gift := run.close_offers(true)
+		var gift := run.skip_offers()
 		if gift != "":
 			hud.set_status("GOT %s", [tr(run.catalog.item(gift).name)])
 	elif id.begins_with("offer_free_"):
@@ -969,9 +968,10 @@ func _on_offer(id: String) -> void:
 
 ## The card of perk offers: each offer, its level and kind, in its rarity's colour (G:
 ## no word for it, the colour says it), and what it does (a risk perk's cost after it,
-## _perk_text), a key to buy each (and to take one free with a CHEAT SHEET), reroll,
-## LATER (they stay for the day, on the phone), done or skip for an item. No
-## requirements here: those are the shelf's (G).
+## _perk_text), a key to buy each (and to take one free with a CHEAT SHEET; on a reward
+## round each is FREE), reroll (a morning round) and skip for an item. No requirements
+## here: those are the shelf's (G). A reward round's upgrade card shows the level it
+## would reach, like any card. (The reward round's own look is the UI pass's.)
 func _offer_card() -> void:
 	var lines := [[tr("CASH %s") % Hud._money(economy.cash), "dim"]]
 	var buy := []
@@ -983,8 +983,9 @@ func _offer_card() -> void:
 		lines.append(["%d  %s %d · %s" % [k + 1, tr(p.name), lv, tr(Catalog.KIND_NAMES[Catalog.kind(p)])], "big",
 			LcdStyle.BRIGHT_TEXT if p.rarity == "common" else Phone.rarity_color(str(p.rarity))])
 		lines.append([_perk_text(p, lv), "note"])
-		buy.append({"id": "offer_%d" % k, "text": tr("BUY %s") % Hud._money(run.perk_price(id)), "disabled": not run.can_buy_offer(k, economy)})
-		if run.held("cheat") > 0:
+		var buy_text: String = tr("FREE") if run.offer_reward else tr("BUY %s") % Hud._money(run.perk_price(id))
+		buy.append({"id": "offer_%d" % k, "text": buy_text, "disabled": not run.can_buy_offer(k, economy)})
+		if run.held("cheat") > 0 and not run.offer_reward:
 			free.append({"id": "offer_free_%d" % k, "text": tr("FREE %d") % (k + 1), "kind": "chrome"})
 	if run.offers.is_empty():
 		lines.append(tr("NOTHING MORE TODAY"))
@@ -993,12 +994,11 @@ func _offer_card() -> void:
 		rows.append(buy)
 	if not free.is_empty():
 		rows.append(free)
-	var ends := [{"id": "offer_reroll", "text": tr("REROLL %s") % Hud._money(run.reroll_price()), "kind": "chrome",
-			"disabled": economy.cash < run.reroll_price() or run.offerable().is_empty() or run.offers.is_empty()}]
-	# LATER only while SKIP is the other way out (once something is bought, DONE is the same).
-	if run.can_skip_offers():
-		ends.append({"id": "offer_later", "text": tr("LATER"), "kind": "chrome"})
-	ends.append({"id": "offer_done", "text": tr("SKIP FOR AN ITEM") if run.can_skip_offers() else tr("DONE")})
+	var ends := []
+	if not run.offer_reward:
+		ends.append({"id": "offer_reroll", "text": tr("REROLL %s") % Hud._money(run.reroll_price()), "kind": "chrome",
+			"disabled": not run.can_reroll_offers(economy)})
+	ends.append({"id": "offer_done", "text": tr("SKIP FOR AN ITEM")})
 	rows.append(ends)
 	rows.append([{"id": "phone", "text": tr("PHONE"), "kind": "chrome"}])
 	run_card.show_card(tr("PERK OFFERS"), lines, rows)
@@ -1260,21 +1260,9 @@ func phone_state() -> Dictionary:
 				"lines": [[tr("LEVEL %d OF %d") % [lv, p.levels.size()]], _perk_text(p, lv)]})
 	st.build = build
 	st.build_line = tr("YOUR BUILD")
-	# TODAY: the day's offers (as on the morning's card), buyable until the day ends.
-	var offers := []
-	for k in run.offers.size():
-		var p := run.catalog.perk(str(run.offers[k]))
-		var lv := run.level(p.id) + 1
-		offers.append({"k": k, "name": "%s %d" % [tr(p.name), lv], "kind": tr(Catalog.KIND_NAMES[Catalog.kind(p)]),
-			"rarity_id": p.rarity, "desc": _perk_text(p, lv), "buy_text": tr("BUY %s") % m.call(run.perk_price(p.id)),
-			"can_buy": run.can_buy_offer(k, economy), "free_text": tr("FREE") if run.held("cheat") > 0 else ""})
-	st.offers = offers
-	st.offers_line = tr("PERK OFFERS") if not offers.is_empty() else tr("NOTHING MORE TODAY")
-	if run.playing() and not offers.is_empty():
-		st.reroll_offers = {"text": tr("REROLL %s") % m.call(run.reroll_price()),
-			"ok": economy.cash >= run.reroll_price() and not run.offerable().is_empty()}
-	if run.can_skip_offers():
-		st.skip_offers = {"text": tr("SKIP FOR AN ITEM"), "ok": true}
+	# TODAY: the day's item shelf. A round of perk offers is only on its card, taken
+	# there and then (M9.8 step 2: nothing of a round is bought from the phone). The
+	# shelf's upgrade slots (run.upgrades, run.buy_upgrade) have no keys yet: the UI pass.
 	st.merge(items_state())
 	var shelf := []
 	for id in run.shelf:
@@ -1284,8 +1272,6 @@ func phone_state() -> Dictionary:
 			"can_buy": run.can_buy_item(id, economy)})
 	st.shelf = shelf
 	st.shelf_line = tr("TODAY'S SHELF") if not shelf.is_empty() else tr("THE SHELF IS EMPTY")
-	if run.playing():
-		st.reroll_shelf = {"text": tr("NEW SHELF %s") % m.call(run.shelf_price()), "ok": economy.cash >= run.shelf_price()}
 	var contacts := []
 	for c in run.catalog.contacts:
 		var line := tr(c.line)
@@ -1416,21 +1402,6 @@ func _on_phone(action: String, id: String) -> void:
 			if ok:
 				run.apply(machine)
 				hud.set_cash(economy.cash)
-		"reroll_shelf":
-			ok = run != null and run.reroll_shelf(economy)
-		"buy_offer", "offer_free":
-			ok = run != null and run.buy_offer(int(id), economy, action == "offer_free")
-			if ok:
-				run.apply(machine)
-				hud.set_cash(economy.cash)
-		"reroll_offers":
-			ok = run != null and run.reroll_offers(economy)
-		"skip_offers":
-			if run != null:
-				var gift := run.close_offers(true)
-				ok = gift != ""
-				if ok:
-					hud.set_status("GOT %s", [tr(run.catalog.item(gift).name)])
 		"buy_service":
 			ok = run != null and run.buy_service(id, economy)
 		"use_item":
@@ -1874,21 +1845,25 @@ func dev_run(what: String, arg := "") -> void:
 				say("OFFERS %d", [run.offer_count()])
 		"offers":
 			if run != null and run.playing():
+				# A new morning round, for nothing (a reward round up becomes a morning one).
 				run.offer_rerolls += 1
 				run.offers = run.deal_offers()
 				run.offers_open = not run.offers.is_empty()
-				run.offer_bought = false
+				run.offer_reward = false
 				_show_run_card()
 		"items":
 			if run != null:
 				for it in run.catalog.items:
 					run.items[it.id] = run.held(it.id) + 3
 		"deal":
-			# A dealt perk not at its top level yet: first in the offers, once.
+			# A dealt perk not at its top level yet: first in the round up (a morning round
+			# when none is), once. A held one is taken as a level up.
 			var p := run.catalog.perk(arg) if run != null else {}
 			if p.is_empty() or Catalog.kind(p) == "shelf" or run.level(arg) >= p.levels.size() or not run.playing():
 				push_warning("dev: no dealt perk to offer: %s" % arg)
 			else:
+				if not run.offers_open:
+					run.offer_reward = false
 				run.offers.erase(arg)
 				run.offers.insert(0, arg)
 				run.offers_open = true
