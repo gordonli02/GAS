@@ -1504,3 +1504,123 @@ The plan is `docs/roadmap.md` M9.8 step 1 (five stages, G's nod 2026-11-13).
   What is left is for the numbers (step 8) and the dealing (step 2): the cores are
   not held (layer 1: PENNY JAR 34%, CLOSER 19%, DUE A WIN 19%, MAGNET 15%, BIG FISH 6%,
   the rest 0 to 3%), and held they are far apart.
+
+## M9.8 step 2: dealing and the shelf
+
+The rules are `docs/roadmap.md` "数值方向" 十 and M9.8 item 2 (the block G nodded at,
+2026-11-16). Only rules changed: debts, perk prices, prize tables, the deal's weights
+and the reroll's price are as they were. The commits: `ee99025` (rules, the bots
+following them), `163fb5b` (the UI), `341aa10`, `b897a06` and `c6be8db` (the bots'
+reroll and bankroll, their defaults).
+
+- **A round is a pick of one** (`RunState`: `offers`, `offers_open`, `offer_reward`,
+  `rewards_pending`). `buy_offer` takes a card (cash; free with a CHEAT SHEET, which is
+  then the round's pick) and ends the round; `reroll_offers` only before that, on a
+  morning round, the price doubling as before; `skip_offers` gives the round up for an
+  item. LATER is gone and nothing of a round is on the phone. `play()` and `work()`
+  throw away rounds still up (`drop_rounds`): the game never lets a round be left
+  (the card is up whenever `offers_open`; PLAY, WORK and TO THE MACHINE are refused),
+  the bots that buy no perks do, and their runs did not move by a row.
+- **Only new perks are dealt** (`offerable` leaves out a perk held; the x1.5 for a
+  level up went, the x2 for a perk with requirements stays).
+- **The daily shelf is not rerolled** (`reroll_shelf`, `SHELF_REROLL` gone) and carries
+  upgrade slots: `RunConfig.shelf_upgrades` (1; G: one, not two, so that which perk
+  can be levelled is partly luck) dealt perks held, below their top level, drawn from
+  the seed, the layer and the day; `buy_upgrade` at the perk's next-level price, any
+  time that day. A perk taken from the morning's round is not on that day's slots.
+- **Reward rounds**: a layer paid (not the last) gives one, and one more a day paid
+  early, before the new layer's morning round. Early days are counted against the
+  layer's own days (`early_days`: SHORT WEEK's taken off, a day bought from the lender
+  not counted, so buying a day and paying mints nothing). Free pick, no reroll, an
+  item for giving it up; the cards are new perks of rarity rare or better at the new
+  layer's weights (commons fill when too few are left), and the last card is a free
+  upgrade of a perk held when one can be levelled. Seeded by the layer and the
+  reward's index.
+- **Saves**: the round up, the reward rounds pending and the slots are saved; a save
+  from before with offers put away (LATER) or already bought from loads without them.
+- **The UI**: the morning card says "TAKE ONE: THE OTHERS GO"; a reward round has its
+  own card ("ON THE HOUSE", why, how many more follow, FREE keys, the upgrade card
+  marked with the level it goes from and to); the phone's TODAY page lists the
+  upgrade slots under the items (`upgrade_<perk>`, `buy_upgrade_<perk>`). The subset
+  fonts have no 升, 励 or 轮 and their sources are not on this machine, so the Chinese
+  says 加一级 and 送你一个技能. `tools/drive_run.gd` follows the new flow and was
+  parse-checked only: **not run in a window yet**.
+- **The bots** (`SimBlocks.perks`): every round up is handled (a reward chain, then the
+  morning's). `cheapest` takes the cheapest card within its share, a reward round's
+  first card, then any slot within its share; `line` and `core` take the best card on
+  their list (free on a reward round), else the item, then a slot of a listed perk.
+  New params, chosen by two variants passes as in step 1 stage 4 (the second adopting
+  only a variant whose paired interval lay wholly above 0): `work_held` (with an
+  engine held and the cash under `work_below`, work first) for all five lines;
+  `rerolls` 2 at `reroll_share` 0.25 for small, clearing and batch (a reroll is paid
+  only when the cash left still buys what it is rerolling for). jackpot and money do
+  not reroll, build never does (its reserve).
+- **Tools**: `sim_runs --detail` prints D1 / D2 / D3 beside L1 / L2 / L3 (the share of
+  runs the perk had been dealt to by the end of the layer), the rounds, rerolls and
+  upgrades a run; `--reach` (the deal's ceiling); `--upgrades=N`; a second probe,
+  `rounds` (a bot with $10M trying every card and reroll in every order: one perk a
+  round at most, no reward round rerolled).
+- **Before and after** (300 runs, SIM seeds; the baseline is step 1's table, saved
+  before any change; cleared, L1 / L2 / L3, return; then rules only, the bots as they
+  were; then the paired difference of the end against the baseline, 95%):
+
+  | bot | baseline | rules only | the step's end | paired |
+  |---|---|---|---|---|
+  | small | 22.0% | 26.7% | 47.0% (49.0 / 97.3 / 98.6) 1.918 | +25.0 (+19.3 to +30.7) |
+  | build | 8.0% | 17.3% | 17.3% (25.3 / 71.1 / 96.3) 2.495 | +9.3 (+6.0 to +12.6) |
+  | jackpot | 2.0% | 1.0% | 11.3% (28.7 / 52.3 / 75.6) 2.920 | +9.3 (+5.8 to +12.9) |
+  | batch | 1.3% | 2.3% | 9.0% (12.7 / 73.7 / 96.4) 1.331 | +7.7 (+4.5 to +10.8) |
+  | money | 0.7% | 2.7% | 6.7% (29.7 / 38.2 / 58.8) 0.906 | +6.0 (+3.3 to +8.7) |
+  | perks | 5.3% | 6.7% | 6.7% (25.0 / 48.0 / 55.6) 1.489 | +1.3 (-1.9 to +4.5) |
+  | clearing | 0.0% | 0.3% | 4.0% (14.0 / 42.9 / 66.7) 1.073 | +4.0 (+1.8 to +6.2) |
+
+  work, blind, borrow, gamble and skip: not a run changed (skip's return 0.760 to
+  0.759: an item from a reward round). With the rules only, every bot's layer-1 rate
+  was the baseline's: a bot affords one card in layer 1 either way, and the change is
+  all reward rounds. jackpot fell then because a bot handed an engine stopped working
+  for a bankroll (median death in layer 2: 1 shift and 119 tickets, 4 and 500 before);
+  `work_held` is that fix (1.0% to 11.3%, +10.3, +6.9 to +13.8). The given-cards test
+  reads exactly as in step 1 at every stage (it buys no perks, and `work_held` only
+  acts in the morning of a bot that buys them); both probes pass (churn 0.868 with
+  fees, as before).
+- **Rerolls, by line** (the first variants pass, a reroll alone over the old defaults;
+  then over the bankroll): small 26.7% to 44.0% with two (+17.3, +12.1 to +22.5), its
+  engines cost $100; jackpot worse with every reroll (layer 1 27.7% to 20.7% to 12.0%),
+  its engines cost $200 to $300 and the reroll's $20 and $40 come out of a $200 start;
+  clearing and batch gain only once they bank (clearing 1.7% to 4.0%, batch 4.3% to
+  9.0%); money and build never pay for one.
+- **Held and dealt by the end of layer 1** (the step's end; held / dealt): PENNY JAR
+  49 / 74, SCRAP DEALER 41 / 61, CLOSER 76 / 82, MAGNET 50 / 62, STREAK 20 / 47, DUE A
+  WIN 19 / 28, FIRST PULL 14 / 35, BIG FISH 6 / 30, STACKER 0 / 29, MIDDLE CUT 0 / 27, NET
+  WORTH 0 / 17, the legendaries with requirements 0 / 0 to 11. (The baseline held:
+  PENNY JAR 34, CLOSER 19, DUE A WIN 19, MAGNET 15, BIG FISH 6.)
+- **十二.3, the deal's ceiling** (`sim_runs --reach`, 300 runs: $10M, the layer paid on
+  its last day, the first core card lacking taken from every round; 20 rounds a run
+  at the layers' 5 / 6 / 7 days; the whole core, `SimBots.GIVEN`'s dealt perks, held
+  by the end of layer 1 / 2 / 3, then never; then at least one engine by the end of
+  layer 1):
+
+  | line | no reroll | never | 1 reroll a morning | 3 rerolls | an engine, layer 1 |
+  |---|---|---|---|---|---|
+  | clearing | 0 / 5 / 39 | 61% | 1 / 23 / 82 | 7 / 70 / 99 | 70% |
+  | jackpot | 0 / 10 / 45 | 55% | 2 / 27 / 78 | 11 / 69 / 98 | 45% |
+  | small | 0 / 13 / 57 | 43% | 4 / 46 / 93 | 11 / 82 / 100 | 93% |
+  | batch | 1 / 11 / 47 | 53% | 4 / 38 / 84 | 11 / 75 / 98 | 53% |
+  | money | 2 / 27 / 66 | 34% | 12 / 56 / 91 | 32 / 86 / 99 | 24% |
+
+  Twenty picks are not enough: with money no object, 39 to 66% of runs hold the core
+  when the run ends and 5 to 27% when layer 2 does. The cards that hold it back are
+  the rare ones and the legendaries with requirements (JACKPOT HUNTER 1 / 18 / 60, ALL
+  IN 4 / 19 / 56). Three rerolls a morning cost $2,500 to $4,100 a run. How to add
+  picks is open (roadmap 十三.5 lists the candidates).
+- **Not answered**: one upgrade slot against two. A 300-run pass at each came out the
+  same in every number, because no bot ever buys from a slot (0.00 a run; on mornings
+  with a slot up the mean price against the mean cash: perks $3,054 / $159, build
+  $1,680 / $165, small $644 / $77, jackpot $4,814 / $1,111, money $7,058 / $2,069);
+  their upgrades all come from reward rounds (small 1.09 a run). It waits for bots
+  that keep money (before step 8's debts) or for G's own play.
+- **For the later steps**: reward rounds deal any rare card, so the bot with the widest
+  list (build) gains most and the lines fall further under it (二.3, step 7); a layer
+  paid on day 1 gives 5 or 6 reward rounds (the rounds probe: 10.6 a run), which no
+  bot reaches while they pay the moment they can (十二.6); the reroll helps the lines
+  with cheap engines only, so perk prices and the reroll's price move together.
