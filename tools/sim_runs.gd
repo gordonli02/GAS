@@ -9,12 +9,14 @@ extends Node
 ## dollar of tickets, and per dollar of tickets and NEW BOX fees; perk levels bought;
 ## the 50th / 90th / 99th percentile of each run's biggest single prize, in dollars.
 ## Beside it the target of docs/roadmap.md 一 for the bots that have one and whether it
-## is met (the five lines, clearing, jackpot, small, batch and money, 25%: 20 to 30;
-## gamble, borrow, blind and skip under 5%; build and perks none yet, "量完再定"), and
-## whether the bot keeps its place in the ordering: every line > build > perks > each
-## of gamble, borrow, blind and skip, and borrow <= gamble (a bot is compared with the
-## bots of the nearest rank below that was run; the line under the table names every
-## comparison that fails and the bots not run).
+## is met (the four main lines, clearing, jackpot, small and batch, 25%: 20 to 30;
+## gamble, borrow, blind and skip under 5%; build and perks none yet, "量完再定"; money,
+## the support route since roadmap 一.5, none yet: step 8), and whether the bot keeps
+## its place in the ordering: every main line > build > perks > each of gamble, borrow,
+## blind and skip, and borrow <= gamble (a bot is compared with the bots of the nearest
+## rank below that was run; the line under the table names every comparison that fails
+## and the bots not run). money is not ranked: it prints like build and perks, with no
+## target and no order mark.
 ## Under the table, a few lines a bot: its spec (SimBots.describe), the 95% Wilson
 ## interval of its clear rate, the share of runs that died in each layer, and the cash
 ## carried into the next layer over its due (median, share at 1 or more). With
@@ -82,8 +84,8 @@ extends Node
 ## size; then each core card's held share by layer. Exit code 0: it is a report.
 ## --set=key=value[,key=value...]: the run's config with those fields overridden
 ## (RunConfig.SETTABLE, RunConfig.parse_set: shelf_upgrades and the dealing switches of
-## roadmap 十三.5: starter, starter_cards=line:perk/line:perk..., offer_bonus, and
-## deal1 / deal2 / deal3=common/rare/legendary, a layer's rarity weights) for the table,
+## roadmap 十三.5: starter, starter_cards=perk/perk/... (a pool in place of
+## Catalog.STARTER), offer_bonus, and deal1 / deal2 / deal3=common/rare/legendary, a layer's rarity weights) for the table,
 ## --variants, --given and --reach (not --baseline: the fixture is the standard
 ## config's). An unknown key, a bad value or a config that does not hold together
 ## (RunConfig.problems: a starter card that does not fit) is an error (exit code 1). The
@@ -92,15 +94,17 @@ extends Node
 ## against the standard deal on the same seeds. --upgrades=N is --set=shelf_upgrades=N.
 
 ## The roadmap's targets (docs/roadmap.md 一): [text, low, high] in percent of runs
-## cleared ("<": under high). build and perks have none yet.
+## cleared ("<": under high). build and perks have none yet; nor has money, the support
+## route since roadmap 一.5 (its target is step 8's).
 const TARGETS := {
 	"clearing": ["25%", 20.0, 30.0], "jackpot": ["25%", 20.0, 30.0], "small": ["25%", 20.0, 30.0],
-	"batch": ["25%", 20.0, 30.0], "money": ["25%", 20.0, 30.0],
+	"batch": ["25%", 20.0, 30.0],
 	"gamble": ["<5%", 0.0, 5.0], "borrow": ["<5%", 0.0, 5.0], "blind": ["<5%", 0.0, 5.0], "skip": ["<5%", 0.0, 5.0],
 }
 ## The ordering (docs/roadmap.md 一.3), rank by rank, highest first: every bot of a rank
-## clears more than every bot of the next rank run. And borrow <= gamble (一.2).
-const RANKS := [["clearing", "jackpot", "small", "batch", "money"], ["build"], ["perks"], ["gamble", "borrow", "blind", "skip"]]
+## clears more than every bot of the next rank run. And borrow <= gamble (一.2). money,
+## the support route (一.5), is in no rank.
+const RANKS := [["clearing", "jackpot", "small", "batch"], ["build"], ["perks"], ["gamble", "borrow", "blind", "skip"]]
 
 
 func _ready() -> void:
@@ -396,7 +400,7 @@ static func _ordering(rates: Dictionary) -> Dictionary:
 			if not rates.has(b):
 				missing.append(b)
 	if made > 0:
-		lines.append("ordering lines > build > perks > gamble, borrow, blind, skip; borrow <= gamble: %s" % (
+		lines.append("ordering clearing, jackpot, small, batch > build > perks > gamble, borrow, blind, skip; borrow <= gamble (money, the support route, not ranked): %s" % (
 			"holds (%d comparisons)" % made if fails.is_empty() else "fails: " + "; ".join(fails)))
 	if not missing.is_empty():
 		lines.append("ordering: not run, so not compared: %s%s" % [", ".join(missing),

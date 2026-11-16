@@ -676,17 +676,16 @@ func test_rerolls() -> void:
 ## upgrade slots and the dealing switches (starter, starter_cards, offer_bonus, deal1 ..
 ## deal3); an unknown key or a bad value is an error.
 func test_set_overrides() -> void:
-	var p := RunConfig.parse_set("starter=1, offer_bonus=1,shelf_upgrades=2,starter_cards=small:scrap/jackpot:pity,"
+	var p := RunConfig.parse_set("starter=1, offer_bonus=1,shelf_upgrades=2,starter_cards=penny/scrap/consolation/closer,"
 		+ "deal1=10/5/2,deal3=10/0/9")
 	eq(p.error, "", "parsed")
-	eq(p.set, {"starter": 1, "offer_bonus": 1, "shelf_upgrades": 2, "starter_cards": {"small": "scrap", "jackpot": "pity"},
+	eq(p.set, {"starter": 1, "offer_bonus": 1, "shelf_upgrades": 2, "starter_cards": ["penny", "scrap", "consolation", "closer"],
 		"deal1": [10, 5, 2], "deal3": [10, 0, 9]}, "each key with its type")
 	var c := RunConfig.standard()
 	c.apply_set(p.set)
 	check(c.starter == 1 and c.offer_bonus == 1 and c.shelf_upgrades == 2, "put into the config")
-	eq(c.starter_cards, {"small": "scrap", "jackpot": "pity"}, "the starter cards")
-	eq(c.starter_table().small, "scrap", "over Catalog's table: SMALL's card")
-	eq(c.starter_table().clearing, Catalog.STARTER.clearing, "the other lines Catalog's")
+	eq(c.starter_cards, ["penny", "scrap", "consolation", "closer"], "the starter pool")
+	eq(c.starter_pool(), ["penny", "scrap", "consolation", "closer"], "in place of Catalog's")
 	eq(c.deal[0].rarity, {"common": 10, "rare": 5, "legendary": 2}, "layer 1's weights")
 	eq(c.deal[1], Catalog.DEAL[1], "layer 2 untouched")
 	eq(c.deal[2].rarity, {"common": 10, "rare": 0, "legendary": 9}, "layer 3's weights")
@@ -694,21 +693,20 @@ func test_set_overrides() -> void:
 	eq(c.problems(), PackedStringArray(), "and it holds together")
 	eq(RunConfig.standard().deal, Catalog.DEAL, "another config: Catalog's weights still")
 	eq(RunConfig.set_text({"deal2": [10, 8, 4]}), "deal2=10/8/4 (standard 10/5/2)", "the text names the standard weights")
-	eq(RunConfig.set_text({"starter_cards": {"small": "scrap"}}),
-		"starter_cards=small:scrap (standard clearing:closer/jackpot:pity/small:penny/batch:streak/money:middle)",
-		"and the standard table")
+	eq(RunConfig.set_text({"starter_cards": ["penny", "closer"]}),
+		"starter_cards=penny/closer (standard penny/scrap/consolation)", "and the standard pool")
 	check(RunConfig.set_text({"starter": 1}).contains("starter=1 (standard 0)"), "the text names the standard value")
 	eq(RunConfig.set_text({}), "", "no overrides: no text")
 	eq(RunConfig.parse_set("").set, {}, "nothing given: nothing set")
 	for bad in ["deal_bias=2", "free_rerolls=1", "reward_bias=2", "starter", "starter=1.5", "starter=-1", "payout=1",
 			"deal1=10/5", "deal1=10/5/2/1", "deal1=0/0/0", "deal1=10/x/2", "deal1=10/-1/2", "deal4=10/5/2",
-			"starter_cards=small", "starter_cards=luck:x", "starter_cards=small:", "starter_cards="]:
+			"starter_cards=", "starter_cards=penny//scrap", "starter_cards=penny/"]:
 		check(str(RunConfig.parse_set(bad).error) != "", "an error: %s" % bad)
 	eq(RunConfig.parse_set("starter=1,starter=0").set, {"starter": 0}, "a key twice: the last")
 	# A card that does not fit is the config's problem, not the parser's.
 	var odd := RunConfig.standard()
-	odd.apply_set(RunConfig.parse_set("starter=1,starter_cards=small:closer").set)
-	check(not odd.problems().is_empty(), "SMALL's card CLOSER (a clearing perk): a problem")
+	odd.apply_set(RunConfig.parse_set("starter=1,starter_cards=penny/nothing").set)
+	check(not odd.problems().is_empty(), "a card not there: a problem")
 
 
 ## M9.8 step 2, stage 2: a reward round for a `core` bot holding no engine: an engine

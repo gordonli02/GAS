@@ -170,14 +170,12 @@ const DEAL := [
 	{"rarity": {"common": 10, "rare": 5, "legendary": 2}, "no_kinds": []},
 	{"rarity": {"common": 10, "rare": 5, "legendary": 5}, "no_kinds": []},
 ]
-## The build lines a starter round deals from (RunConfig.starter, an experiment for
-## roadmap 十三.5): one entry card of three of them.
-const STARTER_LINES := ["clearing", "jackpot", "small", "batch", "money"]
-## Each build line's entry card for the starter round (RunState.starter_cards; a config
-## may override it, RunConfig.starter_cards). Placeholders: what "the line's cheapest
-## dealt perk with no requirements that layer 1 deals" gave, until G names each line's
-## card (docs/roadmap.md 十三.5). problems() holds each to starter_problems.
-const STARTER := {"clearing": "closer", "jackpot": "pity", "small": "penny", "batch": "streak", "money": "middle"}
+## The pool of entry cards the starter round deals three from (RunConfig.starter, an
+## experiment for roadmap 十三.5; RunState.starter_cards; a config may replace it,
+## RunConfig.starter_cards). Not tied to the build lines. G's list, 2026-11-16; generic
+## entry cards are to be added, and the rule stays off until the pool is big enough.
+## problems() holds it to starter_problems.
+const STARTER := ["penny", "scrap", "consolation"]
 const ITEM_WEIGHT := {"common": 10, "rare": 4, "legendary": 1}
 const KINDS := ["shelf", "build", "risk", "twist", "sure"]
 const KIND_NAMES := {"shelf": "THE SHELF", "build": "BUILD", "risk": "RISK", "twist": "TWIST", "sure": "CERTAINTY"}
@@ -601,32 +599,28 @@ static func deal_problems(table: Array) -> PackedStringArray:
 	return out
 
 
-## What is wrong with a starter table (STARTER, or a config's RunConfig.starter_table):
-## the five build lines of STARTER_LINES, each a branch of the catalog, and for each a
-## dealt perk of that branch that is there, not meta, with no requirements, and dealt
-## in layer 1 by `table` (DEAL when empty).
-func starter_problems(starter: Dictionary, table: Array = []) -> PackedStringArray:
+## What is wrong with a starter pool (STARTER, or a config's RunConfig.starter_pool):
+## one card or more, no card twice, each a dealt perk that is there, not meta, with no
+## requirements, and dealt in layer 1 by `table` (DEAL when empty).
+func starter_problems(pool: Array, table: Array = []) -> PackedStringArray:
 	var out := PackedStringArray()
-	var branch_ids := []
-	for b in branches:
-		branch_ids.append(b.id)
-	if starter.size() != STARTER_LINES.size():
-		out.append("the starter table: the five build lines (%s)" % ", ".join(STARTER_LINES))
-	for line in starter:
-		var id := str(starter[line])
+	if pool.is_empty():
+		out.append("the starter pool: no card")
+	var seen := {}
+	for c in pool:
+		var id := str(c)
 		var p := perk(id)
-		if not STARTER_LINES.has(line) or not branch_ids.has(line):
-			out.append("the starter table: %s is not a build line" % line)
+		if seen.has(id):
+			out.append("the starter pool: %s twice" % id)
 		elif p.is_empty():
-			out.append("the starter table: %s's card %s is not there" % [line, id])
+			out.append("the starter pool: %s is not there" % id)
 		elif p.get("shelf", false) or meta(p):
-			out.append("the starter table: %s's card %s is not dealt in a run" % [line, id])
-		elif str(p.get("branch", "")) != str(line):
-			out.append("the starter table: %s's card %s is of branch %s" % [line, id, p.get("branch", "")])
+			out.append("the starter pool: %s is not dealt in a run" % id)
 		elif not p.get("requires", {}).is_empty() or not p.get("requires_any", {}).is_empty():
-			out.append("the starter table: %s's card %s has requirements" % [line, id])
+			out.append("the starter pool: %s has requirements" % id)
 		elif deal_weight(p, 0, table) <= 0.0:
-			out.append("the starter table: %s's card %s is not dealt in layer 1" % [line, id])
+			out.append("the starter pool: %s is not dealt in layer 1" % id)
+		seen[id] = true
 	return out
 
 

@@ -1236,11 +1236,11 @@ func _set_run(text: String, seed_text := "P-1") -> RunState:
 func test_deal_switches_off() -> void:
 	var std := RunConfig.standard()
 	check(std.starter == 0 and std.offer_bonus == 0, "starter, offer bonus off (0)")
-	eq(std.starter_cards, {}, "no starter cards of its own")
-	eq(std.starter_table(), Catalog.STARTER, "the starter table: Catalog's")
+	eq(std.starter_cards, [], "no starter pool of its own")
+	eq(std.starter_pool(), Catalog.STARTER, "the starter pool: Catalog's")
 	eq(std.deal, Catalog.DEAL, "the rarity weights: Catalog's")
 	eq(std.problems(), PackedStringArray(), "the standard config holds together")
-	var off := _exp_run({"starter": 0, "offer_bonus": 0, "starter_cards": {}, "deal": Catalog.DEAL})
+	var off := _exp_run({"starter": 0, "offer_bonus": 0, "starter_cards": [], "deal": Catalog.DEAL})
 	var r := _run()
 	eq(off.offers, r.offers, "the first round of a seed: the same")
 	eq(_deals(off), _deals(r), "every deal of 60 seeds: the same")
@@ -1302,27 +1302,63 @@ func test_deal_weights_from_the_config() -> void:
 	check(not bad.problems().is_empty(), "two layers: a problem")
 
 
-## starter (an experiment): the run's first morning round is the entry card of each of
-## three build lines drawn from the seed, from Catalog.STARTER (or the config's
-## starter_cards over it); paid for like any morning round; only that round, a reroll
-## of it deals as usual.
+## starter (an experiment): the run's first morning round is three cards drawn without
+## repeats from the entry pool (Catalog.STARTER, or the config's starter_cards in its
+## place), from the seed, out of those that can be dealt; paid for like any morning
+## round; only that round, a reroll of it deals as usual.
 func test_starter_round() -> void:
-	eq(Catalog.STARTER.keys(), Catalog.STARTER_LINES, "a card for each of the five build lines")
-	eq(Catalog.standard().starter_problems(Catalog.STARTER), PackedStringArray(), "Catalog's table holds together")
-	var entries := Catalog.STARTER
-	var lines_seen := {}
+	eq(Catalog.STARTER, ["penny", "scrap", "consolation"], "G's pool (2026-11-16)")
+	eq(Catalog.standard().starter_problems(Catalog.STARTER), PackedStringArray(), "Catalog's pool holds together")
+	# A pool of three: exactly those three, in an order drawn from the seed.
+	var sorted_pool := Catalog.STARTER.duplicate()
+	sorted_pool.sort()
+	var orders := {}
 	for i in 30:
 		var s := _exp_run({"starter": 1}, "ST-%d" % i)
 		eq(s.offers.size(), Catalog.OFFERS, "three cards")
-		var branches := {}
-		for id in s.offers:
-			var br := str(s.catalog.perk(id).branch)
-			check(entries.get(br, "") == id, "%s: the entry card of %s" % [id, br])
-			branches[br] = true
-		eq(branches.size(), 3, "three different lines")
-		lines_seen[",".join(s.offers)] = true
+		var got := s.offers.duplicate()
+		got.sort()
+		eq(got, sorted_pool, "the pool's three, no repeats")
+		orders[",".join(s.offers)] = true
 		eq(_exp_run({"starter": 1}, "ST-%d" % i).offers, s.offers, "the same for a seed")
-	check(lines_seen.size() > 3, "the lines change with the seed (%d sets)" % lines_seen.size())
+	check(orders.size() > 3, "the order changes with the seed (%d orders)" % orders.size())
+	# A pool of five: three of them, no repeats, varying with the seed.
+	var five := ["closer", "penny", "scrap", "consolation", "pity"]
+	var threes := {}
+	var seen := {}
+	for i in 30:
+		var s := _exp_run({"starter": 1, "starter_cards": five}, "ST-%d" % i)
+		eq(s.config.problems(), PackedStringArray(), "the pool of five holds together")
+		eq(s.offers.size(), 3, "three cards")
+		var got := s.offers.duplicate()
+		got.sort()
+		var dup := {}
+		for id in got:
+			check(five.has(id), "%s: of the pool" % id)
+			dup[id] = true
+			seen[id] = true
+		eq(dup.size(), 3, "no repeats")
+		threes[",".join(got)] = true
+		eq(_exp_run({"starter": 1, "starter_cards": five}, "ST-%d" % i).offers, s.offers, "the same for a seed")
+	check(threes.size() > 3, "the three change with the seed (%d sets)" % threes.size())
+	eq(seen.size(), 5, "every card of the pool dealt at some seed")
+	var by_set := _set_run("starter=1,starter_cards=closer/penny/scrap/consolation/pity", "ST-3")
+	eq(by_set.offers, _exp_run({"starter": 1, "starter_cards": five}, "ST-3").offers, "the same from --set")
+	# Fewer than three that can be dealt: what the pool has, the rest the usual draw.
+	var two := _exp_run({"starter": 1, "starter_cards": ["penny", "scrap"]}, "ST-4")
+	eq(two.offers.size(), 3, "three cards")
+	var first := two.offers.slice(0, 2)
+	first.sort()
+	eq(first, ["penny", "scrap"], "the pool's two first")
+	check(not ["penny", "scrap"].has(two.offers[2]), "the third another perk (%s)" % str(two.offers[2]))
+	var held := _exp_run({"starter": 1}, "ST-5")
+	held.perks["penny"] = 1
+	var dealt := held.deal_offers()
+	check(not dealt.has("penny"), "a card held is not dealt")
+	var pair := dealt.slice(0, 2)
+	pair.sort()
+	eq(pair, ["consolation", "scrap"], "the other two of the pool first")
+	eq(dealt.size(), 3, "and a third from the usual draw")
 	# Paid for: the card at its price.
 	var paid := _exp_run({"starter": 1}, "ST-1")
 	var ep := paid.new_economy()
@@ -1343,10 +1379,10 @@ func test_starter_round() -> void:
 	var e2 := st2.new_economy()
 	var std2 := _exp_run({}, "ST-1")
 	var es := std2.new_economy()
-	for pair in [[st2, e2], [std2, es]]:
-		pair[0].skip_offers()
-		pair[0].play(pair[1])
-		pair[0].end_day(pair[1])
+	for pr in [[st2, e2], [std2, es]]:
+		pr[0].skip_offers()
+		pr[0].play(pr[1])
+		pr[0].end_day(pr[1])
 	eq(st2.offers, std2.offers, "the second morning: the usual deal")
 	st2.layer = 1
 	st2.day = 1
@@ -1354,59 +1390,43 @@ func test_starter_round() -> void:
 	std2.day = 1
 	eq(st2.deal_offers(), std2.deal_offers(), "the next layer's first morning: the usual deal")
 	# A fourth card (offer_bonus) is dealt the usual way, not another entry card.
-	var four := _exp_run({"starter": 1, "offer_bonus": 1}, "ST-2")
+	var four := _exp_run({"starter": 1, "offer_bonus": 1, "starter_cards": five}, "ST-2")
 	eq(four.offers.size(), 4, "four cards")
-	eq(four.offers.slice(0, 3), _exp_run({"starter": 1}, "ST-2").offers, "the first three: the starter's")
+	eq(four.offers.slice(0, 3), _exp_run({"starter": 1, "starter_cards": five}, "ST-2").offers, "the first three: the starter's")
 	check(not four.offers.slice(0, 3).has(four.offers[3]), "the fourth another perk (%s)" % str(four.offers[3]))
-	# The config's table over Catalog's: SMALL's card SCRAP DEALER, JACKPOT's BIG FISH.
-	var over := {"small": "scrap", "jackpot": "bigfish"}
-	var seen := {}
-	for i in 30:
-		var s := _exp_run({"starter": 1, "starter_cards": over}, "ST-%d" % i)
-		eq(s.config.problems(), PackedStringArray(), "the overridden table holds together")
-		var plain := _exp_run({"starter": 1}, "ST-%d" % i)
-		for k in s.offers.size():
-			var br := str(s.catalog.perk(s.offers[k]).branch)
-			eq(str(s.offers[k]), str(over.get(br, Catalog.STARTER[br])), "%s's card from the table" % br)
-			eq(br, str(plain.catalog.perk(plain.offers[k]).branch), "the same lines drawn as with Catalog's table")
-			seen[s.offers[k]] = true
-	check(seen.has("scrap") and seen.has("bigfish") and not seen.has("penny") and not seen.has("pity"),
-		"SCRAP DEALER and BIG FISH dealt, PENNY JAR and DUE A WIN not")
-	var by_set := _set_run("starter=1,starter_cards=small:scrap/jackpot:bigfish", "ST-3")
-	eq(by_set.offers, _exp_run({"starter": 1, "starter_cards": over}, "ST-3").offers, "the same from --set")
 
 
-## The starter table checked (Catalog.starter_problems; RunConfig.problems for a
-## config's): the five build lines, each a dealt perk of that line that is there, not
-## meta, has no requirements and is dealt in layer 1.
-func test_starter_table_checked() -> void:
+## The starter pool checked (Catalog.starter_problems; RunConfig.problems for a
+## config's): one card or more, none twice, each a dealt perk that is there, not meta,
+## has no requirements and is dealt in layer 1.
+func test_starter_pool_checked() -> void:
 	var cat := Catalog.standard()
-	var swap := func(line: String, id: String) -> Dictionary:
-		var t := Catalog.STARTER.duplicate()
-		t[line] = id
-		return t
 	var cases := {
-		"a line missing": {"clearing": "closer", "jackpot": "pity", "small": "penny", "batch": "streak"},
-		"not a build line": Catalog.STARTER.merged({"luck": "luck"}),
-		"a card not there": swap.call("clearing", "nothing"),
-		"a card of another line": swap.call("clearing", "penny"),
-		"a shelf perk": swap.call("clearing", "savings"),
-		"a meta perk": swap.call("batch", "combo"),
-		"a card with requirements": swap.call("clearing", "snowball"),
+		"an empty pool": [],
+		"a card twice": ["penny", "scrap", "penny"],
+		"a card not there": ["penny", "nothing"],
+		"a shelf perk": ["penny", "savings"],
+		"a meta perk": ["penny", "combo"],
+		"a card with requirements": ["penny", "snowball"],
 	}
 	for what in cases:
 		check(not cat.starter_problems(cases[what]).is_empty(), "%s: a problem" % what)
-	check(cat.starter_problems(Catalog.STARTER, [{"rarity": {"common": 10, "rare": 0, "legendary": 1}, "no_kinds": ["risk"]}])
+	eq(cat.starter_problems(["closer", "pity", "streak", "middle"]), PackedStringArray(), "cards of any line: fine")
+	check(cat.starter_problems(["penny", "pity", "streak", "middle"], [{"rarity": {"common": 10, "rare": 0, "legendary": 1}, "no_kinds": ["risk"]}])
 		.size() == 3, "layer 1 dealing no rare: DUE A WIN, STREAK and MIDDLE CUT not dealt there")
-	# In a config: checked with the starter on, or a table of its own.
+	# In a config: checked with the starter on, or a pool of its own.
 	var c := RunConfig.standard()
 	c.apply_set({"deal1": [10, 0, 1]})
-	eq(c.problems(), PackedStringArray(), "no rare in layer 1, starter off: fine")
 	c.starter = 1
-	check(not c.problems().is_empty(), "starter on: its rare cards are not dealt in layer 1")
+	eq(c.problems(), PackedStringArray(), "no rare in layer 1, starter on, Catalog's pool (all common): fine")
+	c.starter = 0
+	c.starter_cards = ["pity"]
+	check(not c.problems().is_empty(), "a pool of its own, starter off: still checked (a rare card not dealt in layer 1)")
 	c = RunConfig.standard()
-	c.starter_cards = {"small": "closer"}
-	check(not c.problems().is_empty(), "a table of its own, starter off: still checked")
+	c.starter = 1
+	eq(c.problems(), PackedStringArray(), "starter on with Catalog's pool: fine")
+	c.starter_cards = ["penny", "nothing"]
+	check(not c.problems().is_empty(), "starter on, a card not there: a problem")
 	c = RunConfig.standard()
 	c.starter = 2
 	check(not c.problems().is_empty(), "starter 2: a problem (0 or 1)")

@@ -1101,14 +1101,15 @@ func shelf_perks() -> Array:
 ## weighs double, so that a build comes together. The first Catalog.OFFERS of them hold
 ## two kinds at least (build / risk / twist / sure) and two branches, when the pool has
 ## them (_deal). Cards past those (DOUBLE DOWN, a bonus from outside the run) are drawn
-## freely. With config.starter, the run's first round opens with starter_cards().
+## freely. With config.starter, the run's first round opens with starter_cards(), drawn
+## from the entry pool.
 func deal_offers(forms: Array = []) -> Array:
 	var r := SeededRng.new("%s|offer|%d|%d|%d" % [seed, layer, day, offer_rerolls])
 	var out := []
 	var ids := offerable(forms)
 	if config != null and config.starter > 0 and layer == 0 and day == 1 and offer_rerolls == 0:
-		for id in starter_cards():
-			if ids.has(id) and out.size() < offer_count():
+		for id in starter_cards(ids):
+			if out.size() < offer_count():
 				out.append(_pool([id])[0])
 				ids.erase(id)
 	_deal(out, _pool(ids), offer_count(), r)
@@ -1116,16 +1117,18 @@ func deal_offers(forms: Array = []) -> Array:
 
 
 ## The starter round's cards (config.starter; an experiment for roadmap 十三.5, off in
-## the standard config; not a rule yet): the entry card of each of three different
-## build lines, the lines drawn from the seed, in the order drawn. Each line's entry
-## card is the config's table (RunConfig.starter_table: Catalog.STARTER, or the config's
-## starter_cards over it), in its order; a card that cannot be dealt now is left out
-## (deal_offers). Cards past three are dealt the usual way (deal_offers).
-func starter_cards() -> Array:
-	var table: Dictionary = config.starter_table() if config != null else Catalog.STARTER
+## the standard config until the pool is big enough): three cards of the entry pool
+## (RunConfig.starter_pool: Catalog.STARTER, or the config's starter_cards), drawn
+## without repeats from the seed, in the order drawn, out of those that can be dealt
+## now (`ids`, offerable(): not held, requirements met, the layer's deal allows them).
+## A pool with fewer than three such cards gives what it has; the round's other cards
+## are dealt the usual way (deal_offers).
+func starter_cards(ids: Array) -> Array:
+	var pool: Array = config.starter_pool() if config != null else Catalog.STARTER
 	var entries := []
-	for b in table:
-		entries.append(str(table[b]))
+	for id in pool:
+		if ids.has(str(id)) and not entries.has(str(id)):
+			entries.append(str(id))
 	var r := SeededRng.new("%s|starter" % seed)
 	var out := []
 	while out.size() < Catalog.OFFERS and not entries.is_empty():
