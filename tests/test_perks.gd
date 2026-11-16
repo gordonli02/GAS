@@ -2365,6 +2365,68 @@ func test_fast_forward_is_not_in_the_flow() -> void:
 	check(b4.ops.is_empty(), "nothing logged")
 
 
+## A guard (G, 2026-11-16): tickets given back with a RETURN SLIP or with RETURNS never go
+## back into the machine. Only the money comes back; the box stays where the sale left it
+## (its cursor; a box sold out stays sold out, its last sale stays paid). On exactly that
+## condition, buying the rest of a box unopened, taking the last sale and returning the
+## tickets is a mechanic, not a hole: once a box, never twice on the same tickets.
+func test_returned_tickets_stay_out_of_the_box() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var res := _rich(100000)
+	var r: RunState = res[0]
+	var e: Economy = res[1]
+	var m := r.new_machine(pack.forms, true)
+	check(r.play(e), "a day of play")
+	r.items = {"slip": 1}
+	# The rest of a box bought unopened: the last sale paid, then all of it given back.
+	var box: TicketBox = m.boxes[0]
+	box.cursor = box.size - 10
+	var last := m.last_sale
+	check(last > 0, "the layer has a last-sale prize")
+	for k in 3:
+		e.insert(e.bills[e.bills.size() - 1])
+		e.step_bill(Economy.BILL_TIME)
+	var money := e.cash + e.credit
+	var won := e.won
+	var held := []
+	for k in 10:
+		var sold := m.sell_now(0, e)
+		check(not sold.is_empty(), "sold %d" % k)
+		if sold.get("last_sale", false):
+			r.cleared_box(m)
+		held.append({"form": m.forms[0], "ticket": sold.ticket, "box": sold.box, "bet": m.bet})
+	eq(box.cursor, box.size, "the box sold out")
+	eq(e.won, won + last, "its last sale paid")
+	check(not r.use_now("slip").is_empty(), "the RETURN SLIP used")
+	var back := r.refund_tickets(e, held, 100)
+	eq(back, 10 * m.price(0), "every ticket back at full price")
+	eq(e.cash + e.credit, money + last, "the money back, and the last sale kept")
+	eq(box.cursor, box.size, "the tickets do not go back into the box: still sold out")
+	check(m.boxes[0] == box, "the same box on the column, nothing put back in it")
+	eq(e.won, won + last, "the last sale stays paid")
+	eq(int(r.stats.boxes_cleared), 1, "cleared once")
+	eq(BoxReading.flow(box).sold, box.size, "the box counts them sold")
+	# The next sale is the next box: the same tickets cannot be bought again.
+	var next := m.sell_now(0, e)
+	check(not next.is_empty() and next.box != box and next.box.cursor == 1, "the next sale opens a new box")
+	# RETURNS: part of a box given back, the box where the sale left it.
+	r.perks = {"returns": 1}
+	var b2: TicketBox = m.boxes[1]
+	var at := b2.cursor
+	var part := []
+	for k in 5:
+		var s := m.sell_now(1, e)
+		part.append({"form": m.forms[1], "ticket": s.ticket, "box": s.box, "bet": m.bet})
+	var pct := r.refund_pct()
+	var cash := e.cash
+	var got := r.refund_tickets(e, part, pct)
+	eq(e.cash - cash, got, "RETURNS: the money back to cash")
+	eq(b2.cursor, at + 5, "RETURNS: the box where the sale left it")
+	check(e.balanced(), "balanced")
+
+
 func test_buying_anything_breaks_the_work_only_line() -> void:
 	var r := _run()
 	var e := r.new_economy()

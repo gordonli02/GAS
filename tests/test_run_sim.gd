@@ -589,8 +589,9 @@ func test_bot_specs_are_data() -> void:
 	for line in SimBots.VARIANTS:
 		for name in ["reroll1", "reroll3", "reroll3t"]:
 			check(SimBots.VARIANTS[line].has(name), "%s: a %s variant" % [line, name])
-	# The items block (M9.8 step 3): its variants, the params it reads, each line's and
-	# build's `use` and `usebuy` (and jackpot's `informant`); no bot uses items by default.
+	# The items block (M9.8 step 3): its variants, the params it reads; the five lines and
+	# build use their items by default (the 300-run pass), with `nouse` and `usebuy` (and
+	# jackpot's `informant`) laid over that; the other bots use none.
 	eq(SimBlocks.VARIANTS.items, ["none", "use", "blind"], "items: none (the default), use, blind")
 	for k in ["peek_min", "peek_scale", "happy_min", "slip_max", "coin_wait", "item_share", "item_list", "daily_items"]:
 		check(SimBots.PARAMS.has(k), "%s is a param" % k)
@@ -600,19 +601,27 @@ func test_bot_specs_are_data() -> void:
 		check(not Catalog.standard().item(id).is_empty(), "item_list: %s is an item" % id)
 	for f in SimBots.PARAMS.peek_min:
 		check(float(SimBots.PARAMS.peek_min[f]) > 0.0, "peek_min: %s in winners per 100" % f)
+	var users := ["clearing", "jackpot", "small", "batch", "money", "build"]
 	for bot in SimBots.NAMES + SimBots.PROBES:
-		eq(SimBots.spec(bot).blocks.items, "none", "%s uses no item by default" % bot)
-	for line in ["clearing", "jackpot", "small", "batch", "money", "build"]:
+		eq(SimBots.spec(bot).blocks.items, "use" if users.has(bot) else "none", "%s: items %s by default" % [bot,
+			"use" if users.has(bot) else "none"])
+		eq(float(SimBots.spec(bot).params.item_share), 0.0, "%s buys no item" % bot)
+	eq(SimBots.spec("jackpot").params.peek_min, SimBots.JACKPOT_PEEK, "jackpot's own PEEK threshold")
+	for line in users:
 		var vs: Dictionary = SimBots.VARIANTS[line]
-		check(vs.has("use") and vs.has("usebuy"), "%s: use and usebuy" % line)
-		eq(SimBots.spec(line, vs.get("use", {})).blocks.items, "use", "%s/use uses its items" % line)
-		eq(float(SimBots.spec(line, vs.get("use", {})).params.item_share), 0.0, "%s/use buys none" % line)
-		check(float(SimBots.spec(line, vs.get("usebuy", {})).params.item_share) > 0.0, "%s/usebuy buys" % line)
+		check(vs.has("nouse") and vs.has("usebuy") and not vs.has("use"), "%s: nouse and usebuy (use is its own spec)" % line)
+		eq(SimBots.spec(line, vs.get("nouse", {})).blocks.items, "none", "%s/nouse uses none" % line)
+		var ub := SimBots.spec(line, vs.get("usebuy", {}))
+		check(ub.blocks.items == "use" and float(ub.params.item_share) > 0.0, "%s/usebuy uses and buys" % line)
+		for name in ["nouse", "usebuy", "informant"]:
+			if vs.has(name):
+				check(SimBots.spec(line, vs[name]) != SimBots.spec(line), "%s/%s differs from its own spec" % [line, name])
 	var inf := SimBots.spec("jackpot", SimBots.VARIANTS.jackpot.informant)
-	check(inf.blocks.items == "use" and inf.params.shelf.has("informant"), "jackpot/informant buys INFORMANT and uses its items")
+	check(inf.blocks.items == "use" and inf.params.shelf.has("informant") and inf.params.peek_min == SimBots.JACKPOT_PEEK,
+		"jackpot/informant buys INFORMANT, uses its items with its threshold")
 	for id in SimBots.GIVEN_ITEMS:
 		check(not Catalog.standard().item(id).is_empty(), "GIVEN_ITEMS: %s is an item" % id)
-	var gl := SimBots.given_spec("small", SimBots.VARIANTS.small.use, SimBots.GIVEN_ITEMS)
+	var gl := SimBots.given_spec("small", {}, SimBots.GIVEN_ITEMS)
 	check(gl.blocks.items == "use" and gl.params.daily_items == SimBots.GIVEN_ITEMS, "the line arm with items")
 	var gc := SimBots.control_spec("small", SimBots.GIVEN_ITEMS)
 	check(gc.blocks.items == "blind" and gc.params.daily_items == SimBots.GIVEN_ITEMS, "the control with items: blind")
@@ -1146,13 +1155,13 @@ func test_items_block() -> void:
 	check(not ("daily_items" in st), "the run has no such thing: only the simulator")
 	var used := SimRun.play(SimBots.spec("small", {"blocks": {"items": "use"}, "params": {"daily_items": {"coin": 1}}}), forms, "IT-0")
 	check(int(used.counters.get("item_coin", 0)) >= 1, "use: the morning's coin used (%s)" % str(used.counters))
-	var kept := SimRun.play(SimBots.spec("small", {"params": {"daily_items": {"coin": 1}}}), forms, "IT-0")
+	var kept := SimRun.play(SimBots.spec("small", {"blocks": {"items": "none"}, "params": {"daily_items": {"coin": 1}}}), forms, "IT-0")
 	check(not kept.counters.keys().any(func(k): return str(k).begins_with("item_")), "none: held, never used")
 	check(used.balanced and kept.balanced, "balanced")
 	# Whole runs: every line's and build's item variants, and the control with items.
 	for line in ["clearing", "jackpot", "small", "batch", "money", "build"]:
 		for v in SimBots.VARIANTS[line]:
-			if not str(v).begins_with("use") and v != "informant":
+			if not ["nouse", "usebuy", "informant"].has(v):
 				continue
 			for i in (2 if full else 1):
 				var r := SimRun.play(SimBots.spec(line, SimBots.VARIANTS[line][v]), forms, "IU-%d" % i)

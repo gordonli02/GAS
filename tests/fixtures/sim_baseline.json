@@ -10,10 +10,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 2,
-				"spent": 526,
+				"spent": 326,
 				"status": "failed",
-				"tickets": 526,
-				"won": 400
+				"tickets": 376,
+				"won": 200
 			},
 			{
 				"best_prize": 40,
@@ -24,24 +24,24 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 1624,
+				"spent": 1790,
 				"status": "failed",
-				"tickets": 1624,
-				"won": 1448
+				"tickets": 1832,
+				"won": 1614
 			},
 			{
 				"best_prize": 105,
-				"cash": 0,
+				"cash": 79,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 1491,
+				"perks": 0,
+				"spent": 3196,
 				"status": "failed",
-				"tickets": 1491,
-				"won": 1365
+				"tickets": 3238,
+				"won": 2820
 			},
 			{
 				"best_prize": 15,
@@ -52,10 +52,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 211,
+				"spent": 216,
 				"status": "failed",
-				"tickets": 211,
-				"won": 145
+				"tickets": 252,
+				"won": 150
 			},
 			{
 				"best_prize": 0,
@@ -72,18 +72,18 @@
 				"won": 0
 			},
 			{
-				"best_prize": 10,
+				"best_prize": 55,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 266,
+				"perks": 0,
+				"spent": 1245,
 				"status": "failed",
-				"tickets": 266,
-				"won": 80
+				"tickets": 1295,
+				"won": 730
 			},
 			{
 				"best_prize": 15,
@@ -101,20 +101,20 @@
 			},
 			{
 				"best_prize": 105,
-				"cash": 0,
+				"cash": 95,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 1341,
+				"spent": 1346,
 				"status": "failed",
-				"tickets": 1341,
-				"won": 1025
+				"tickets": 1346,
+				"won": 1030
 			},
 			{
-				"best_prize": 50,
+				"best_prize": 100,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
@@ -122,13 +122,13 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 641,
+				"spent": 801,
 				"status": "failed",
-				"tickets": 641,
-				"won": 325
+				"tickets": 851,
+				"won": 485
 			},
 			{
-				"best_prize": 10,
+				"best_prize": 55,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
@@ -136,10 +136,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 591,
+				"spent": 1990,
 				"status": "failed",
-				"tickets": 591,
-				"won": 275
+				"tickets": 1990,
+				"won": 1475
 			},
 			{
 				"best_prize": 100,
@@ -178,10 +178,24 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 236,
+				"spent": 536,
 				"status": "failed",
-				"tickets": 236,
-				"won": 110
+				"tickets": 536,
+				"won": 410
+			},
+			{
+				"best_prize": 10,
+				"cash": 41,
+				"days": 5,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 0,
+				"layers_cleared": 0,
+				"perks": 1,
+				"spent": 218,
+				"status": "failed",
+				"tickets": 218,
+				"won": 82
 			},
 			{
 				"best_prize": 10,
@@ -191,25 +205,11 @@
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 213,
-				"status": "failed",
-				"tickets": 213,
-				"won": 77
-			},
-			{
-				"best_prize": 100,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
 				"perks": 2,
-				"spent": 1461,
+				"spent": 316,
 				"status": "failed",
-				"tickets": 1461,
-				"won": 1295
+				"tickets": 316,
+				"won": 150
 			},
 			{
 				"best_prize": 210,
@@ -233,15 +233,15 @@
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 226,
+				"perks": 0,
+				"spent": 756,
 				"status": "failed",
-				"tickets": 226,
-				"won": 100
+				"tickets": 757,
+				"won": 360
 			},
 			{
 				"best_prize": 210,
-				"cash": 321,
+				"cash": 331,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
@@ -251,21 +251,21 @@
 				"spent": 6000,
 				"status": "failed",
 				"tickets": 6000,
-				"won": 6195
+				"won": 6205
 			},
 			{
 				"best_prize": 10,
-				"cash": 0,
+				"cash": 56,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 221,
+				"spent": 236,
 				"status": "failed",
-				"tickets": 221,
-				"won": 35
+				"tickets": 284,
+				"won": 50
 			},
 			{
 				"best_prize": 10,
@@ -862,18 +862,18 @@
 				"won": 110
 			},
 			{
-				"best_prize": 6900,
-				"cash": 6102,
+				"best_prize": 2754,
+				"cash": 502,
 				"days": 9,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 3,
 				"perks": 7,
-				"spent": 16179,
+				"spent": 13679,
 				"status": "cleared",
-				"tickets": 4128,
-				"won": 38726
+				"tickets": 4003,
+				"won": 28562
 			},
 			{
 				"best_prize": 105,
@@ -884,9 +884,9 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 1508,
+				"spent": 1587,
 				"status": "failed",
-				"tickets": 1508,
+				"tickets": 1626,
 				"won": 1150
 			},
 			{
@@ -898,13 +898,13 @@
 				"layer": 1,
 				"layers_cleared": 1,
 				"perks": 3,
-				"spent": 1965,
+				"spent": 2890,
 				"status": "failed",
-				"tickets": 833,
-				"won": 1445
+				"tickets": 678,
+				"won": 1346
 			},
 			{
-				"best_prize": 10,
+				"best_prize": 20,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
@@ -912,10 +912,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 1248,
+				"spent": 1447,
 				"status": "failed",
-				"tickets": 1248,
-				"won": 990
+				"tickets": 1447,
+				"won": 1110
 			},
 			{
 				"best_prize": 100,
@@ -926,10 +926,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 898,
+				"spent": 1371,
 				"status": "failed",
-				"tickets": 898,
-				"won": 540
+				"tickets": 1401,
+				"won": 855
 			},
 			{
 				"best_prize": 100,
@@ -940,24 +940,24 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 968,
+				"spent": 1422,
 				"status": "failed",
-				"tickets": 968,
-				"won": 610
+				"tickets": 1422,
+				"won": 985
 			},
 			{
 				"best_prize": 200,
-				"cash": 0,
+				"cash": 79,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 1663,
+				"spent": 1598,
 				"status": "failed",
-				"tickets": 1663,
-				"won": 1305
+				"tickets": 1598,
+				"won": 1295
 			},
 			{
 				"best_prize": 15,
@@ -968,38 +968,38 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 588,
+				"spent": 573,
 				"status": "failed",
-				"tickets": 588,
-				"won": 230
+				"tickets": 600,
+				"won": 215
 			},
 			{
-				"best_prize": 10,
-				"cash": 0,
-				"days": 5,
+				"best_prize": 10000,
+				"cash": 469,
+				"days": 15,
 				"fees": 0,
 				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 0,
-				"spent": 568,
-				"status": "failed",
-				"tickets": 568,
-				"won": 210
+				"layer": 2,
+				"layers_cleared": 3,
+				"perks": 2,
+				"spent": 87911,
+				"status": "cleared",
+				"tickets": 5939,
+				"won": 101400
 			},
 			{
-				"best_prize": 500,
-				"cash": 514,
-				"days": 7,
+				"best_prize": 29646,
+				"cash": 16796,
+				"days": 9,
 				"fees": 0,
 				"idle_days": 0,
-				"layer": 1,
-				"layers_cleared": 1,
-				"perks": 4,
-				"spent": 5680,
-				"status": "failed",
-				"tickets": 1476,
-				"won": 5158
+				"layer": 2,
+				"layers_cleared": 3,
+				"perks": 7,
+				"spent": 22695,
+				"status": "cleared",
+				"tickets": 1885,
+				"won": 51787
 			},
 			{
 				"best_prize": 55,
@@ -1010,10 +1010,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 578,
+				"spent": 732,
 				"status": "failed",
-				"tickets": 578,
-				"won": 220
+				"tickets": 732,
+				"won": 295
 			},
 			{
 				"best_prize": 500,
@@ -1024,24 +1024,24 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 2684,
+				"spent": 2649,
 				"status": "failed",
-				"tickets": 2684,
-				"won": 2426
+				"tickets": 2649,
+				"won": 2391
 			},
 			{
 				"best_prize": 105,
-				"cash": 0,
+				"cash": 79,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 1050,
+				"spent": 966,
 				"status": "failed",
-				"tickets": 1050,
-				"won": 692
+				"tickets": 966,
+				"won": 663
 			},
 			{
 				"best_prize": 500,
@@ -1052,24 +1052,24 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 1488,
+				"spent": 1524,
 				"status": "failed",
-				"tickets": 1488,
-				"won": 1130
+				"tickets": 1524,
+				"won": 1166
 			},
 			{
 				"best_prize": 105,
-				"cash": 0,
+				"cash": 79,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 2703,
+				"spent": 943,
 				"status": "failed",
-				"tickets": 2703,
-				"won": 2345
+				"tickets": 943,
+				"won": 640
 			},
 			{
 				"best_prize": 15,
@@ -1080,10 +1080,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 638,
+				"spent": 937,
 				"status": "failed",
-				"tickets": 638,
-				"won": 280
+				"tickets": 957,
+				"won": 500
 			},
 			{
 				"best_prize": 50,
@@ -1094,14 +1094,14 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 738,
+				"spent": 902,
 				"status": "failed",
-				"tickets": 738,
-				"won": 380
+				"tickets": 937,
+				"won": 465
 			},
 			{
 				"best_prize": 100,
-				"cash": 0,
+				"cash": 24,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
@@ -1110,11 +1110,11 @@
 				"perks": 0,
 				"spent": 853,
 				"status": "failed",
-				"tickets": 853,
+				"tickets": 884,
 				"won": 495
 			},
 			{
-				"best_prize": 100,
+				"best_prize": 10,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
@@ -1122,10 +1122,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 1443,
+				"spent": 533,
 				"status": "failed",
-				"tickets": 1443,
-				"won": 1085
+				"tickets": 533,
+				"won": 175
 			}
 		],
 		"churn": [
@@ -1420,10 +1420,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 949,
+				"spent": 945,
 				"status": "failed",
-				"tickets": 949,
-				"won": 672
+				"tickets": 975,
+				"won": 668
 			},
 			{
 				"best_prize": 30,
@@ -1434,38 +1434,38 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 1382,
+				"spent": 1422,
 				"status": "failed",
-				"tickets": 1382,
-				"won": 1085
+				"tickets": 1426,
+				"won": 1125
 			},
 			{
-				"best_prize": 100,
-				"cash": 79,
-				"days": 5,
+				"best_prize": 20000,
+				"cash": 18185,
+				"days": 12,
 				"fees": 0,
 				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 2,
-				"spent": 977,
-				"status": "failed",
-				"tickets": 977,
-				"won": 790
+				"layer": 2,
+				"layers_cleared": 3,
+				"perks": 5,
+				"spent": 28491,
+				"status": "cleared",
+				"tickets": 4222,
+				"won": 60025
 			},
 			{
 				"best_prize": 4100,
-				"cash": 759,
+				"cash": 969,
 				"days": 12,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 3,
 				"perks": 3,
-				"spent": 36215,
+				"spent": 35975,
 				"status": "cleared",
 				"tickets": 2543,
-				"won": 49780
+				"won": 49750
 			},
 			{
 				"best_prize": 200,
@@ -1476,10 +1476,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 1819,
+				"spent": 1964,
 				"status": "failed",
-				"tickets": 1819,
-				"won": 1482
+				"tickets": 1964,
+				"won": 1548
 			},
 			{
 				"best_prize": 30,
@@ -1490,10 +1490,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 537,
+				"spent": 701,
 				"status": "failed",
-				"tickets": 537,
-				"won": 260
+				"tickets": 731,
+				"won": 345
 			},
 			{
 				"best_prize": 500,
@@ -1504,10 +1504,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 3352,
+				"spent": 3551,
 				"status": "failed",
-				"tickets": 3352,
-				"won": 3075
+				"tickets": 3551,
+				"won": 3195
 			},
 			{
 				"best_prize": 500,
@@ -1518,24 +1518,24 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 3067,
+				"spent": 3217,
 				"status": "failed",
-				"tickets": 3067,
-				"won": 2770
+				"tickets": 3217,
+				"won": 2855
 			},
 			{
-				"best_prize": 1000,
-				"cash": 3,
-				"days": 10,
+				"best_prize": 2500,
+				"cash": 2083,
+				"days": 17,
 				"fees": 0,
 				"idle_days": 0,
-				"layer": 1,
-				"layers_cleared": 1,
+				"layer": 2,
+				"layers_cleared": 2,
 				"perks": 4,
-				"spent": 11457,
+				"spent": 24232,
 				"status": "failed",
-				"tickets": 4665,
-				"won": 9905
+				"tickets": 5873,
+				"won": 17940
 			},
 			{
 				"best_prize": 150,
@@ -1546,24 +1546,24 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 2,
-				"spent": 2731,
+				"spent": 2895,
 				"status": "failed",
-				"tickets": 2731,
-				"won": 2585
+				"tickets": 2895,
+				"won": 2670
 			},
 			{
-				"best_prize": 1020,
-				"cash": 4,
-				"days": 9,
+				"best_prize": 3300,
+				"cash": 30,
+				"days": 11,
 				"fees": 0,
 				"idle_days": 0,
-				"layer": 1,
-				"layers_cleared": 1,
-				"perks": 2,
-				"spent": 30437,
-				"status": "failed",
-				"tickets": 6421,
-				"won": 28935
+				"layer": 2,
+				"layers_cleared": 3,
+				"perks": 6,
+				"spent": 28990,
+				"status": "cleared",
+				"tickets": 2273,
+				"won": 36718
 			},
 			{
 				"best_prize": 30,
@@ -1574,13 +1574,13 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 427,
+				"spent": 506,
 				"status": "failed",
-				"tickets": 427,
+				"tickets": 506,
 				"won": 90
 			},
 			{
-				"best_prize": 100,
+				"best_prize": 500,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
@@ -1588,27 +1588,27 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 862,
+				"spent": 1347,
 				"status": "failed",
-				"tickets": 862,
-				"won": 585
+				"tickets": 1347,
+				"won": 1070
 			},
 			{
-				"best_prize": 50,
+				"best_prize": 450,
 				"cash": 0,
-				"days": 5,
+				"days": 11,
 				"fees": 0,
 				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 1192,
+				"layer": 1,
+				"layers_cleared": 1,
+				"perks": 2,
+				"spent": 20151,
 				"status": "failed",
-				"tickets": 1192,
-				"won": 895
+				"tickets": 6923,
+				"won": 18441
 			},
 			{
-				"best_prize": 100,
+				"best_prize": 150,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
@@ -1616,10 +1616,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 892,
+				"spent": 2095,
 				"status": "failed",
-				"tickets": 892,
-				"won": 595
+				"tickets": 2095,
+				"won": 1798
 			},
 			{
 				"best_prize": 30,
@@ -1630,24 +1630,24 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 347,
+				"spent": 447,
 				"status": "failed",
-				"tickets": 347,
-				"won": 50
+				"tickets": 447,
+				"won": 85
 			},
 			{
 				"best_prize": 615,
-				"cash": 1,
+				"cash": 3,
 				"days": 9,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 1,
 				"layers_cleared": 1,
 				"perks": 3,
-				"spent": 5685,
+				"spent": 7170,
 				"status": "failed",
-				"tickets": 1157,
-				"won": 4970
+				"tickets": 1461,
+				"won": 6245
 			},
 			{
 				"best_prize": 30,
@@ -1658,14 +1658,14 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 532,
+				"spent": 671,
 				"status": "failed",
-				"tickets": 532,
-				"won": 295
+				"tickets": 707,
+				"won": 355
 			},
 			{
 				"best_prize": 50,
-				"cash": 0,
+				"cash": 24,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
@@ -2000,53 +2000,11 @@
 				"perks": 4,
 				"spent": 1565,
 				"status": "failed",
-				"tickets": 621,
+				"tickets": 625,
 				"won": 1320
 			},
 			{
-				"best_prize": 500,
-				"cash": 0,
-				"days": 9,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 1,
-				"layers_cleared": 1,
-				"perks": 4,
-				"spent": 2800,
-				"status": "failed",
-				"tickets": 632,
-				"won": 1632
-			},
-			{
 				"best_prize": 1000,
-				"cash": 0,
-				"days": 11,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 1,
-				"layers_cleared": 1,
-				"perks": 0,
-				"spent": 3395,
-				"status": "failed",
-				"tickets": 1171,
-				"won": 1610
-			},
-			{
-				"best_prize": 10,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 0,
-				"spent": 527,
-				"status": "failed",
-				"tickets": 527,
-				"won": 90
-			},
-			{
-				"best_prize": 500,
 				"cash": 4,
 				"days": 9,
 				"fees": 0,
@@ -2054,10 +2012,52 @@
 				"layer": 1,
 				"layers_cleared": 1,
 				"perks": 4,
-				"spent": 2015,
+				"spent": 3335,
 				"status": "failed",
-				"tickets": 539,
-				"won": 851
+				"tickets": 788,
+				"won": 2171
+			},
+			{
+				"best_prize": 12200,
+				"cash": 128,
+				"days": 14,
+				"fees": 467,
+				"idle_days": 0,
+				"layer": 2,
+				"layers_cleared": 3,
+				"perks": 5,
+				"spent": 5620,
+				"status": "cleared",
+				"tickets": 986,
+				"won": 20316
+			},
+			{
+				"best_prize": 500,
+				"cash": 0,
+				"days": 5,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 0,
+				"layers_cleared": 0,
+				"perks": 0,
+				"spent": 1256,
+				"status": "failed",
+				"tickets": 1304,
+				"won": 740
+			},
+			{
+				"best_prize": 1000,
+				"cash": 2,
+				"days": 11,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 1,
+				"layers_cleared": 1,
+				"perks": 3,
+				"spent": 2255,
+				"status": "failed",
+				"tickets": 756,
+				"won": 1364
 			},
 			{
 				"best_prize": 10,
@@ -2068,55 +2068,55 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 482,
+				"spent": 561,
 				"status": "failed",
-				"tickets": 482,
+				"tickets": 561,
 				"won": 45
 			},
 			{
-				"best_prize": 500,
-				"cash": 1,
+				"best_prize": 1000,
+				"cash": 4,
 				"days": 9,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 1,
 				"layers_cleared": 1,
 				"perks": 0,
-				"spent": 2880,
+				"spent": 3305,
 				"status": "failed",
-				"tickets": 648,
-				"won": 1175
+				"tickets": 759,
+				"won": 1875
 			},
 			{
 				"best_prize": 500,
-				"cash": 0,
-				"days": 5,
+				"cash": 3,
+				"days": 11,
 				"fees": 0,
 				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 0,
-				"spent": 1662,
+				"layer": 1,
+				"layers_cleared": 1,
+				"perks": 3,
+				"spent": 2145,
 				"status": "failed",
-				"tickets": 1662,
-				"won": 1225
+				"tickets": 683,
+				"won": 901
 			},
 			{
-				"best_prize": 13400,
-				"cash": 5142,
-				"days": 15,
+				"best_prize": 2000,
+				"cash": 4,
+				"days": 11,
 				"fees": 0,
 				"idle_days": 0,
-				"layer": 2,
-				"layers_cleared": 3,
-				"perks": 5,
-				"spent": 6910,
-				"status": "cleared",
-				"tickets": 610,
-				"won": 23064
+				"layer": 1,
+				"layers_cleared": 1,
+				"perks": 1,
+				"spent": 5710,
+				"status": "failed",
+				"tickets": 1422,
+				"won": 4771
 			},
 			{
-				"best_prize": 5,
+				"best_prize": 8,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
@@ -2124,10 +2124,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 3,
-				"spent": 111,
+				"spent": 114,
 				"status": "failed",
-				"tickets": 111,
-				"won": 5
+				"tickets": 114,
+				"won": 8
 			},
 			{
 				"best_prize": 10,
@@ -2138,13 +2138,27 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 492,
+				"spent": 596,
 				"status": "failed",
-				"tickets": 492,
-				"won": 55
+				"tickets": 596,
+				"won": 80
 			},
 			{
-				"best_prize": 9,
+				"best_prize": 14800,
+				"cash": 5161,
+				"days": 18,
+				"fees": 589,
+				"idle_days": 0,
+				"layer": 2,
+				"layers_cleared": 3,
+				"perks": 5,
+				"spent": 12130,
+				"status": "cleared",
+				"tickets": 1810,
+				"won": 25094
+			},
+			{
+				"best_prize": 10,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
@@ -2152,13 +2166,13 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 3,
-				"spent": 115,
+				"spent": 121,
 				"status": "failed",
-				"tickets": 115,
-				"won": 9
+				"tickets": 121,
+				"won": 15
 			},
 			{
-				"best_prize": 5,
+				"best_prize": 10,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
@@ -2166,28 +2180,14 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 3,
-				"spent": 111,
+				"spent": 183,
 				"status": "failed",
-				"tickets": 111,
-				"won": 5
+				"tickets": 183,
+				"won": 77
 			},
 			{
 				"best_prize": 8,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 3,
-				"spent": 142,
-				"status": "failed",
-				"tickets": 142,
-				"won": 36
-			},
-			{
-				"best_prize": 8,
-				"cash": 0,
+				"cash": 32,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
@@ -2200,21 +2200,21 @@
 				"won": 21
 			},
 			{
-				"best_prize": 6,
+				"best_prize": 5,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
-				"perks": 3,
-				"spent": 112,
+				"perks": 1,
+				"spent": 226,
 				"status": "failed",
-				"tickets": 112,
-				"won": 6
+				"tickets": 226,
+				"won": 10
 			},
 			{
-				"best_prize": 7,
+				"best_prize": 14,
 				"cash": 0,
 				"days": 5,
 				"fees": 0,
@@ -2222,21 +2222,21 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 3,
-				"spent": 148,
+				"spent": 244,
 				"status": "failed",
-				"tickets": 148,
-				"won": 42
+				"tickets": 292,
+				"won": 59
 			},
 			{
 				"best_prize": 40000,
-				"cash": 29146,
+				"cash": 29196,
 				"days": 17,
 				"fees": 62,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 3,
 				"perks": 5,
-				"spent": 7110,
+				"spent": 7060,
 				"status": "cleared",
 				"tickets": 895,
 				"won": 46315
@@ -2250,10 +2250,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 557,
+				"spent": 572,
 				"status": "failed",
-				"tickets": 557,
-				"won": 120
+				"tickets": 572,
+				"won": 135
 			}
 		],
 		"money": [
@@ -2266,10 +2266,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 1137,
+				"spent": 1157,
 				"status": "failed",
-				"tickets": 1137,
-				"won": 648
+				"tickets": 1307,
+				"won": 668
 			},
 			{
 				"best_prize": 202,
@@ -2280,10 +2280,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 887,
+				"spent": 1507,
 				"status": "failed",
-				"tickets": 887,
-				"won": 398
+				"tickets": 1557,
+				"won": 1018
 			},
 			{
 				"best_prize": 202,
@@ -2294,26 +2294,54 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 961,
+				"spent": 1051,
 				"status": "failed",
-				"tickets": 961,
+				"tickets": 1149,
+				"won": 476
+			},
+			{
+				"best_prize": 202,
+				"cash": 0,
+				"days": 5,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 0,
+				"layers_cleared": 0,
+				"perks": 1,
+				"spent": 995,
+				"status": "failed",
+				"tickets": 1045,
+				"won": 506
+			},
+			{
+				"best_prize": 200,
+				"cash": 0,
+				"days": 5,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 0,
+				"layers_cleared": 0,
+				"perks": 1,
+				"spent": 1946,
+				"status": "failed",
+				"tickets": 1993,
+				"won": 1370
+			},
+			{
+				"best_prize": 202,
+				"cash": 0,
+				"days": 5,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 0,
+				"layers_cleared": 0,
+				"perks": 1,
+				"spent": 1145,
+				"status": "failed",
+				"tickets": 1192,
 				"won": 472
 			},
 			{
-				"best_prize": 202,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 957,
-				"status": "failed",
-				"tickets": 957,
-				"won": 468
-			},
-			{
 				"best_prize": 200,
 				"cash": 0,
 				"days": 5,
@@ -2322,38 +2350,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 1809,
+				"spent": 1232,
 				"status": "failed",
-				"tickets": 1809,
-				"won": 1320
-			},
-			{
-				"best_prize": 10,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 682,
-				"status": "failed",
-				"tickets": 682,
-				"won": 194
-			},
-			{
-				"best_prize": 10,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 589,
-				"status": "failed",
-				"tickets": 589,
-				"won": 100
+				"tickets": 1232,
+				"won": 656
 			},
 			{
 				"best_prize": 202,
@@ -2364,94 +2364,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 1353,
+				"spent": 1440,
 				"status": "failed",
-				"tickets": 1353,
-				"won": 864
-			},
-			{
-				"best_prize": 200,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 1061,
-				"status": "failed",
-				"tickets": 1061,
-				"won": 572
-			},
-			{
-				"best_prize": 12480,
-				"cash": 2864,
-				"days": 14,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 2,
-				"layers_cleared": 3,
-				"perks": 6,
-				"spent": 8700,
-				"status": "cleared",
-				"tickets": 1090,
-				"won": 19983
-			},
-			{
-				"best_prize": 202,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 2339,
-				"status": "failed",
-				"tickets": 2339,
-				"won": 1850
-			},
-			{
-				"best_prize": 500,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 4070,
-				"status": "failed",
-				"tickets": 4070,
-				"won": 3582
-			},
-			{
-				"best_prize": 200,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 2285,
-				"status": "failed",
-				"tickets": 2285,
-				"won": 1796
-			},
-			{
-				"best_prize": 204,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 4419,
-				"status": "failed",
-				"tickets": 4419,
-				"won": 3930
+				"tickets": 1440,
+				"won": 884
 			},
 			{
 				"best_prize": 10,
@@ -2462,10 +2378,52 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 577,
+				"spent": 743,
 				"status": "failed",
-				"tickets": 577,
-				"won": 88
+				"tickets": 790,
+				"won": 254
+			},
+			{
+				"best_prize": 1000,
+				"cash": 4,
+				"days": 9,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 1,
+				"layers_cleared": 1,
+				"perks": 3,
+				"spent": 6885,
+				"status": "failed",
+				"tickets": 1537,
+				"won": 4127
+			},
+			{
+				"best_prize": 1000,
+				"cash": 2,
+				"days": 9,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 1,
+				"layers_cleared": 1,
+				"perks": 2,
+				"spent": 15095,
+				"status": "failed",
+				"tickets": 3539,
+				"won": 12281
+			},
+			{
+				"best_prize": 1000,
+				"cash": 3,
+				"days": 11,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 1,
+				"layers_cleared": 1,
+				"perks": 2,
+				"spent": 8460,
+				"status": "failed",
+				"tickets": 3218,
+				"won": 5743
 			},
 			{
 				"best_prize": 200,
@@ -2476,10 +2434,52 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 1213,
+				"spent": 2261,
 				"status": "failed",
-				"tickets": 1213,
-				"won": 724
+				"tickets": 2261,
+				"won": 1773
+			},
+			{
+				"best_prize": 300,
+				"cash": 4,
+				"days": 11,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 1,
+				"layers_cleared": 1,
+				"perks": 2,
+				"spent": 5255,
+				"status": "failed",
+				"tickets": 2983,
+				"won": 3123
+			},
+			{
+				"best_prize": 100,
+				"cash": 0,
+				"days": 5,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 0,
+				"layers_cleared": 0,
+				"perks": 1,
+				"spent": 1161,
+				"status": "failed",
+				"tickets": 1161,
+				"won": 672
+			},
+			{
+				"best_prize": 200,
+				"cash": 0,
+				"days": 5,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 0,
+				"layers_cleared": 0,
+				"perks": 1,
+				"spent": 1308,
+				"status": "failed",
+				"tickets": 1308,
+				"won": 752
 			},
 			{
 				"best_prize": 10,
@@ -2490,10 +2490,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 781,
+				"spent": 883,
 				"status": "failed",
-				"tickets": 781,
-				"won": 292
+				"tickets": 931,
+				"won": 306
 			},
 			{
 				"best_prize": 202,
@@ -2504,38 +2504,38 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 2895,
+				"spent": 3012,
 				"status": "failed",
-				"tickets": 2895,
-				"won": 2406
+				"tickets": 3059,
+				"won": 2436
 			},
 			{
-				"best_prize": 12000,
-				"cash": 3409,
-				"days": 15,
+				"best_prize": 202,
+				"cash": 91,
+				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
-				"layer": 2,
-				"layers_cleared": 3,
-				"perks": 4,
-				"spent": 11850,
-				"status": "cleared",
-				"tickets": 1380,
-				"won": 18574
+				"layer": 0,
+				"layers_cleared": 0,
+				"perks": 1,
+				"spent": 1831,
+				"status": "failed",
+				"tickets": 1879,
+				"won": 1342
 			},
 			{
 				"best_prize": 2510,
-				"cash": 17,
-				"days": 17,
+				"cash": 9,
+				"days": 16,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 2,
 				"perks": 4,
-				"spent": 13870,
+				"spent": 13590,
 				"status": "failed",
-				"tickets": 2189,
-				"won": 6003
+				"tickets": 2175,
+				"won": 6045
 			}
 		],
 		"perks": [
@@ -3105,31 +3105,31 @@
 		"small": [
 			{
 				"best_prize": 2700,
-				"cash": 2920,
+				"cash": 3385,
 				"days": 6,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 3,
 				"perks": 6,
-				"spent": 16000,
+				"spent": 15450,
 				"status": "cleared",
-				"tickets": 3300,
-				"won": 35385
+				"tickets": 3183,
+				"won": 35300
 			},
 			{
-				"best_prize": 600,
-				"cash": 1828,
-				"days": 7,
+				"best_prize": 2000,
+				"cash": 1677,
+				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 3,
-				"perks": 4,
-				"spent": 26310,
+				"perks": 5,
+				"spent": 14925,
 				"status": "cleared",
-				"tickets": 4002,
-				"won": 44150
+				"tickets": 3450,
+				"won": 33050
 			},
 			{
 				"best_prize": 105,
@@ -3140,10 +3140,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 1903,
+				"spent": 1982,
 				"status": "failed",
-				"tickets": 1903,
-				"won": 1625
+				"tickets": 2024,
+				"won": 1665
 			},
 			{
 				"best_prize": 210,
@@ -3154,42 +3154,42 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 2210,
+				"spent": 2654,
 				"status": "failed",
-				"tickets": 2210,
-				"won": 1893
+				"tickets": 2695,
+				"won": 2337
 			},
 			{
 				"best_prize": 3600,
-				"cash": 26,
-				"days": 5,
+				"cash": 368,
+				"days": 7,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 3,
-				"perks": 5,
-				"spent": 7600,
+				"perks": 10,
+				"spent": 4350,
 				"status": "cleared",
-				"tickets": 2900,
-				"won": 24150
+				"tickets": 2400,
+				"won": 20806
+			},
+			{
+				"best_prize": 2000,
+				"cash": 964,
+				"days": 12,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 2,
+				"layers_cleared": 3,
+				"perks": 4,
+				"spent": 15450,
+				"status": "cleared",
+				"tickets": 5011,
+				"won": 30185
 			},
 			{
 				"best_prize": 100,
 				"cash": 79,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 0,
-				"spent": 1058,
-				"status": "failed",
-				"tickets": 1058,
-				"won": 780
-			},
-			{
-				"best_prize": 100,
-				"cash": 0,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
@@ -3202,36 +3202,36 @@
 				"won": 1662
 			},
 			{
-				"best_prize": 600,
-				"cash": 199,
-				"days": 9,
+				"best_prize": 900,
+				"cash": 476,
+				"days": 8,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 3,
 				"perks": 2,
-				"spent": 29479,
+				"spent": 20404,
 				"status": "cleared",
-				"tickets": 3804,
-				"won": 46025
+				"tickets": 3154,
+				"won": 37270
 			},
 			{
 				"best_prize": 2700,
-				"cash": 380,
+				"cash": 480,
 				"days": 6,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 3,
 				"perks": 7,
-				"spent": 13825,
+				"spent": 13950,
 				"status": "cleared",
-				"tickets": 4075,
-				"won": 30670
+				"tickets": 4126,
+				"won": 30895
 			},
 			{
 				"best_prize": 55,
-				"cash": 0,
+				"cash": 158,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
@@ -3244,74 +3244,32 @@
 				"won": 946
 			},
 			{
-				"best_prize": 1800,
-				"cash": 1164,
-				"days": 8,
+				"best_prize": 2700,
+				"cash": 422,
+				"days": 6,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 3,
-				"perks": 5,
-				"spent": 13835,
+				"perks": 6,
+				"spent": 20950,
 				"status": "cleared",
-				"tickets": 2063,
-				"won": 29400
+				"tickets": 2175,
+				"won": 37773
 			},
 			{
 				"best_prize": 675,
-				"cash": 2077,
+				"cash": 2069,
 				"days": 11,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 2,
 				"perks": 6,
-				"spent": 17895,
+				"spent": 14950,
 				"status": "failed",
-				"tickets": 2596,
-				"won": 15285
-			},
-			{
-				"best_prize": 10,
-				"cash": 79,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 652,
-				"status": "failed",
-				"tickets": 652,
-				"won": 394
-			},
-			{
-				"best_prize": 110,
-				"cash": 0,
-				"days": 5,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 0,
-				"layers_cleared": 0,
-				"perks": 1,
-				"spent": 1474,
-				"status": "failed",
-				"tickets": 1474,
-				"won": 1157
-			},
-			{
-				"best_prize": 2000,
-				"cash": 380,
-				"days": 6,
-				"fees": 0,
-				"idle_days": 0,
-				"layer": 2,
-				"layers_cleared": 3,
-				"perks": 4,
-				"spent": 20200,
-				"status": "cleared",
-				"tickets": 2825,
-				"won": 37085
+				"tickets": 2055,
+				"won": 12332
 			},
 			{
 				"best_prize": 105,
@@ -3321,11 +3279,53 @@
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
-				"perks": 0,
-				"spent": 678,
+				"perks": 1,
+				"spent": 2360,
 				"status": "failed",
-				"tickets": 678,
-				"won": 400
+				"tickets": 2360,
+				"won": 2102
+			},
+			{
+				"best_prize": 165,
+				"cash": 398,
+				"days": 5,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 0,
+				"layers_cleared": 0,
+				"perks": 1,
+				"spent": 6555,
+				"status": "failed",
+				"tickets": 6555,
+				"won": 6636
+			},
+			{
+				"best_prize": 2000,
+				"cash": 275,
+				"days": 6,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 2,
+				"layers_cleared": 3,
+				"perks": 4,
+				"spent": 19025,
+				"status": "cleared",
+				"tickets": 1830,
+				"won": 35805
+			},
+			{
+				"best_prize": 105,
+				"cash": 0,
+				"days": 5,
+				"fees": 0,
+				"idle_days": 0,
+				"layer": 0,
+				"layers_cleared": 0,
+				"perks": 0,
+				"spent": 724,
+				"status": "failed",
+				"tickets": 724,
+				"won": 405
 			},
 			{
 				"best_prize": 205,
@@ -3335,39 +3335,39 @@
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
-				"perks": 0,
-				"spent": 1948,
+				"perks": 1,
+				"spent": 2213,
 				"status": "failed",
-				"tickets": 1948,
-				"won": 1670
+				"tickets": 2249,
+				"won": 1956
 			},
 			{
 				"best_prize": 1800,
-				"cash": 2180,
+				"cash": 154,
 				"days": 6,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 2,
 				"layers_cleared": 3,
-				"perks": 7,
-				"spent": 8800,
+				"perks": 8,
+				"spent": 8300,
 				"status": "cleared",
-				"tickets": 1425,
-				"won": 27445
+				"tickets": 1400,
+				"won": 25255
 			},
 			{
 				"best_prize": 50,
-				"cash": 79,
+				"cash": 0,
 				"days": 5,
 				"fees": 0,
 				"idle_days": 0,
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 0,
-				"spent": 458,
+				"spent": 509,
 				"status": "failed",
-				"tickets": 458,
-				"won": 180
+				"tickets": 539,
+				"won": 190
 			},
 			{
 				"best_prize": 15,
@@ -3378,10 +3378,10 @@
 				"layer": 0,
 				"layers_cleared": 0,
 				"perks": 1,
-				"spent": 784,
+				"spent": 756,
 				"status": "failed",
-				"tickets": 784,
-				"won": 467
+				"tickets": 756,
+				"won": 439
 			}
 		],
 		"work": [

@@ -1499,6 +1499,11 @@ func deal_shelf() -> Array:
 ## RETURNS and a RETURN SLIP: tray entries ({form, ticket, bet}) given back to the
 ## machine for `pct` of what they cost. The money comes back to cash (no longer
 ## spent). Returns the money back. The caller takes the tickets off the table.
+## Only the money comes back: the tickets never go back into the box, which stays where
+## the sale left it (a box sold out stays sold out, its last sale stays paid). That is
+## what makes buying the rest of a box unopened, taking the last sale and returning the
+## tickets a mechanic, not a hole (G, 2026-11-16): it can be done once a box, never again
+## on the same tickets (tests/test_perks.gd test_returned_tickets_stay_out_of_the_box).
 func refund_tickets(e: Economy, entries: Array, pct: int) -> int:
 	var total := 0
 	for en in entries:
