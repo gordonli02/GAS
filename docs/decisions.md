@@ -1693,3 +1693,46 @@ nothing. They are experiments, not rules: G picks. 300 runs, SIM seeds.
   when their line is not among the three (a player could, for a paid normal round),
   which is why small reads lower under starter 2 than under starter 1. `offer_bonus`
   widens reward rounds too.
+
+## 十三.5 after G's choice: the deal stays random, and what rarity weights can do for layer 2
+
+G (2026-11-16, roadmap 一.7, 一.8, 十三.5): no lean to held lines, no free reroll, no
+reward lean, no four cards; the two hurdles (an engine, the whole core) need not both
+be passed in a run, 40 to 66% holding the core when a run ends is fine; a starter
+round stays and is paid for; with the core held a line should clear 70 to 80%, not
+100. From G's side session the same day: entry cards are a pool not tied to lines
+(PENNY JAR, SCRAP DEALER, CONSOLATION, generic ones to come), how the starter round
+deals from it is open; money is a support route, not a main line.
+
+- **The code** (`99e3646`): `deal_bias`, `reward_bias`, `free_rerolls` and the free
+  starter pick are removed. Left, all off or standard by default: `starter` (0 / 1)
+  with `Catalog.STARTER`, still a table of one card a line (placeholders; the shape is
+  wrong for a pool and waits for G's rule), `starter_cards`, `offer_bonus`, and `deal`:
+  each layer's rarity weights from the config (`--set=deal2=10/8/4`). `--reach` prints
+  the share of runs holding at least k of a core's cards by the end of each layer.
+- **Open with G**: whether the chance of holding the core by the end of layer 2 goes
+  up (layer 3 is where a build is topped up, not found). With the deal random the
+  levers are the layers' rarity weights and the number of rounds (the checkpoint's,
+  step 5). The weights, measured (300 runs, SIM seeds; `--reach --rerolls=0`; by the
+  end of layer 2, percent of runs; the weights are common / rare / legendary, the
+  standard ones 10/3/1, 10/5/2, 10/5/5):
+
+  | layer 2 (and layer 1) | whole core: clearing, jackpot, small, batch, money | all but one: clearing 3 of 4, jackpot 2 of 3, small 4 of 5, batch 2 of 3 |
+  |---|---|---|
+  | standard | 5, 10, 13, 11, 27 | 29, 43, 52, 48 |
+  | 10/8/4 | 10, 13, 12, 19, 36 | 38, 51, 52, 53 |
+  | 10/10/6 | 12, 18, 14, 21, 41 | 43, 55, 54, 58 |
+  | 10/10/10 | 20, 24, 19, 30, 53 | 54, 58, 56, 59 |
+  | 5/10/10 | 23, 33, 20, 37, 59 | 57, 65, 54, 68 |
+  | 10/10/6, layer 1 10/8/1 | 10, 25, 13, 29, 43 | 39, 65, 46, 68 |
+  | 5/10/10, layer 1 10/10/1 | 19, 43, 11, 52, 63 | 47, 73, 37, 79 |
+
+  When the run ends the whole core is held in 44 to 57% of runs at 10/10/10 (39 to 57%
+  standard), so the end hardly moves: the weights bring cards forward. small gains
+  nothing (three of its five are common) and loses when commons weigh less.
+- **Whole runs** (the seven building bots, paired with the standard config): layer 2's
+  weights alone change no bot's clear rate beyond noise (10/10/6: batch -0.7, money
+  -1.0, perks -1.3, the rest 0; 5/10/10: batch -1.3, -2.6 to -0.0, perks -2.0). Layer
+  1's rare weight up costs the bots that live on cheap commons: at 10/8/1 small -11.3
+  (-17.1 to -5.6) and build -4.7 (-8.3 to -1.0), at 10/10/1 small -14.3 and build -7.0;
+  jackpot, batch and clearing within noise. So layer 1's weights are best left.
