@@ -1736,3 +1736,27 @@ deals from it is open; money is a support route, not a main line.
   1's rare weight up costs the bots that live on cheap commons: at 10/8/1 small -11.3
   (-17.1 to -5.6) and build -4.7 (-8.3 to -1.0), at 10/10/1 small -14.3 and build -7.0;
   jackpot, batch and clearing within noise. So layer 1's weights are best left.
+
+## The starter pool, and a reading of it on (the rule stays off)
+
+G (2026-11-16): the starter round is three cards at random from the pool of entry
+cards, bought like any card; the pool is not tied to lines (`Catalog.STARTER`: PENNY
+JAR, SCRAP DEALER, CONSOLATION; generic entry cards are to be added); the rule stays
+off (`RunConfig.starter` 0) until the pool has grown. Holding the core by the end of
+layer 2 means any one core card (clearing 94%, jackpot 87%, small 100%, batch 90% at
+the ceiling), so nothing is raised and the rarity weights stay; `RunConfig.deal` is
+kept as the seam for step 8. money is the support route: `sim_runs` gives it no
+target and does not rank it (`664ba20`).
+
+- **A reading with the pool on as it is** (300 runs, paired with the standard config;
+  the pool being small's three cards, day 1 always shows them): small 47.0% to 95.7%
+  (+48.7, +42.9 to +54.4; layer 1 49.0% to 96.7%), perks +6.0 (+2.3 to +9.7), build
+  17.3% to 7.3% (-10.0, -14.5 to -5.5; layer 1 25.3% to 13.3%), jackpot, batch, money
+  and clearing unchanged. At the ceiling the other lines' first engine comes later
+  (an engine by the end of layer 1: clearing 70 to 63%, jackpot 45 to 35%, batch 53 to
+  45%, money 24 to 19%): the first round is spent on cards that are not theirs.
+- **What it shows for step 8.** small's run is decided by one card: with PENNY JAR
+  sure on day 1 it clears 95.7% (G's mark with the whole core held is 70 to 80%), and
+  in the standard table its layer-1 deaths hold SCRAP DEALER (77%) or nothing. build
+  falls because SCRAP DEALER stands before PENNY JAR on its list and day 1 now always
+  offers it: SCRAP DEALER as a first card is far the weaker of the two.
