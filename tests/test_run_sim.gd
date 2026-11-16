@@ -845,3 +845,79 @@ func test_upgrades_counted() -> void:
 		return
 	var s := RunSim.summary("perks", pack.forms, 3, "UP")
 	check(s.upgrades.has("shelf") and s.upgrades.has("reward"), "summary: the upgrades a run (%s)" % str(s.upgrades))
+
+
+## The flow study (SimData.flow_study, sim_runs --flow): what a box paid before a cut
+## and what it holds after add up to the box; the thirds split the boxes; the shares
+## add up; the same seed gives the same numbers.
+func test_flow_study() -> void:
+	var pack := core_pack()
+	if pack == null:
+		return
+	var model := RunConfig.standard().box_model(0)
+	var f: FormDef = pack.forms[0].shaped()
+	var box := BoxGenerator.build(f, "FLOWT-0", model, true)
+	for cut in [0, box.size / 4, box.size / 2, box.size - 1, box.size]:
+		var x := SimData.flow_cut(box, cut)
+		var before := 0
+		for i in cut:
+			before += int(box.tickets[i].prize)
+		eq(int(x.past_money), before, "cut %d: past is the tickets before the cut" % cut)
+		eq(int(x.past_money) + int(x.rest_money), box.prize_total(), "cut %d: past and rest money are the box's" % cut)
+		eq(int(x.past_cost) + int(x.rest_cost), box.gross(), "cut %d: past and rest cost are the box's" % cut)
+		eq(int(x.past_cost), cut * f.price, "cut %d: the tickets sold" % cut)
+		eq(box.cursor, 0, "cut %d: the box is put back" % cut)
+		var tops := 0
+		for i in range(cut, box.size):
+			for g in box.tickets[i].get("wins", [box.tickets[i].tier]):
+				if int(g) >= 0 and f.is_top(int(g)):
+					tops += 1
+		eq(bool(x.top_in), tops > 0, "cut %d: a top prize in after the cut" % cut)
+	# The thirds: every index once, sizes within one, the lower third's values not above the next's.
+	var vals := [0.5, 0.1, 0.1, 0.9, 0.3, 0.3, 0.7, 0.2, 0.0, 0.6, 0.6]
+	var t := SimData.terciles(vals)
+	var seen := []
+	for k in 3:
+		seen.append_array(t[k])
+		check(absi(t[k].size() - vals.size() / 3) <= 1, "third %d: %d of %d" % [k, t[k].size(), vals.size()])
+	seen.sort()
+	eq(seen, range(vals.size()), "the thirds partition the indexes")
+	for k in 2:
+		var hi: float = t[k].map(func(i): return vals[i]).max()
+		var lo: float = t[k + 1].map(func(i): return vals[i]).min()
+		check(hi <= lo, "third %d's values under third %d's" % [k, k + 1])
+	check(is_equal_approx(SimData.pearson([1, 2, 3], [2, 4, 6]), 1.0), "Pearson: a line up is 1")
+	check(is_equal_approx(SimData.pearson([1, 2, 3], [3, 2, 1]), -1.0), "Pearson: a line down is -1")
+	check(is_equal_approx(SimData.spearman([1.0, 2.0, 3.0, 4.0], [1.0, 8.0, 27.0, 1000.0]), 1.0), "Spearman: any rise is 1")
+	eq(SimData._ranks([3.0, 1.0, 3.0, 2.0]), [2.5, 0.0, 2.5, 1.0], "ties share their mean rank")
+	# A small study.
+	var forms := pack.forms.slice(0, 3)
+	const N := 30
+	var s := SimData.flow_study(forms, N, null, "FLOWT")
+	eq(s.cuts, SimData.FLOW_CUTS, "the cuts")
+	eq(s.rows.size(), forms.size() + 1, "a row set a form and one over all")
+	for key in s.rows:
+		var want := N * (forms.size() if key == "all" else 1)
+		eq(s.rows[key].size(), SimData.FLOW_CUTS.size(), "%s: a row a cut" % key)
+		for row in s.rows[key]:
+			eq(int(row.n), want, "%s at %d%%: the boxes" % [key, row.cut])
+			eq(int(row.top_in.n) + int(row.no_top.n), want, "%s at %d%%: top in and no top are every box" % [key, row.cut])
+			check(is_equal_approx(row.top_in.share + row.no_top.share, 1.0), "%s at %d%%: the shares add up" % [key, row.cut])
+			var sum := 0
+			for th in row.thirds:
+				sum += int(th.n)
+			eq(sum, want, "%s at %d%%: the thirds are every box" % [key, row.cut])
+			for g in [row.top_in, row.no_top]:
+				var gs := 0
+				for th in g.thirds:
+					gs += int(th.n)
+				eq(gs, int(g.n), "%s at %d%%: the thirds within a group are its boxes" % [key, row.cut])
+			if key != "all":
+				for k in 2:
+					check(float(row.thirds[k].hi) <= float(row.thirds[k + 1].lo), "%s at %d%%: third %d's past under the next" % [key, row.cut, k])
+			var mixed: float = (row.thirds[0].rest * row.thirds[0].n + row.thirds[1].rest * row.thirds[1].n
+				+ row.thirds[2].rest * row.thirds[2].n) / float(want)
+			check(is_equal_approx(mixed, float(row.rest)), "%s at %d%%: the thirds' rests make the mean" % [key, row.cut])
+			check(row.r >= -1.0 and row.r <= 1.0, "%s at %d%%: r %.3f" % [key, row.cut, row.r])
+	eq(SimData.flow_study(forms, N, null, "FLOWT"), s, "the same seed, the same numbers")
+	check(SimData.flow_study(forms, N, null, "FLOWU") != s, "another seed, other numbers")

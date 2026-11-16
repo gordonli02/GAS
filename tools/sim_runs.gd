@@ -82,6 +82,21 @@ extends Node
 ## complete at and the share that never completed it; rerolls a run and their cost; then
 ## the share holding at least k of the core's cards by layer, k from 1 to the core's
 ## size; then each core card's held share by layer. Exit code 0: it is a report.
+## With --flow the tool does only the flow study (SimData.flow_study; docs/roadmap.md
+## 数值方向 三.2 and 十二.1: how much what a box has paid says about what it holds): for
+## each form, --flow-boxes=N boxes (default 2000) as the run makes them in layer 1 (180
+## to 220 tickets, the forms' shapes, the run's payout; stake 1, no perks, no bots),
+## each cut at 25%, 50% and 75% of its tickets sold in order. past: the prizes of the
+## tickets sold over what they cost; rest: the prize money left over what the tickets
+## left cost (BoxReading's heat; the last-sale prize not counted). A table a cut, a row
+## a form and one over all forms pooled (the same count of boxes each, thirds taken
+## within each form): the means of past and rest; r, Pearson's correlation of past and
+## rest (above 0: a box that paid more so far holds more; below 0: it holds less; near
+## 0: its past says little) and rho, the same on ranks (Spearman's); the mean rest of the lowest, middle and highest third by
+## past, and highest less lowest; the share of boxes with a top prize still in (READ
+## THE FLARE) and the mean rest with and without; the same thirds within each of those;
+## and what a chooser gets: the rest of the best and worst third by past (L / M / H)
+## against the mean of all. Seeds --seed= (default FLOW). Exit code 0: it is a report.
 ## --set=key=value[,key=value...]: the run's config with those fields overridden
 ## (RunConfig.SETTABLE, RunConfig.parse_set: shelf_upgrades and the dealing switches of
 ## roadmap 十三.5: starter, starter_cards=perk/perk/... (a pool in place of
@@ -132,6 +147,9 @@ func _run() -> void:
 	var bots_set := false
 	var reach := false
 	var reach_rerolls := [0, 1, 2, 3]
+	var flow := false
+	var flow_boxes := 2000
+	var seed_set := false
 	var overrides := {}
 	for a in OS.get_cmdline_user_args():
 		var set_text := ""
@@ -170,6 +188,10 @@ func _run() -> void:
 			probes = true
 		elif a == "--reach":
 			reach = true
+		elif a == "--flow":
+			flow = true
+		elif a.begins_with("--flow-boxes="):
+			flow_boxes = maxi(3, a.trim_prefix("--flow-boxes=").to_int())
 		elif a.begins_with("--probe-runs="):
 			probe_runs = maxi(1, a.trim_prefix("--probe-runs=").to_int())
 		elif a == "--early":
@@ -197,6 +219,7 @@ func _run() -> void:
 			ev_boxes = maxi(0, a.trim_prefix("--ev-boxes=").to_int())
 		elif a.begins_with("--seed="):
 			prefix = a.trim_prefix("--seed=")
+			seed_set = true
 		elif a == "--list-bots":
 			for b in RunSim.BOTS:
 				print(b)
@@ -224,6 +247,10 @@ func _run() -> void:
 			return
 	if probes:
 		get_tree().quit(_probes(probe_runs, churn_boxes, res.pack.forms))
+		return
+	if flow:
+		_flow(res.pack.forms, flow_boxes, config, prefix if seed_set else "FLOW")
+		get_tree().quit(0)
 		return
 	var lines: Array = (bots if bots_set else SimBots.GIVEN.keys()).filter(func(b): return SimBots.GIVEN.has(b))
 	if given:
@@ -553,6 +580,41 @@ func _reach(lines: Array, runs: int, prefix: String, forms: Array, config: RunCo
 				var c: Array = r.cards[id]
 				parts.append("/".join(c.map(func(v): return "-" if v < 0.0 else "%.0f" % (v * 100.0))))
 			print("    %-12s %s" % [id, "   ".join(parts)])
+
+
+## --flow: the flow study (SimData.flow_study), a table a cut.
+func _flow(forms: Array, boxes: int, config: RunConfig, prefix: String) -> void:
+	var t0 := Time.get_ticks_msec()
+	var s := SimData.flow_study(forms, boxes, config, prefix)
+	print("flow study (docs/roadmap.md 数值方向 三.2, 十二.1): %d boxes a form as the run makes them in layer 1 (%d to %d tickets, payout %.3f, stake 1, no perks), seeds %s-0 .. %s-%d; %.1f s" % [
+		boxes, s.sizes[0], s.sizes[1], s.payout, prefix, prefix, boxes - 1, (Time.get_ticks_msec() - t0) / 1000.0])
+	print("past: prizes paid by the tickets sold / their cost; rest: prize money left / the cost of the tickets left (means of the boxes' ratios)")
+	print("r: Pearson of past and rest (> 0: paid more, holds more; < 0: paid more, holds less; ~0: the past says little); rho: the same on ranks (Spearman), less moved by the few boxes with a top still in")
+	print("thirds by past within the form and cut, L / M / H: lowest / middle / highest; H-L: H's rest less L's")
+	print("top: a top prize still in (READ THE FLARE): share of boxes, rest with it in / without; in L M H, no L M H: thirds by past within each")
+	print("chooser: the rest of the best and worst third by past (which), each less the mean rest of all")
+	var keys: Array = s.forms + ["all"]
+	for c in s.cuts.size():
+		print("\ncut at %d%% sold:" % s.cuts[c])
+		print("  %-10s %5s %5s %6s %6s  %5s %5s %5s %6s  %4s %5s %5s  %5s %5s %5s  %5s %5s %5s  %-16s  %-16s" % ["form", "past",
+			"rest", "r", "rho", "L", "M", "H", "H-L", "top", "in", "no", "in L", "M", "H", "no L", "M", "H", "best  rest  -all", "worst rest  -all"])
+		for key in keys:
+			var row: Dictionary = s.rows[key][c]
+			var th: Array = row.thirds
+			var ti: Dictionary = row.top_in
+			var nt: Dictionary = row.no_top
+			print("  %-10s %5.3f %5.3f %+6.3f %+6.3f  %s %s %s %+6.3f  %3.0f%% %s %s  %s  %s  %s %5.3f %+.3f  %s %5.3f %+.3f" % [key, row.past,
+				row.rest, row.r, row.rho, _r3(th[0]), _r3(th[1]), _r3(th[2]), row.spread, ti.share * 100.0,
+				_r3(ti), _r3(nt), " ".join(ti.thirds.map(_r3)), " ".join(nt.thirds.map(_r3)),
+				"LMH"[int(row.best.third)], float(row.best.rest), float(row.best.rest) - float(row.rest),
+				"LMH"[int(row.worst.third)], float(row.worst.rest), float(row.worst.rest) - float(row.rest)])
+
+
+## A group's mean rest as a 5-wide column, "    -" for a group with no box.
+static func _r3(g: Dictionary) -> String:
+	if int(g.n) == 0:
+		return "    -"
+	return "%5.3f" % float(g.rest) if float(g.rest) < 10.0 else "%5.2f" % float(g.rest)
 
 
 ## Three shares (a layer each) as "  56%" columns, "-" for a layer none played.

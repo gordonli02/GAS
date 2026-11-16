@@ -184,6 +184,222 @@ static func churn_return(base_forms: Array, perk_levels: Dictionary, boxes: int,
 		"return_fees": float(won) / (spent + fees) if spent + fees > 0 else 0.0, "fee": run.change_fee()}
 
 
+## Where the flow study cuts each box: percent of its tickets sold.
+const FLOW_CUTS := [25, 50, 75]
+
+
+## One box cut after `cut` tickets sold in order (the box as built; its cursor is put
+## back as it was): {past_money, past_cost: the prizes and the price of the tickets
+## sold; rest_money, rest_cost: of the tickets left (BoxReading.read's value, what the
+## machine still holds); past, rest: money over cost (0 for no tickets); top_in: a top
+## prize is still in the box (READ THE FLARE)}.
+static func flow_cut(box: TicketBox, cut: int) -> Dictionary:
+	cut = clampi(cut, 0, box.size)
+	var past_money := 0
+	for i in cut:
+		past_money += int(box.tickets[i].prize)
+	var was := box.cursor
+	box.cursor = cut
+	var r := BoxReading.read(box)
+	box.cursor = was
+	var past_cost := cut * box.form.price
+	var rest_cost := (box.size - cut) * box.form.price
+	return {"past_money": past_money, "past_cost": past_cost, "rest_money": int(r.value), "rest_cost": rest_cost,
+		"past": float(past_money) / past_cost if past_cost > 0 else 0.0,
+		"rest": float(r.value) / rest_cost if rest_cost > 0 else 0.0,
+		"top_in": int(r.roles.top) > 0}
+
+
+## The indexes of `values` split in three by value, lowest third first: sorted (equal
+## values by index), the k-th of n going to third floor(3k / n), so the thirds differ
+## in size by one at most and every index is in exactly one.
+static func terciles(values: Array) -> Array:
+	var order := range(values.size())
+	order.sort_custom(func(a, b): return values[a] < values[b] or (values[a] == values[b] and a < b))
+	var out := [[], [], []]
+	var n := order.size()
+	for k in n:
+		out[3 * k / n].append(order[k])
+	return out
+
+
+## Pearson's correlation of two lists of the same length; 0 when either does not vary.
+static func pearson(xs: Array, ys: Array) -> float:
+	var n := xs.size()
+	if n < 2:
+		return 0.0
+	var mx := 0.0
+	var my := 0.0
+	for i in n:
+		mx += xs[i]
+		my += ys[i]
+	mx /= n
+	my /= n
+	var sxy := 0.0
+	var sxx := 0.0
+	var syy := 0.0
+	for i in n:
+		sxy += (xs[i] - mx) * (ys[i] - my)
+		sxx += (xs[i] - mx) * (xs[i] - mx)
+		syy += (ys[i] - my) * (ys[i] - my)
+	if sxx <= 0.0 or syy <= 0.0:
+		return 0.0
+	return sxy / sqrt(sxx * syy)
+
+
+## Spearman's rank correlation: Pearson's on the ranks (equal values share their mean
+## rank). Less moved than Pearson's by the few boxes whose rest is far out (a top prize
+## still in a small rest).
+static func spearman(xs: Array, ys: Array) -> float:
+	return pearson(_ranks(xs), _ranks(ys))
+
+
+static func _ranks(values: Array) -> Array:
+	var order := range(values.size())
+	order.sort_custom(func(a, b): return values[a] < values[b])
+	var out := []
+	out.resize(values.size())
+	var k := 0
+	while k < order.size():
+		var j := k
+		while j + 1 < order.size() and values[order[j + 1]] == values[order[k]]:
+			j += 1
+		for m in range(k, j + 1):
+			out[order[m]] = (k + j) / 2.0
+		k = j + 1
+	return out
+
+
+## What the past of a box says about its rest (docs/roadmap.md 数值方向 三.2, 十二.1:
+## the flow, 流水): for each form, `boxes` boxes as the run makes them in layer 1
+## (`config`'s box model 0: its sizes, shapes, chance rounding and payout; stake 1, no
+## perks), each cut at FLOW_CUTS percent of its tickets sold in order (flow_cut). Per
+## form and cut, and over all forms pooled ("all": every form has the same count of
+## boxes, so each weighs the same; the thirds are still taken within each form):
+## {cut, n, past, rest (means of the boxes' ratios), r (Pearson of past and rest), rho
+## (Spearman's, on ranks),
+## thirds: [{n, lo, hi (the third's past range), rest}] lowest past first, spread (the
+## highest third's rest less the lowest's), top_in / no_top: {n, share, rest, thirds}
+## (the boxes with a top prize still in, and without; thirds by past within each),
+## best / worst: the rest of the best and worst third by past (and which, 0 to 2)}.
+## Returns {boxes, cuts, sizes: [smallest, biggest], payout, forms: [ids],
+## rows: {form id or "all": [a row a cut]}}.
+static func flow_study(base_forms: Array, boxes: int, config: RunConfig = null, seed_prefix := "FLOW") -> Dictionary:
+	if config == null:
+		config = RunConfig.standard()
+	var model := config.box_model(0)
+	var rows := {}
+	var ids := []
+	# all[c]: every form's boxes at cut c, with the third each fell in within its form.
+	var all := []
+	for c in FLOW_CUTS.size():
+		all.append({"cuts": [], "third": [], "third_top": []})
+	for base: FormDef in base_forms:
+		var f := base.shaped()
+		ids.append(f.id)
+		var per := []
+		for c in FLOW_CUTS.size():
+			per.append([])
+		for n in boxes:
+			var box := BoxGenerator.build(f, "%s-%d" % [seed_prefix, n], model, true)
+			for c in FLOW_CUTS.size():
+				per[c].append(flow_cut(box, box.size * int(FLOW_CUTS[c]) / 100))
+		var form_rows := []
+		for c in FLOW_CUTS.size():
+			var row := _flow_row(per[c], [], [])
+			row.cut = FLOW_CUTS[c]
+			form_rows.append(row)
+			all[c].cuts.append_array(per[c])
+			all[c].third.append_array(row._third)
+			all[c].third_top.append_array(row._third_top)
+		rows[f.id] = form_rows
+	var pooled := []
+	for c in FLOW_CUTS.size():
+		var row := _flow_row(all[c].cuts, all[c].third, all[c].third_top)
+		row.cut = FLOW_CUTS[c]
+		pooled.append(row)
+	rows["all"] = pooled
+	for key in rows:
+		for row in rows[key]:
+			row.erase("_third")
+			row.erase("_third_top")
+	return {"boxes": boxes, "cuts": FLOW_CUTS.duplicate(), "payout": model.payout, "forms": ids, "rows": rows,
+		"sizes": [model.size_min, model.size_min + model.size_step * (model.size_steps - 1)]}
+
+
+## One row of flow_study from a list of flow_cut results. `third` / `third_top`: each
+## box's third by past (overall, and within its top-in or no-top group) when already
+## taken (the pooled row: taken within each form); empty: taken here. The row carries
+## them back as _third / _third_top.
+static func _flow_row(cuts: Array, third: Array, third_top: Array) -> Dictionary:
+	var n := cuts.size()
+	var pasts := []
+	var rests := []
+	for x in cuts:
+		pasts.append(x.past)
+		rests.append(x.rest)
+	if third.is_empty():
+		third = _thirds_of(pasts, range(n))
+		var ins := range(n).filter(func(i): return cuts[i].top_in)
+		var outs := range(n).filter(func(i): return not cuts[i].top_in)
+		third_top = []
+		third_top.resize(n)
+		for group in [ins, outs]:
+			var t := _thirds_of(group.map(func(i): return pasts[i]), range(group.size()))
+			for k in group.size():
+				third_top[group[k]] = t[k]
+	var row := {"n": n, "past": _mean(pasts), "rest": _mean(rests), "r": pearson(pasts, rests), "rho": spearman(pasts, rests),
+		"thirds": _thirds_rows(cuts, range(n), third), "_third": third, "_third_top": third_top}
+	for key in ["top_in", "no_top"]:
+		var want: bool = key == "top_in"
+		var idx := range(n).filter(func(i): return cuts[i].top_in == want)
+		row[key] = {"n": idx.size(), "share": float(idx.size()) / n if n > 0 else 0.0,
+			"rest": _mean(idx.map(func(i): return rests[i])), "thirds": _thirds_rows(cuts, idx, third_top)}
+	var th: Array = row.thirds
+	row.spread = float(th[2].rest) - float(th[0].rest)
+	var best := 0
+	var worst := 0
+	for k in 3:
+		if th[k].n > 0 and (th[best].n == 0 or th[k].rest > th[best].rest):
+			best = k
+		if th[k].n > 0 and (th[worst].n == 0 or th[k].rest < th[worst].rest):
+			worst = k
+	row.best = {"third": best, "rest": th[best].rest}
+	row.worst = {"third": worst, "rest": th[worst].rest}
+	return row
+
+
+## Each of `idx`'s places in `values` order: its third (0, 1 or 2) by terciles.
+static func _thirds_of(values: Array, idx: Array) -> Array:
+	var out := []
+	out.resize(idx.size())
+	var t := terciles(values)
+	for k in 3:
+		for i in t[k]:
+			out[i] = k
+	return out
+
+
+## The three thirds of the boxes `idx` (by `third`, a box's third): {n, lo, hi, rest}.
+static func _thirds_rows(cuts: Array, idx: Array, third: Array) -> Array:
+	var out := []
+	for k in 3:
+		var ins := idx.filter(func(i): return third[i] == k)
+		var ps := ins.map(func(i): return cuts[i].past)
+		out.append({"n": ins.size(), "lo": ps.min() if not ps.is_empty() else 0.0, "hi": ps.max() if not ps.is_empty() else 0.0,
+			"rest": _mean(ins.map(func(i): return cuts[i].rest))})
+	return out
+
+
+static func _mean(xs: Array) -> float:
+	if xs.is_empty():
+		return 0.0
+	var s := 0.0
+	for x in xs:
+		s += x
+	return s / xs.size()
+
+
 ## ALL IN's odds on each form, no perks, stake 1: `boxes` boxes of the form in the
 ## run's model, their tickets opened in order in windows of Catalog.WINDOW (the boxes
 ## one after another). Of the windows after one that paid, the share whose printed
